@@ -1,38 +1,18 @@
 "use client";
-
+import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 export default function BottomNav() {
-  const pathname = usePathname();
-
-  const navItems = [
-    { name: "Home", path: "/" },
-    { name: "Chest", path: "/chest" },
-    { name: "NFT Stake", path: "/stake" },
-    { name: "Leaderboard", path: "/leaderboard" },
-    { name: "Profile", path: "/profile" },
-  ];
-
   return (
-    <nav className="fixed bottom-0 left-0 w-full bg-black/40 backdrop-blur-lg border-t border-white/10 py-3">
-      <div className="flex items-center justify-around text-white">
-        {navItems.map((item) => {
-          const active = pathname === item.path;
-
-          return (
-            <Link
-              key={item.path}
-              href={item.path}
-              className={`text-sm ${
-                active ? "text-blue-400 font-semibold" : "text-white/60"
-              }`}
-            >
-              {item.name}
-            </Link>
-          );
-        })}
-      </div>
+    <nav className="fixed left-4 top-1/2 transform -translate-y-1/2 z-50">
+      <ul className="space-y-3">
+        <li><Link href="/" className="block px-3 py-2 rounded-lg bg-white/8 text-white text-sm">Home</Link></li>
+        <li><Link href="/chest" className="block px-3 py-2 rounded-lg bg-white/8 text-white text-sm">Chest</Link></li>
+        <li><Link href="/stake" className="block px-3 py-2 rounded-lg bg-white/8 text-white text-sm">NFT Stake</Link></li>
+        <li><Link href="/leaderboard" className="block px-3 py-2 rounded-lg bg-white/8 text-white text-sm">Rank</Link></li>
+        <li><Link href="/profile" className="block px-3 py-2 rounded-lg bg-white/8 text-white text-sm">Me</Link></li>
+      </ul>
     </nav>
   );
 }
+

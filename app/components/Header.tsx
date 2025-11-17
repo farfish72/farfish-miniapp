@@ -1,28 +1,17 @@
+// app/components/Header.tsx
 "use client";
-
 import React from "react";
 
 export default function Header() {
   return (
-    <header className="hidden md:flex items-center justify-between py-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tight">FarFISH</h1>
-        <span className="text-white/60 text-sm">
-          Premium NFT Collection
-        </span>
+    <header className="flex justify-between items-center py-4">
+      <div>
+        <h1 className="text-2xl font-extrabold">FarFISH</h1>
+        <p className="text-sm text-white/70">Premium NFTs · Rewards Chest</p>
       </div>
 
-      <div className="flex items-center gap-3">
-        <a
-          href="#"
-          className="px-3 py-2 bg-white/10 rounded-lg text-sm hover:bg-white/20 transition"
-        >
-          Follow on Farcaster
-        </a>
-
-        <button className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-700 rounded-lg text-sm font-semibold">
-          Connect Wallet
-        </button>
+      <div>
+        <button className="px-3 py-1 bg-white/10 rounded-lg text-sm">Follow</button>
       </div>
     </header>
   );

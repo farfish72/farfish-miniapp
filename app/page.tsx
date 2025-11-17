@@ -1,170 +1,102 @@
 "use client";
 
-import React, { useState } from "react";
-
-const TOTAL_SUPPLY = 9999;
-const RESERVED = 10;
-const MINTED_COUNT = 15;
-const REMAINING = TOTAL_SUPPLY - MINTED_COUNT;
-
 export default function Home() {
-  const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  function connectMock() {
-    setConnected(true);
-  }
-
-  async function handleMint() {
-    if (!connected) {
-      alert("Please connect wallet first.");
-      return;
-    }
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setLoading(false);
-    alert("Mint simulated (replace with real mint).");
-  }
-
-  const percent = Math.round((MINTED_COUNT / TOTAL_SUPPLY) * 100 * 100) / 100;
-
   return (
-    <main className="min-h-screen bg-[#04121a] text-white px-4 py-6 sm:px-6">
-      <div className="max-w-2xl mx-auto">
+    <main className="min-h-screen w-full flex justify-center bg-[#04121a] text-white p-4">
+      <div className="w-full max-w-md">
 
         {/* HEADER */}
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-          
-          <div className="mb-4 sm:mb-0">
-            <h1 className="text-3xl font-extrabold">FarFISH</h1>
-            <p className="text-sm text-white/70">
-              Premium NFT collection · Fishing theme
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <a
-              href="https://warpcast.com/"
-              target="_blank"
-              rel="noreferrer"
-              className="px-3 py-2 bg-white/10 rounded text-xs hover:bg-white/20 transition"
-            >
-              Follow
-            </a>
-
-            {connected ? (
-              <div className="px-3 py-2 bg-emerald-600/60 rounded text-xs">
-                Connected
-              </div>
-            ) : (
-              <button
-                onClick={connectMock}
-                className="px-3 py-2 bg-fuchsia-600 rounded text-xs hover:brightness-105"
-              >
-                Connect Wallet
-              </button>
-            )}
-          </div>
-
-        </header>
+    
+        {/* SLOGAN */}
+        <p className="text-center text-teal-300 text-sm mb-4">
+          Mint. Stake. Earn. Dominate the Seas.
+        </p>
 
         {/* MINT CARD */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-md">
-          <h2 className="text-xl font-semibold">Mint Your FarFISH NFT</h2>
-
-          <p className="mt-2 text-xs text-white/70">
-            Total supply: <b>{TOTAL_SUPPLY}</b> ({RESERVED} reserved)
-          </p>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
+              <p className="text-xs text-white/60">
+                Total supply: 9999 • Phase 1: 5000 • Reserved: 20
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-white/60">Price</p>
+              <p className="text-lg font-bold">0.00375 ETH</p>
+            </div>
+          </div>
 
           {/* STATS */}
-          <div className="grid grid-cols-3 gap-3 mt-4 text-center text-sm">
+          <div className="grid grid-cols-3 gap-2 mt-4 text-center">
             <div>
-              <div className="text-white/70 text-xs">Price</div>
-              <div className="font-semibold text-base">0.03 ETH</div>
+              <p className="text-xs text-white/60">Minted</p>
+              <p className="font-bold">15</p>
             </div>
             <div>
-              <div className="text-white/70 text-xs">Minted</div>
-              <div className="font-semibold text-base">{MINTED_COUNT}</div>
+              <p className="text-xs text-white/60">Progress</p>
+              <p className="font-bold">0.15%</p>
             </div>
             <div>
-              <div className="text-white/70 text-xs">Progress</div>
-              <div className="font-semibold text-base">{percent}%</div>
+              <p className="text-xs text-white/60">Remaining</p>
+              <p className="font-bold">9984</p>
             </div>
           </div>
 
           {/* PROGRESS BAR */}
-          <div className="mt-4 w-full bg-white/10 rounded-full h-2">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-[#00d4c4] to-[#80ffd1]"
-              style={{ width: `${percent}%` }}
-            />
+          <div className="w-full bg-white/10 rounded-full h-2 mt-4 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] w-[0.15%]"></div>
           </div>
 
-          {/* ACTION BUTTON */}
-          <button
-            onClick={handleMint}
-            disabled={!connected || loading}
-            className={`mt-5 w-full py-3 rounded-md text-sm font-semibold transition ${
-              connected
-                ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:scale-[1.02]"
-                : "bg-white/10 text-white/50"
-            }`}
-          >
-            {loading ? "Processing..." : connected ? "Mint Now" : "Connect to Mint"}
+          {/* MINT BUTTON */}
+          <button className="w-full mt-4 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg">
+            Connect & Mint
           </button>
 
-          <div className="mt-3 text-xs text-white/70 text-center">
-            Remaining: <b>{REMAINING}</b>
-          </div>
-        </section>
+          {/* SHARE BUTTON */}
+          <button className="w-full mt-2 bg-white/10 text-white py-2 rounded-lg text-sm">
+            Share
+          </button>
 
-        {/* WHY MINT BOX */}
-        <section className="mt-6 bg-white/5 border border-white/10 rounded-2xl p-5">
-          <h3 className="text-lg font-semibold mb-3">Why mint FarFISH?</h3>
+          <p className="text-xs text-white/60 mt-2">
+            Note: 20 NFTs are reserved for team/partners.
+          </p>
+        </div>
 
-          <ul className="text-sm text-white/70 space-y-2">
+        {/* WHY MINT */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+          <h3 className="font-bold mb-2">Why mint a FarFISH?</h3>
+          <ul className="text-sm text-white/70 space-y-1 pl-4">
             <li>• Staking rewards (30/90/180/360 days)</li>
             <li>• Tier system & exclusive drops</li>
-            <li>• Limited supply — 9999 NFTs</li>
+            <li>• Limited editions</li>
           </ul>
-        </section>
-
-        {/* RARITY BOX */}
-        <section className="mt-4 bg-white/5 border border-white/10 rounded-2xl p-5">
-          <h4 className="text-sm font-semibold mb-3 text-white/80">Rarity Snapshot</h4>
-
-          <ul className="text-sm text-white/70 space-y-1">
-            <li>Common — 70%</li>
-            <li>Uncommon — 20%</li>
-            <li>Rare — 8%</li>
-            <li>Legendary — 1%</li>
-          </ul>
-        </section>
+        </div>
 
         {/* COLLECTION PREVIEW */}
-        <section className="mt-6">
-          <h3 className="text-lg font-semibold mb-3">Collection Preview</h3>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white/10 rounded-lg aspect-[4/5] flex items-center justify-center text-xs text-white/50">
-              Artwork 1
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+          <h3 className="font-bold mb-2">Collection Preview</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
+              <img src="/fish1.jpg" alt="Artwork 1" className="w-full h-full object-cover" />
             </div>
-            <div className="bg-white/10 rounded-lg aspect-[4/5] flex items-center justify-center text-xs text-white/50">
-              Artwork 2
+            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
+              <img src="/fish2.jpg" alt="Artwork 2" className="w-full h-full object-cover" />
             </div>
-            <div className="bg-white/10 rounded-lg aspect-[4/5] flex items-center justify-center text-xs text-white/50">
-              Artwork 3
+            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
+              <img src="/fish3.jpg" alt="Artwork 3" className="w-full h-full object-cover" />
             </div>
-            <div className="bg-white/10 rounded-lg aspect-[4/5] flex items-center justify-center text-xs text-white/50">
-              Artwork 4
+            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
+              <img src="/fish4.jpg" alt="Artwork 4" className="w-full h-full object-cover" />
             </div>
           </div>
-        </section>
+        </div>
 
         {/* FOOTER */}
-        <footer className="mt-8 text-center text-xs text-white/50">
-          FarFISH © All rights reserved.
+        <footer className="text-center text-xs text-white/50 mt-4 mb-6">
+          FarFISH © All rights reserved
         </footer>
+
       </div>
     </main>
   );
