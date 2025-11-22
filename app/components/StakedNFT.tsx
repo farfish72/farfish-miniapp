@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BrowserProvider, Contract } from "ethers";
+import { ethers } from "ethers";
 import CONTRACT_ABI from "../abi/stake.json";
 
 // Your final contract address
@@ -26,7 +26,7 @@ export default function StakedNFT() {
         return;
       }
 
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
 
@@ -46,10 +46,10 @@ export default function StakedNFT() {
       setLoading(true);
       setError(null);
 
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = await provider.getSigner();
 
-      const contract = new Contract(
+      const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI as any,
         signer
@@ -73,10 +73,10 @@ export default function StakedNFT() {
       setLoading(true);
       setError(null);
 
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = await provider.getSigner();
 
-      const contract = new Contract(
+      const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI as any,
         signer
