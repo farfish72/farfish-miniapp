@@ -21,7 +21,7 @@ export default function ConfirmStakeModal({
     >
       <div className="w-[90%] max-w-md bg-[#071022] rounded-xl p-6 border border-white/10">
         <h3 className="text-lg font-bold">Confirm Stake</h3>
-        <p className="mt-2 text-sm text-gray-300">
+        <p className="mt-2 text-sm text-white/70">
           Are you sure you want to stake <span className="font-semibold">{nft}</span>?
         </p>
 

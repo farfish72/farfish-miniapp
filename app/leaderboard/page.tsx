@@ -1,57 +1,254 @@
-// app/leaderboard/page.tsx
 "use client";
 
-export default function LeaderboardPage() {
-  const rows = [
-    { rank: 1, name: "Alpha", score: "12,400" },
-    { rank: 2, name: "Beta", score: "9,800" },
-    { rank: 3, name: "Gamma", score: "6,300" },
-    { rank: 4, name: "You", score: "—" },
+import { useMemo } from "react";
+import Image from "next/image";
+import Header from "../components/Header";
+import useUser from "../hooks/useUser";
+
+// Type definition for leaderboard entries (ready for backend integration)
+type LeaderboardEntry = {
+  rank: number;
+  walletAddress: string;
+  displayName?: string;
+  pfpUrl?: string;
+  totalPoints: number; // FRH Score from chests, staking, etc.
+  fid?: number;
+};
+
+// Generate 100 mock users for demonstration
+const generateMockLeaderboard = (): LeaderboardEntry[] => {
+  const names = [
+    "AlphaFisher", "BetaCaster", "GammaWave", "DeltaForce", "EpsilonElite",
+    "ZetaMaster", "EtaHunter", "ThetaKing", "IotaLegend", "KappaPro",
+    "LambdaLord", "MuMariner", "NuNavigator", "XiExplorer", "OmicronOracle",
+    "PiPioneer", "RhoRuler", "SigmaSailor", "TauTitan", "UpsilonUltra",
+    "PhiPhoenix", "ChiChampion", "PsiPirate", "OmegaOverlord", "AquaAce",
+    "NebulaNinja", "StellarStriker", "CosmicCaptain", "GalacticGuard", "VoidVoyager",
+    "QuantumQuasar", "NovaNavigator", "SolarSailor", "LunarLegend", "MeteorMaster",
+    "CometCommander", "AsteroidAce", "PlanetPilot", "StarStriker", "SunSailor",
+    "MoonMariner", "MarsMaster", "JupiterJuggernaut", "SaturnSailor", "UranusUltra",
+    "NeptuneNavigator", "PlutoPilot", "CeresCaptain", "ErisElite", "HaumeaHero",
+    "MakemakeMaster", "SednaSailor", "OrcusOracle", "QuaoarQuasar", "VarunaVoyager",
+    "IxionIdeal", "ErisElite", "GonggongGuard", "SalaciaSailor", "VardaVoyager",
+    "BorasisiBoss", "RadigastRuler", "SilaSailor", "TawaTitan", "WeywotWarrior",
+    "NamakaNavigator", "Hi'iakaHero", "NixNinja", "HydraHunter", "KerberosKing",
+    "StyxSailor", "CharonCaptain", "NixNavigator", "HydraHero", "KerberosKing",
+    "StyxStriker", "CharonCommander", "DysnomiaDuke", "VanthVoyager", "ActaeaAce",
+    "BiancaBoss", "CressidaCaptain", "DesdemonaDuke", "JulietJuggernaut", "PortiaPilot",
+    "RosalindRuler", "BelindaBoss", "PuckPioneer", "MirandaMaster", "ArielAce",
+    "UmbrielUltra", "TitaniaTitan", "OberonOracle", "CordeliaCaptain", "OpheliaOracle",
+    "PerditaPilot", "MabMaster", "CupidCommander", "FranciscoFighter", "CalibanCaptain",
   ];
 
+  const entries: LeaderboardEntry[] = [];
+  
+  for (let i = 0; i < 100; i++) {
+    const rank = i + 1;
+    // Generate decreasing scores (top user has highest)
+    const baseScore = 50000 - (rank * 400) + Math.floor(Math.random() * 500);
+    const score = Math.max(100, baseScore);
+    
+    entries.push({
+      rank,
+      walletAddress: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
+      displayName: names[i % names.length] + (i > names.length - 1 ? `#${Math.floor(i / names.length) + 1}` : ""),
+      pfpUrl: `https://avatar.vercel.sh/1`,
+      totalPoints: score,
+      fid: 1000 + i,
+    });
+  }
+  
+  return entries;
+};
+
+// Format large numbers with commas
+const formatScore = (score: number): string => {
+  return score.toLocaleString("en-US");
+};
+
+// Get rank badge styling
+const getRankBadgeStyle = (rank: number) => {
+  if (rank === 1) {
+    return "bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-black font-extrabold shadow-lg shadow-yellow-500/50";
+  }
+  if (rank === 2) {
+    return "bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500 text-black font-extrabold shadow-lg shadow-gray-400/50";
+  }
+  if (rank === 3) {
+    return "bg-gradient-to-br from-amber-600 via-amber-700 to-amber-800 text-white font-extrabold shadow-lg shadow-amber-600/50";
+  }
+  return "bg-white/10 text-white/80 font-semibold";
+};
+
+// Get row background styling for top 3
+const getRowStyle = (rank: number) => {
+  if (rank === 1) {
+    return "border-yellow-500/30 bg-gradient-to-r from-yellow-500/5 to-transparent";
+  }
+  if (rank === 2) {
+    return "border-gray-400/30 bg-gradient-to-r from-gray-400/5 to-transparent";
+  }
+  if (rank === 3) {
+    return "border-amber-600/30 bg-gradient-to-r from-amber-600/5 to-transparent";
+  }
+  return "border-white/10 bg-white/5";
+};
+
+// Shorten wallet address
+const shortenAddress = (address: string): string => {
+  if (!address) return "0x0000...0000";
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
+
+export default function LeaderboardPage() {
+  const { user } = useUser();
+  
+  // Generate mock leaderboard data
+  const leaderboardData = useMemo(() => generateMockLeaderboard(), []);
+  
+  // Calculate current user's mock FRH score (in real app, this comes from backend)
+  // For now, we'll use a combination of stats or a default value
+  const currentUserScore = useMemo(() => {
+    if (!user) return 0;
+    // Mock calculation: combine NFTs owned, staked, and streak days
+    const nftPoints = (user.stats?.nftsOwned ?? 0) * 100;
+    const stakedPoints = (user.stats?.staked ?? 0) * 500;
+    const streakPoints = (user.stats?.streakDays ?? 0) * 50;
+    return nftPoints + stakedPoints + streakPoints || 1250; // Default score if no stats
+  }, [user]);
+  
+  // Find current user's rank (or assign a rank if not in top 100)
+  const currentUserRank = useMemo(() => {
+    const userRank = leaderboardData.findIndex(
+      (entry) => entry.walletAddress.toLowerCase() === user?.walletAddress?.toLowerCase()
+    );
+    if (userRank !== -1) return userRank + 1;
+    // If user not in top 100, calculate approximate rank
+    const usersAbove = leaderboardData.filter((entry) => entry.totalPoints > currentUserScore).length;
+    return usersAbove + 1;
+  }, [leaderboardData, user, currentUserScore]);
+
   return (
-    <main className="min-h-screen w-full flex justify-center bg-[#04121a] text-white p-4">
-      <div className="w-full max-w-md">
-        {/* HEADER */}
-        <header className="flex justify-between items-center mb-4">
-          <div>
-            <h1 className="text-2xl font-extrabold">FarFISH</h1>
-            <p className="text-sm text-white/70">Leaderboard</p>
-          </div>
-        </header>
+    <div className="flex flex-col flex-1 min-h-0">
+      <Header title="Rank" />
 
-        {/* LEADERBOARD CARD */}
+      <div className="mt-4 flex-1 flex flex-col">
+        {/* Header Section */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-          <h2 className="text-lg font-bold mb-2">Top Fishers</h2>
-          <p className="text-sm text-white/70 mb-3">Unique ranking UI — rewards will be assigned to top ranks.</p>
+          <h2 className="text-xl font-bold bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] bg-clip-text text-transparent">
+            Real-time Leaderboard
+          </h2>
+          <p className="text-sm text-white/70 mt-1">
+            Top 100 fishers ranked by FRH Score. Final rewards flow to top wallets when the airdrop snapshot happens.
+          </p>
+        </section>
 
-          <ol className="space-y-2">
-            {rows.map((r) => (
-              <li key={r.rank} className="flex items-center justify-between bg-white/6 rounded-lg p-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center font-semibold">{r.rank}</div>
-                  <div>
-                    <div className="font-semibold">{r.name}</div>
-                    <div className="text-xs text-white/60">Details</div>
+        {/* Scrollable Leaderboard List */}
+        <div className="space-y-2 flex-1 overflow-y-auto min-h-0">
+          {leaderboardData.map((entry) => (
+            <div
+              key={entry.rank}
+              className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-all hover:bg-white/10 ${getRowStyle(entry.rank)}`}
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {/* Rank Badge */}
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${getRankBadgeStyle(entry.rank)}`}>
+                  <span className="text-sm">{entry.rank}</span>
+                </div>
+
+                {/* User Info */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  {entry.pfpUrl && (
+                    <div className="relative h-10 w-10 shrink-0 rounded-full overflow-hidden border border-white/20">
+                      <Image
+                        src={entry.pfpUrl}
+                        alt={entry.displayName || "User"}
+                        fill
+                        sizes="40px"
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-white truncate">
+                      {entry.displayName || shortenAddress(entry.walletAddress)}
+                    </p>
+                    <p className="text-xs text-white/60 truncate">
+                      {entry.displayName ? shortenAddress(entry.walletAddress) : `FID: ${entry.fid || "—"}`}
+                    </p>
                   </div>
                 </div>
-                <div className="font-semibold">{r.score}</div>
-              </li>
-            ))}
-          </ol>
+              </div>
+
+              {/* FRH Score */}
+              <div className="ml-4 shrink-0 text-right">
+                <p className="text-sm font-bold text-[#00d4c4]">
+                  {formatScore(entry.totalPoints)}
+                </p>
+                <p className="text-xs text-white/50">FRH</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Info Section */}
+        <section className="bg-white/5 border border-white/10 rounded-2xl p-4 mt-4">
+          <h3 className="font-semibold text-lg mb-2">How to climb</h3>
+          <ul className="space-y-1.5 text-sm text-white/70">
+            <li>• Stake NFTs for longer periods to earn multipliers</li>
+            <li>• Maintain daily chest streaks to avoid decay</li>
+            <li>• Complete quests in the activity feed for bonus points</li>
+            <li>• Higher rarity NFTs earn more FRH when staked</li>
+          </ul>
         </section>
 
-        {/* INFO */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-          <h3 className="font-semibold mb-2">How it works</h3>
-          <p className="text-sm text-white/70">Leaderboard driven by staking & activity. Unique titles & rewards for top users.</p>
-        </section>
-
-        {/* FOOTER */}
-        <footer className="text-center text-xs text-white/50 mt-4">
-          FarFISH © All rights reserved
-        </footer>
+        
       </div>
-    </main>
+
+      {/* Sticky Current User Row - Always visible at bottom */}
+      {user && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-[92%] max-w-md z-40">
+          <div className="bg-gradient-to-r from-[#00d4c4]/20 via-[#3be6c1]/20 to-[#80ffd1]/20 border-2 border-[#00d4c4]/50 rounded-xl p-4 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {/* Rank Badge */}
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${getRankBadgeStyle(currentUserRank)}`}>
+                  <span className="text-base font-bold">{currentUserRank}</span>
+                </div>
+
+                {/* User Avatar */}
+                <div className="relative h-12 w-12 shrink-0 rounded-full overflow-hidden border-2 border-[#00d4c4]">
+                  <Image
+                    src={user.pfpUrl || "/farfish-logo.png"}
+                    alt={user.displayName || "You"}
+                    fill
+                    sizes="48px"
+                    className="object-cover"
+                    unoptimized
+                  />
+                </div>
+
+                {/* User Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-white truncate">YOU</p>
+                  <p className="text-xs text-white/70 truncate">
+                    {user.displayName || shortenAddress(user.walletAddress)}
+                  </p>
+                </div>
+              </div>
+
+              {/* FRH Score - Prominently displayed */}
+              <div className="ml-4 shrink-0 text-right">
+                <p className="text-lg font-extrabold text-[#00d4c4]">
+                  {formatScore(currentUserScore)}
+                </p>
+                <p className="text-xs font-semibold text-white/80">FRH Score</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

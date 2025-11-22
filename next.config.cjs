@@ -2,8 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    appDir: true,
+    appDir: true
   },
+  images: {
+    domains: ["avatar.vercel.sh", "placehold.co"],
+  }
 };
 
 module.exports = nextConfig;

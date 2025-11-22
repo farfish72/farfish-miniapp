@@ -82,7 +82,7 @@ export default function StakeModal({ onClose, onSelectNFT, initialFocusId }: Sta
                 className="w-full text-left p-3 bg-white/5 rounded-md hover:bg-white/6 transition flex justify-between items-center"
               >
                 <span className="text-white">{n.title}</span>
-                <span className="text-sm text-gray-300">
+                <span className="text-sm text-white/70">
                   {loadingId === n.id ? "Staking..." : "Stake"}
                 </span>
               </button>

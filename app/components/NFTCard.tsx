@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import React from "react";
 
 type NFT = {
@@ -20,10 +21,13 @@ export default function NFTCard({ nft }: { nft: NFT }) {
     <div className="bg-white/5 rounded-lg overflow-hidden shadow-lg flex flex-col">
       {/* image box */}
       <div className="relative w-full h-44 sm:h-48 bg-slate-700">
-        <img
+        <Image
           src={coverSrc}
           alt={displayName}
-          className="object-cover w-full h-full"
+          fill
+          sizes="(max-width: 768px) 90vw, 320px"
+          className="object-cover"
+          unoptimized
         />
         {/* top-left small badge with id */}
         <div className="absolute top-2 left-2 bg-black/50 text-xs px-2 py-1 rounded text-white">

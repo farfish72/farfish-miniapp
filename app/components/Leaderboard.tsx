@@ -20,4 +20,3 @@ export default function Leaderboard({ entries = [] as Entry[] }:{entries?:Entry[
     </div>
   );
 }
-

@@ -1,29 +1,25 @@
+// app/page.tsx
 "use client";
+
+import Image from "next/image";
+import Header from "./components/Header";
 
 export default function Home() {
   return (
-    <main className="min-h-screen w-full flex justify-center bg-[#04121a] text-white p-4">
-      <div className="w-full max-w-md">
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* উপরের FarFISH + Follow us + Home টাইটেল */}
+      <Header title="Home" />
 
-        {/* HEADER */}
-    
-        {/* SLOGAN */}
-        <p className="text-center text-teal-300 text-sm mb-4">
-          Mint. Stake. Earn. Dominate the Seas.
-        </p>
-
+      {/* নিচে আসল হোম / মিন্ট কনটেন্ট */}
+      <div className="mt-4 flex-1 flex flex-col">
         {/* MINT CARD */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
               <p className="text-xs text-white/60">
-                Total supply: 9999 • Phase 1: 5000 • Reserved: 20
+                Total supply: 9999 • Reserved: 20
               </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-white/60">Price</p>
-              <p className="text-lg font-bold">0.00375 ETH</p>
             </div>
           </div>
 
@@ -45,12 +41,12 @@ export default function Home() {
 
           {/* PROGRESS BAR */}
           <div className="w-full bg-white/10 rounded-full h-2 mt-4 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] w-[0.15%]"></div>
+            <div className="h-full bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] w-[15%]" />
           </div>
 
           {/* MINT BUTTON */}
           <button className="w-full mt-4 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg">
-            Connect & Mint
+            Connect &amp; Mint
           </button>
 
           {/* SHARE BUTTON */}
@@ -68,7 +64,7 @@ export default function Home() {
           <h3 className="font-bold mb-2">Why mint a FarFISH?</h3>
           <ul className="text-sm text-white/70 space-y-1 pl-4">
             <li>• Staking rewards (30/90/180/360 days)</li>
-            <li>• Tier system & exclusive drops</li>
+            <li>• Tier system &amp; exclusive drops</li>
             <li>• Limited editions</li>
           </ul>
         </div>
@@ -77,27 +73,28 @@ export default function Home() {
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
           <h3 className="font-bold mb-2">Collection Preview</h3>
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
-              <img src="/fish1.jpg" alt="Artwork 1" className="w-full h-full object-cover" />
-            </div>
-            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
-              <img src="/fish2.jpg" alt="Artwork 2" className="w-full h-full object-cover" />
-            </div>
-            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
-              <img src="/fish3.jpg" alt="Artwork 3" className="w-full h-full object-cover" />
-            </div>
-            <div className="bg-white/10 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
-              <img src="/fish4.jpg" alt="Artwork 4" className="w-full h-full object-cover" />
-            </div>
+            {["/fish1.jpg", "/fish2.jpg", "/fish3.jpg", "/fish4.jpg"].map(
+              (src, idx) => (
+                <div
+                  key={src}
+                  className="relative bg-white/10 rounded-lg aspect-square overflow-hidden"
+                >
+                  <Image
+                    src={src}
+                    alt={`Artwork ${idx + 1}`}
+                    fill
+                    priority={idx === 0}
+                    sizes="(max-width: 768px) 50vw, 200px"
+                    className="object-cover"
+                  />
+                </div>
+              )
+            )}
           </div>
         </div>
 
-        {/* FOOTER */}
-        <footer className="text-center text-xs text-white/50 mt-4 mb-6">
-          FarFISH © All rights reserved
-        </footer>
-
+        
       </div>
-    </main>
+    </div>
   );
 }

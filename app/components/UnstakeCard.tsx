@@ -43,13 +43,17 @@ export default function UnstakeCard({ tokenId, onUnstaked }: Props) {
   }
 
   return (
-    <div className="p-4 bg-gray-800 rounded-lg mt-4 text-white">
+    <div className="p-4 mt-4 rounded-lg border border-white/10 bg-white/5 text-white">
       <h2 className="text-xl font-bold">Fishing NFT #{tokenId}</h2>
 
       <button
         onClick={handleUnstake}
         disabled={loading}
-        className="mt-3 w-full bg-red-600 hover:bg-red-700 p-3 rounded-lg font-semibold"
+        className={`mt-3 w-full p-3 rounded-lg font-semibold ${
+          loading
+            ? "bg-white/10 text-white/60 cursor-not-allowed"
+            : "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black"
+        }`}
       >
         {loading ? "Unstaking..." : "Unstake"}
       </button>
