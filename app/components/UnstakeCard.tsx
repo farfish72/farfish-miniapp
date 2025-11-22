@@ -25,7 +25,7 @@ export default function UnstakeCard({ tokenId, onUnstaked }: Props) {
 
       setLoading(true);
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
