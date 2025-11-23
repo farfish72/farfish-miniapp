@@ -3,8 +3,10 @@
 
 import Image from "next/image";
 import Header from "./components/Header";
+import useFarcasterGate from "./hooks/useFarcasterGate";
 
 export default function Home() {
+  const { blocked, message } = useFarcasterGate();
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* উপরের FarFISH + Follow us + Home টাইটেল */}
@@ -45,9 +47,15 @@ export default function Home() {
           </div>
 
           {/* MINT BUTTON */}
-          <button className="w-full mt-4 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg">
-            Connect &amp; Mint
-          </button>
+          {blocked ? (
+            <div className="w-full mt-4 rounded-lg border border-white/10 bg-white/5 p-3 text-center text-xs font-semibold text-red-400">
+              {message}
+            </div>
+          ) : (
+            <button className="w-full mt-4 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg">
+              Connect &amp; Mint
+            </button>
+          )}
 
           {/* SHARE BUTTON */}
           <button className="w-full mt-2 bg-white/10 text-white py-2 rounded-lg text-sm">

@@ -2,10 +2,13 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ConnectWallet } from "@thirdweb-dev/react";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
+import { FARCASTER_PROFILE_URL, X_PROFILE_URL } from "../constants";
+import { supabase } from "../lib/supabase";
+import useFarcasterGate from "../hooks/useFarcasterGate";
 
 const faqItems = [
   {
@@ -53,6 +56,10 @@ const shortenAddress = (address?: string) => {
 export default function ProfilePage() {
   const { user } = useUser();
   const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const [referralsCompleted, setReferralsCompleted] = useState<number>(0);
+  const [referralLink, setReferralLink] = useState<string | null>(null);
+  const { blocked, message } = useFarcasterGate();
+  const [refMultiplier, setRefMultiplier] = useState<number>(1.0);
 
   const stats = useMemo(
     () => [
@@ -76,6 +83,45 @@ export default function ProfilePage() {
     [user?.stats]
   );
 
+  useEffect(() => {
+    const wallet = user?.walletAddress;
+    if (!wallet) return;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("referrals_completed")
+        .eq("wallet_address", wallet)
+        .limit(1)
+        .single();
+      setReferralsCompleted((data as any)?.referrals_completed ?? 0);
+    })();
+  }, [user?.walletAddress]);
+
+  const handleVerifyAndGetLink = () => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://farfish.app";
+    const id = user?.walletAddress ?? (user?.fid ? `fid-${user.fid}` : "guest");
+    const link = `${origin}/?ref=${encodeURIComponent(id)}`;
+    setReferralLink(link);
+  };
+
+  useEffect(() => {
+    const wallet = user?.walletAddress;
+    if (!wallet) return;
+    (async () => {
+      const { data } = await supabase
+        .from("staking_positions")
+        .select("token_tier")
+        .eq("wallet_address", wallet)
+        .order("token_tier", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const tier = (data as any)?.token_tier ?? 0;
+      const { REFERRAL_MULTIPLIER } = await import("../constants");
+      const multiplier = REFERRAL_MULTIPLIER(tier);
+      setRefMultiplier(multiplier);
+    })();
+  }, [user?.walletAddress]);
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <Header title="Profile" />
@@ -83,7 +129,13 @@ export default function ProfilePage() {
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
           <div className="flex justify-end">
-            <ConnectWallet />
+            {blocked ? (
+              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-red-400">
+                {message}
+              </div>
+            ) : (
+              <ConnectWallet />
+            )}
           </div>
           <div className="flex items-center gap-3">
           <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
@@ -118,6 +170,44 @@ export default function ProfilePage() {
                 <p className="text-lg font-semibold mt-1">{stat.value}</p>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
+          <p className="text-sm text-white/70">Base reward: 10 FRH per referral. Current multiplier: x{refMultiplier.toFixed(1)} (based on highest staked NFT).</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <a
+              href={X_PROFILE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center"
+            >
+              Follow on X
+            </a>
+            <a
+              href={FARCASTER_PROFILE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center"
+            >
+              Follow on Farcaster
+            </a>
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={handleVerifyAndGetLink}
+              className="w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-2 text-sm font-semibold text-black"
+            >
+              Verify & Get Link
+            </button>
+          </div>
+          <div className="mt-3 space-y-1">
+            <p className="text-sm">Referrals completed: {referralsCompleted}</p>
+            {referralLink && (
+              <p className="text-xs text-white/70 break-all">Your referral link: {referralLink}</p>
+            )}
           </div>
         </section>
 

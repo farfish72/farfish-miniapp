@@ -2,13 +2,12 @@
 
 import { ThirdwebProvider as ThirdwebReactProvider } from "@thirdweb-dev/react";
 import { PropsWithChildren } from "react";
+import { THIRDWEB_CLIENT_ID } from "../constants";
 
 const ThirdwebProvider = ({ children }: PropsWithChildren) => {
-  const clientId = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID;
+  const clientId = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ?? THIRDWEB_CLIENT_ID;
 
-  if (!clientId) {
-    console.warn("NEXT_PUBLIC_THIRDWEB_CLIENT_ID is not set. Thirdweb features will be disabled.");
-  }
+  // clientId is guaranteed by constants fallback
 
   return (
     <ThirdwebReactProvider
