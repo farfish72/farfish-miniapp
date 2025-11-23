@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import BottomNav from "./components/BottomNav";
 import Footer from "./components/Footer";
 import ThirdwebProvider from "./providers/ThirdwebProvider";
+import FarcasterMiniAppReady from "./components/FarcasterMiniAppReady";
 
 const baseUrl = new URL("https://farfish.app");
 
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen flex flex-col relative items-center overflow-x-hidden text-white">
+        <FarcasterMiniAppReady />
         <ThirdwebProvider>
           {/* MAIN MOBILE WRAPPER - Flex container */}
           <main
