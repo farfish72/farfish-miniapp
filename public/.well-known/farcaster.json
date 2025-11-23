@@ -7,12 +7,12 @@
   "frame": {
     "version": "1",
     "name": "Example Frame",
-    "iconUrl": " `https://farfish-miniapp5.vercel.app/icon.png` ",
-    "homeUrl": " `https://farfish-miniapp5.vercel.app` ",
-    "imageUrl": " `https://farfish-miniapp5.vercel.app/image.png` ",
+    "iconUrl": "https://farfish-miniapp5.vercel.app/icon.png",
+    "homeUrl": "https://farfish-miniapp5.vercel.app",
+    "imageUrl": "https://farfish-miniapp5.vercel.app/image.png",
     "buttonTitle": "Check this out",
-    "splashImageUrl": " `https://farfish-miniapp5.vercel.app/splash.png` ",
+    "splashImageUrl": "https://farfish-miniapp5.vercel.app/splash.png",
     "splashBackgroundColor": "#eeccff",
-    "webhookUrl": " `https://farfish-miniapp5.vercel.app/api/webhook` "
+    "webhookUrl": "https://farfish-miniapp5.vercel.app/api/webhook"
   }
 }
