@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
+import { supabase } from "../lib/supabase";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -50,30 +51,45 @@ export default function ChestView() {
   const isFirstDay = now.getDate() === 1;
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const wallet = user?.walletAddress;
+    if (!wallet) {
+      setDailyAvailable(true);
+      setDailyRemainingMs(0);
+      return;
+    }
 
-    const updateDailyState = () => {
-      const lastClaim = window.localStorage.getItem("ff_daily_claimed_at");
-      if (!lastClaim) {
+    const updateDailyState = async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("last_daily_claim_at")
+          .eq("wallet_address", wallet)
+          .limit(1)
+          .maybeSingle();
+        const lastClaim = Number((data as any)?.last_daily_claim_at ?? 0);
+        if (!lastClaim) {
+          setDailyAvailable(true);
+          setDailyRemainingMs(0);
+          return;
+        }
+        const elapsed = Date.now() - lastClaim;
+        if (elapsed >= DAY_MS) {
+          setDailyAvailable(true);
+          setDailyRemainingMs(0);
+        } else {
+          setDailyAvailable(false);
+          setDailyRemainingMs(DAY_MS - elapsed);
+        }
+      } catch {
         setDailyAvailable(true);
         setDailyRemainingMs(0);
-        return;
-      }
-
-      const elapsed = Date.now() - Number(lastClaim);
-      if (elapsed >= DAY_MS) {
-        setDailyAvailable(true);
-        setDailyRemainingMs(0);
-      } else {
-        setDailyAvailable(false);
-        setDailyRemainingMs(DAY_MS - elapsed);
       }
     };
 
     updateDailyState();
     const interval = window.setInterval(updateDailyState, 60_000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [user?.walletAddress]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -141,11 +157,18 @@ export default function ChestView() {
     setInfoModal({ title, description });
   };
 
-  const handleDailyClaim = () => {
-    if (!dailyAvailable || typeof window === "undefined") return;
-    window.localStorage.setItem("ff_daily_claimed_at", Date.now().toString());
-    setDailyAvailable(false);
-    setDailyRemainingMs(DAY_MS);
+  const handleDailyClaim = async () => {
+    if (!dailyAvailable) return;
+    const wallet = user?.walletAddress;
+    if (!wallet) return;
+    try {
+      await supabase
+        .from("profiles")
+        .update({ last_daily_claim_at: Date.now() })
+        .eq("wallet_address", wallet);
+      setDailyAvailable(false);
+      setDailyRemainingMs(DAY_MS);
+    } catch {}
   };
 
   const handleStakeClaim = () => {

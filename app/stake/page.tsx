@@ -1,18 +1,14 @@
 // app/stake/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Header from "../components/Header";
-import StakeModal from "../components/StakeModal";
+import useUser from "../hooks/useUser";
+import { supabase } from "../lib/supabase";
+import { tierById, powerById } from "../constants";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
-
-const lockOptions = [
-  { label: "30 days", days: 30 },
-  { label: "90 days", days: 90 },
-  { label: "180 days", days: 180 },
-];
 
 type StakedItem = {
   id: string;
@@ -20,50 +16,52 @@ type StakedItem = {
   image: string;
   lockDays: number;
   stakedAt: number;
+  tierId?: number;
 };
 
 export default function StakingPage() {
-  const [selectedNFT, setSelectedNFT] = useState<string | null>(null);
-  const [selectedLockDays, setSelectedLockDays] = useState<number | null>(30);
-  const [modalOpen, setModalOpen] = useState(false);
+  const { user } = useUser();
   const [nowTick, setNowTick] = useState(Date.now());
-  const [staked, setStaked] = useState<StakedItem[]>(() => {
-    const n = Date.now();
-    return [
-      {
-        id: "nft-101",
-        name: "Fishing NFT #101",
-        image: "https://placehold.co/400x400/222/00ffff?text=Item",
-        lockDays: 30,
-        stakedAt: n - 5 * DAY_MS,
-      },
-      {
-        id: "nft-202",
-        name: "Fishing NFT #202",
-        image: "https://placehold.co/400x400/222/00ffff?text=Item",
-        lockDays: 30,
-        stakedAt: n - 31 * DAY_MS,
-      },
-    ];
-  });
+  const [staked, setStaked] = useState<StakedItem[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const walletAddress = user?.walletAddress;
 
   useEffect(() => {
     const i = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(i);
   }, []);
 
-  const handleStake = () => {
-    if (!selectedNFT || !selectedLockDays) return;
-    const item: StakedItem = {
-      id: selectedNFT,
-      name: `Fishing NFT ${selectedNFT.replace("nft-", "#")}`,
-      image: "https://placehold.co/400x400/222/00ffff?text=Item",
-      lockDays: selectedLockDays,
-      stakedAt: Date.now(),
-    };
-    setStaked((prev) => [item, ...prev]);
-    setSelectedNFT(null);
-  };
+  const fetchStakedPositions = useCallback(async () => {
+    if (!walletAddress) {
+      setStaked([]);
+      return;
+    }
+    setSyncing(true);
+    try {
+      const { data } = await supabase
+        .from("staking_positions")
+        .select("token_id, token_tier, lock_days, staked_at, image_url")
+        .eq("wallet_address", walletAddress);
+      const mapped: StakedItem[] = (data ?? []).map((row: any) => ({
+        id: `nft-${row.token_id}`,
+        name: `Fishing NFT #${row.token_id}`,
+        image: row.image_url ?? "https://placehold.co/400x400/222/00ffff?text=Item",
+        lockDays: Number(row.lock_days ?? 0),
+        stakedAt: Number(row.staked_at ?? Date.now()),
+        tierId: Number(row.token_tier ?? 0),
+      }));
+      setStaked(mapped);
+    } catch (error) {
+      console.error("Failed to sync staking positions", error);
+      setStaked([]);
+    } finally {
+      setSyncing(false);
+    }
+  }, [walletAddress]);
+
+  useEffect(() => {
+    fetchStakedPositions();
+  }, [fetchStakedPositions]);
 
   const formatRemaining = (ms: number) => {
     if (ms <= 0) return "Unlocked";
@@ -83,51 +81,23 @@ export default function StakingPage() {
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h2 className="text-xl font-bold">Locked Staking</h2>
-          <p className="text-sm text-white/70 mt-1">Stake NFTs with a fixed lock. No early unstake.</p>
+          <p className="text-sm text-white/70 mt-1">
+            Confirm your stake or unstake directly inside the Farcaster mini-app wallet. When you finish, sync
+            the dashboard below to pull the live Supabase snapshot.
+          </p>
 
-          <div className="mt-4 space-y-3">
-            <div className="bg-white/10 rounded-xl p-3">
-              <p className="text-xs text-white/60">Selected NFT</p>
-              <div className="mt-2 flex items-center justify-between">
-                <p className="text-sm font-semibold">
-                  {selectedNFT ? `Fishing NFT ${selectedNFT.replace("nft-", "#")}` : "No NFT selected"}
-                </p>
-                <button
-                  onClick={() => setModalOpen(true)}
-                  className="text-xs bg-white/10 px-3 py-1 rounded-md border border-white/10"
-                >
-                  Select
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {lockOptions.map((option) => {
-                const active = selectedLockDays === option.days;
-                return (
-                  <button
-                    key={option.label}
-                    onClick={() => setSelectedLockDays(option.days)}
-                    className={`rounded-lg border px-2 py-3 text-xs font-semibold ${
-                      active ? "border-[#00d4c4] bg-[#00d4c4]/10 text-white" : "border-white/10 bg-white/5 text-white"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={handleStake}
-              disabled={!selectedNFT || !selectedLockDays}
-              className={`w-full bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg ${
-                !selectedNFT || !selectedLockDays ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              Stake
-            </button>
-          </div>
+          <button
+            onClick={fetchStakedPositions}
+            disabled={syncing || !walletAddress}
+            className={`w-full mt-4 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg ${
+              !walletAddress ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            {syncing ? "Syncing…" : "Sync staked NFTs"}
+          </button>
+          {!walletAddress && (
+            <p className="text-xs text-red-300 mt-2">Connect your wallet to enable syncing.</p>
+          )}
         </section>
 
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
@@ -159,6 +129,11 @@ export default function StakingPage() {
                       <div>
                         <p className="text-sm font-semibold">{item.name}</p>
                         <p className="text-xs text-white/60">{item.lockDays} Days Lock</p>
+                        {typeof item.tierId === "number" && (
+                          <p className="text-xs text-white/70">
+                            Tier: {tierById(item.tierId)?.name ?? "Bluefin"} • Power: {powerById(item.tierId ?? 0)}
+                          </p>
+                        )}
                         <p className={`text-xs ${unlocked ? "text-green-400" : "text-white/70"}`}>
                           {unlocked ? "Unlocked" : formatRemaining(remainingMs)}
                         </p>
@@ -189,13 +164,6 @@ export default function StakingPage() {
         </section>
       </div>
 
-      {modalOpen && (
-        <StakeModal
-          onClose={() => setModalOpen(false)}
-          onSelectNFT={(id) => setSelectedNFT(id)}
-          initialFocusId={undefined}
-        />
-      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useMemo, useState, useEffect } from "react";
 import { ConnectWallet } from "@thirdweb-dev/react";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
-import { FARCASTER_PROFILE_URL, X_PROFILE_URL } from "../constants";
+import { FARCASTER_PROFILE_URL, X_PROFILE_URL, referralMultiplierByTokenId } from "../constants";
 import { supabase } from "../lib/supabase";
 import useFarcasterGate from "../hooks/useFarcasterGate";
 
@@ -59,7 +59,7 @@ export default function ProfilePage() {
   const [referralsCompleted, setReferralsCompleted] = useState<number>(0);
   const [referralLink, setReferralLink] = useState<string | null>(null);
   const { blocked, message } = useFarcasterGate();
-  const [refMultiplier, setRefMultiplier] = useState<number>(1.0);
+  const [refMultiplier, setRefMultiplier] = useState<number | null>(null);
 
   const stats = useMemo(
     () => [
@@ -98,27 +98,35 @@ export default function ProfilePage() {
   }, [user?.walletAddress]);
 
   const handleVerifyAndGetLink = () => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://farfish.app";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://farfish-miniapp5.vercel.app";
     const id = user?.walletAddress ?? (user?.fid ? `fid-${user.fid}` : "guest");
-    const link = `${origin}/?ref=${encodeURIComponent(id)}`;
+    const link = `${origin}/api/frame?ref=${encodeURIComponent(id)}`;
     setReferralLink(link);
   };
 
   useEffect(() => {
     const wallet = user?.walletAddress;
-    if (!wallet) return;
+    if (!wallet) {
+      setRefMultiplier(null);
+      return;
+    }
     (async () => {
-      const { data } = await supabase
-        .from("staking_positions")
-        .select("token_tier")
-        .eq("wallet_address", wallet)
-        .order("token_tier", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const tier = (data as any)?.token_tier ?? 0;
-      const { REFERRAL_MULTIPLIER } = await import("../constants");
-      const multiplier = REFERRAL_MULTIPLIER(tier);
-      setRefMultiplier(multiplier);
+      try {
+        const { data } = await supabase
+          .from("staking_positions")
+          .select("token_id, token_tier")
+          .eq("wallet_address", wallet)
+          .order("token_tier", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const tokenId = Number((data as any)?.token_id);
+        const fallbackTier = Number((data as any)?.token_tier ?? 0);
+        const resolvedId = Number.isFinite(tokenId) ? tokenId : fallbackTier;
+        setRefMultiplier(referralMultiplierByTokenId(resolvedId));
+      } catch (error) {
+        console.error("Failed to load referral multiplier", error);
+        setRefMultiplier(1);
+      }
     })();
   }, [user?.walletAddress]);
 
@@ -175,7 +183,10 @@ export default function ProfilePage() {
 
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
-          <p className="text-sm text-white/70">Base reward: 10 FRH per referral. Current multiplier: x{refMultiplier.toFixed(1)} (based on highest staked NFT).</p>
+          <p className="text-sm text-white/70">
+            Base reward: 10 FRH per referral. Current multiplier:{" "}
+            {refMultiplier === null ? "Loading..." : `x${refMultiplier}`} (based on highest staked NFT token ID).
+          </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <a
               href={X_PROFILE_URL}

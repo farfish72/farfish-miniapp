@@ -14,7 +14,7 @@ const items = [
   { href: "/", label: "Home", icon: FaHome },
   { href: "/chest", label: "Chest", icon: FaBoxOpen },
   { href: "/stake", label: "Stake", icon: FaCoins },
-  { href: "/leaderboard", label: "Rank", icon: FaTrophy },
+  { href: "/rank", label: "Rank", icon: FaTrophy },
   { href: "/profile", label: "Profile", icon: FaUser },
 ];
 

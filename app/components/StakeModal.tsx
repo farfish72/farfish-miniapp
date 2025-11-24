@@ -1,32 +1,63 @@
-// app/components/StakeModal.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useAddress, useContract } from "@thirdweb-dev/react";
+import { supabase } from "../lib/supabase";
+import { NFT_CONTRACT_ADDRESS } from "../constants";
 
 interface StakeModalProps {
   onClose: () => void;
   onSelectNFT: (id: string) => void;
-  initialFocusId?: string; // optional: which nft button to focus initially
+  initialFocusId?: string;
 }
 
-const mockNFTs = [
-  { id: "nft-1", title: "Fishing NFT #1" },
-  { id: "nft-2", title: "Fishing NFT #2" },
-  { id: "nft-3", title: "Fishing NFT #3" },
-];
+type Choice = { id: string; title: string };
 
 export default function StakeModal({ onClose, onSelectNFT, initialFocusId }: StakeModalProps) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [choices, setChoices] = useState<Choice[]>([]);
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const firstButtonRef = useRef<HTMLButtonElement | null>(null);
+  const address = useAddress();
+  const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined, "nft-drop");
 
-  // focus first interactive element on open
   useEffect(() => {
     const toFocus = initialFocusId ? document.getElementById(initialFocusId) : firstButtonRef.current;
     (toFocus as HTMLElement | null)?.focus();
   }, [initialFocusId]);
 
-  // close on Escape
+  useEffect(() => {
+    async function load() {
+      if (!address || !contract) {
+        setChoices([]);
+        return;
+      }
+      let owned: any[] = [];
+      let stakedIds = new Set<number>();
+      try {
+        owned = await contract.getOwned(address);
+      } catch {}
+      try {
+        const { data } = await supabase
+          .from("staking_positions")
+          .select("token_id")
+          .eq("wallet_address", address);
+        (data ?? []).forEach((row: any) => stakedIds.add(Number(row.token_id)));
+      } catch {}
+
+      const list: Choice[] = owned
+        .map((nft: any) => {
+          const tokenId = Number(nft?.id ?? nft?.metadata?.id ?? nft?.metadata?.tokenId ?? 0);
+          return { tokenId };
+        })
+        .filter((x: { tokenId: number }) => Number.isFinite(x.tokenId) && !stakedIds.has(x.tokenId))
+        .map((x) => ({ id: `nft-${x.tokenId}`, title: `Fishing NFT #${x.tokenId}` }));
+
+      setChoices(list);
+    }
+    load();
+  }, [address, contract]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -35,23 +66,17 @@ export default function StakeModal({ onClose, onSelectNFT, initialFocusId }: Sta
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // click outside to close
   function onBackdropClick(e: React.MouseEvent) {
     if (e.target === backdropRef.current) onClose();
   }
 
   async function handleSelect(id: string) {
-    // prevent double clicks
     if (loadingId) return;
     try {
       setLoadingId(id);
-      // if you need async operation (tx) you can await here
-      await Promise.resolve(); // placeholder
       onSelectNFT(id);
-      // close modal after select
       onClose();
-    } catch (err) {
-      console.error("select error", err);
+    } catch {
     } finally {
       setLoadingId(null);
     }
@@ -70,24 +95,26 @@ export default function StakeModal({ onClose, onSelectNFT, initialFocusId }: Sta
         <h2 className="text-xl font-semibold mb-3 text-white">Select NFT to Stake</h2>
 
         <div className="space-y-3">
-          {mockNFTs.map((n, idx) => {
-            const idAttr = `stake-btn-${n.id}`;
-            return (
-              <button
-                id={idAttr}
-                key={n.id}
-                ref={idx === 0 ? firstButtonRef : undefined}
-                onClick={() => handleSelect(n.id)}
-                disabled={!!loadingId}
-                className="w-full text-left p-3 bg-white/5 rounded-md hover:bg-white/6 transition flex justify-between items-center"
-              >
-                <span className="text-white">{n.title}</span>
-                <span className="text-sm text-white/70">
-                  {loadingId === n.id ? "Staking..." : "Stake"}
-                </span>
-              </button>
-            );
-          })}
+          {choices.length === 0 ? (
+            <div className="text-sm text-white/60">No eligible NFTs to stake.</div>
+          ) : (
+            choices.map((n, idx) => {
+              const idAttr = `stake-btn-${n.id}`;
+              return (
+                <button
+                  id={idAttr}
+                  key={n.id}
+                  ref={idx === 0 ? firstButtonRef : undefined}
+                  onClick={() => handleSelect(n.id)}
+                  disabled={!!loadingId}
+                  className="w-full text-left p-3 bg-white/5 rounded-md hover:bg-white/6 transition flex justify-between items-center"
+                >
+                  <span className="text-white">{n.title}</span>
+                  <span className="text-sm text-white/70">{loadingId === n.id ? "Staking..." : "Stake"}</span>
+                </button>
+              );
+            })
+          )}
         </div>
 
         <div className="mt-5 flex justify-end">

@@ -7,6 +7,7 @@ import {
   useUser as useThirdwebUser,
 } from "@thirdweb-dev/react";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 type Rarity = "common" | "rare" | "epic" | "legendary";
 
@@ -58,6 +59,14 @@ const defaultBreakdown = (): RarityBreakdown => ({
   legendary: 0,
 });
 
+type ProfileRow = {
+  display_name?: string | null;
+  fid?: number | null;
+  pfp_url?: string | null;
+  streak_days?: number | null;
+  rank_label?: string | null;
+};
+
 export default function useUser() {
   const address = useAddress();
   const { user } = useThirdwebUser();
@@ -65,14 +74,56 @@ export default function useUser() {
   const { data: balanceData } = useBalance(address);
   const [loadingNFTs, setLoadingNFTs] = useState(false);
   const [rarityBreakdown, setRarityBreakdown] = useState<RarityBreakdown>(defaultBreakdown());
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [stakedCount, setStakedCount] = useState(0);
 
   const rawData = user?.data as any;
-  const displayName = (rawData?.name as string) ?? "FarFISH Captain";
-  const fid = (rawData?.fid as number) ?? 0;
-  const rawPfp = rawData?.pfp as string | undefined;
+  const displayName =
+    (profile?.display_name as string | undefined) ?? (rawData?.name as string) ?? "FarFISH Captain";
+  const fid = Number(
+    profile?.fid ?? (rawData?.fid as number | undefined) ?? 0
+  );
+  const rawPfp = (profile?.pfp_url as string | undefined) ?? (rawData?.pfp as string | undefined);
   const pfpUrl = rawPfp && !String(rawPfp).startsWith("data:")
     ? String(rawPfp)
     : "https://avatar.vercel.sh/1";
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchProfile = async () => {
+      if (!address) {
+        if (!cancelled) {
+          setProfile(null);
+          setStakedCount(0);
+        }
+        return;
+      }
+      try {
+        const [{ data: profileData }, { data: stakingData }] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("display_name, fid, pfp_url, streak_days, rank_label")
+            .eq("wallet_address", address)
+            .limit(1)
+            .maybeSingle(),
+          supabase.from("staking_positions").select("token_id").eq("wallet_address", address),
+        ]);
+        if (cancelled) return;
+        setProfile((profileData as ProfileRow) ?? null);
+        setStakedCount((stakingData as { token_id: number }[] | null)?.length ?? 0);
+      } catch (error) {
+        if (!cancelled) {
+          setProfile(null);
+          setStakedCount(0);
+          console.error("Failed to fetch profile data", error);
+        }
+      }
+    };
+    fetchProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
 
   useEffect(() => {
     const fetchNFTs = async () => {
@@ -110,9 +161,11 @@ export default function useUser() {
 
   const stats: UserStats = {
     nftsOwned,
-    staked: 0, // TODO: integrate staking contract positions
-    streakDays: 0,
-    rankLabel: nftsOwned >= 5 ? "Gold" : nftsOwned >= 3 ? "Silver" : nftsOwned > 0 ? "Bronze" : "Unranked",
+    staked: stakedCount,
+    streakDays: profile?.streak_days ?? 0,
+    rankLabel:
+      profile?.rank_label ??
+      (nftsOwned >= 5 ? "Gold" : nftsOwned >= 3 ? "Silver" : nftsOwned > 0 ? "Bronze" : "Unranked"),
     rarityBreakdown,
     walletBalance: balanceData?.displayValue
       ? `${Number(balanceData.displayValue).toFixed(4)} ${balanceData.symbol}`

@@ -15,8 +15,8 @@ const ThirdwebProvider = ({ children }: PropsWithChildren) => {
       dAppMeta={{
         name: "FarFISH",
         description: "Mint. Stake. Earn. Dominate the seas.",
-        logoUrl: "https://farfish.app/frame-placeholder.png",
-        url: "https://farfish.app",
+        logoUrl: "https://farfish-miniapp5.vercel.app/frame-image.png",
+        url: "https://farfish-miniapp5.vercel.app",
       }}
     >
       {children}

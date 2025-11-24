@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
+import { supabase } from "../lib/supabase";
 
 // Type definition for leaderboard entries (ready for backend integration)
 type LeaderboardEntry = {
@@ -15,49 +16,30 @@ type LeaderboardEntry = {
   fid?: number;
 };
 
-// Generate 100 mock users for demonstration
-const generateMockLeaderboard = (): LeaderboardEntry[] => {
-  const names = [
-    "AlphaFisher", "BetaCaster", "GammaWave", "DeltaForce", "EpsilonElite",
-    "ZetaMaster", "EtaHunter", "ThetaKing", "IotaLegend", "KappaPro",
-    "LambdaLord", "MuMariner", "NuNavigator", "XiExplorer", "OmicronOracle",
-    "PiPioneer", "RhoRuler", "SigmaSailor", "TauTitan", "UpsilonUltra",
-    "PhiPhoenix", "ChiChampion", "PsiPirate", "OmegaOverlord", "AquaAce",
-    "NebulaNinja", "StellarStriker", "CosmicCaptain", "GalacticGuard", "VoidVoyager",
-    "QuantumQuasar", "NovaNavigator", "SolarSailor", "LunarLegend", "MeteorMaster",
-    "CometCommander", "AsteroidAce", "PlanetPilot", "StarStriker", "SunSailor",
-    "MoonMariner", "MarsMaster", "JupiterJuggernaut", "SaturnSailor", "UranusUltra",
-    "NeptuneNavigator", "PlutoPilot", "CeresCaptain", "ErisElite", "HaumeaHero",
-    "MakemakeMaster", "SednaSailor", "OrcusOracle", "QuaoarQuasar", "VarunaVoyager",
-    "IxionIdeal", "ErisElite", "GonggongGuard", "SalaciaSailor", "VardaVoyager",
-    "BorasisiBoss", "RadigastRuler", "SilaSailor", "TawaTitan", "WeywotWarrior",
-    "NamakaNavigator", "Hi'iakaHero", "NixNinja", "HydraHunter", "KerberosKing",
-    "StyxSailor", "CharonCaptain", "NixNavigator", "HydraHero", "KerberosKing",
-    "StyxStriker", "CharonCommander", "DysnomiaDuke", "VanthVoyager", "ActaeaAce",
-    "BiancaBoss", "CressidaCaptain", "DesdemonaDuke", "JulietJuggernaut", "PortiaPilot",
-    "RosalindRuler", "BelindaBoss", "PuckPioneer", "MirandaMaster", "ArielAce",
-    "UmbrielUltra", "TitaniaTitan", "OberonOracle", "CordeliaCaptain", "OpheliaOracle",
-    "PerditaPilot", "MabMaster", "CupidCommander", "FranciscoFighter", "CalibanCaptain",
-  ];
-
-  const entries: LeaderboardEntry[] = [];
-  
-  for (let i = 0; i < 100; i++) {
-    const rank = i + 1;
-    // Generate decreasing scores (top user has highest)
-    const baseScore = 50000 - (rank * 400) + Math.floor(Math.random() * 500);
-    const score = Math.max(100, baseScore);
-    
-    entries.push({
-      rank,
-      walletAddress: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
-      displayName: names[i % names.length] + (i > names.length - 1 ? `#${Math.floor(i / names.length) + 1}` : ""),
-      pfpUrl: `https://avatar.vercel.sh/1`,
-      totalPoints: score,
-      fid: 1000 + i,
-    });
-  }
-  
+const useLeaderboardData = () => {
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("wallet_address, display_name, pfp_url, frh_score, fid")
+          .order("frh_score", { ascending: false })
+          .limit(100);
+        const mapped: LeaderboardEntry[] = (data ?? []).map((row: any, idx: number) => ({
+          rank: idx + 1,
+          walletAddress: row.wallet_address,
+          displayName: row.display_name ?? undefined,
+          pfpUrl: row.pfp_url ?? undefined,
+          totalPoints: Number(row.frh_score ?? 0),
+          fid: row.fid ?? undefined,
+        }));
+        setEntries(mapped);
+      } catch {
+        setEntries([]);
+      }
+    })();
+  }, []);
   return entries;
 };
 
@@ -103,27 +85,21 @@ const shortenAddress = (address: string): string => {
 export default function LeaderboardPage() {
   const { user } = useUser();
   
-  // Generate mock leaderboard data
-  const leaderboardData = useMemo(() => generateMockLeaderboard(), []);
+  const leaderboardData = useLeaderboardData();
   
-  // Calculate current user's mock FRH score (in real app, this comes from backend)
-  // For now, we'll use a combination of stats or a default value
   const currentUserScore = useMemo(() => {
     if (!user) return 0;
-    // Mock calculation: combine NFTs owned, staked, and streak days
     const nftPoints = (user.stats?.nftsOwned ?? 0) * 100;
     const stakedPoints = (user.stats?.staked ?? 0) * 500;
     const streakPoints = (user.stats?.streakDays ?? 0) * 50;
-    return nftPoints + stakedPoints + streakPoints || 1250; // Default score if no stats
+    return nftPoints + stakedPoints + streakPoints;
   }, [user]);
   
-  // Find current user's rank (or assign a rank if not in top 100)
   const currentUserRank = useMemo(() => {
     const userRank = leaderboardData.findIndex(
       (entry) => entry.walletAddress.toLowerCase() === user?.walletAddress?.toLowerCase()
     );
     if (userRank !== -1) return userRank + 1;
-    // If user not in top 100, calculate approximate rank
     const usersAbove = leaderboardData.filter((entry) => entry.totalPoints > currentUserScore).length;
     return usersAbove + 1;
   }, [leaderboardData, user, currentUserScore]);

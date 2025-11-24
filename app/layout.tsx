@@ -7,7 +7,7 @@ import Footer from "./components/Footer";
 import ThirdwebProvider from "./providers/ThirdwebProvider";
 import FarcasterMiniAppReady from "./components/FarcasterMiniAppReady";
 
-const baseUrl = new URL("https://farfish.app");
+const baseUrl = new URL("https://farfish-miniapp5.vercel.app");
 
 export const metadata: Metadata = {
   metadataBase: baseUrl,
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     siteName: "FarFISH",
     images: [
       {
-        url: "https://farfish.app/frame-placeholder.png",
+        url: "https://farfish-miniapp5.vercel.app/frame-image.png",
         width: 1200,
         height: 630,
         alt: "FarFISH preview",
@@ -31,17 +31,17 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "FarFISH",
     description: "Mint. Stake. Earn. Dominate the seas.",
-    images: ["https://farfish.app/frame-placeholder.png"],
+    images: ["https://farfish-miniapp5.vercel.app/frame-image.png"],
   },
   other: {
     "fc:frame": "vNext",
-    "fc:frame:image": "https://farfish.app/frame-placeholder.png",
-    "fc:frame:post_url": "https://farfish.app/api/frame",
+    "fc:frame:image": "https://farfish-miniapp5.vercel.app/frame-image.png",
+    "fc:frame:post_url": "https://farfish-miniapp5.vercel.app/api/frame",
     "fc:frame:button:1": "Mint",
     "fc:frame:button:1:action": "post",
     "fc:frame:button:2": "Stake",
     "fc:frame:button:2:action": "post_redirect",
-    "fc:frame:button:2:target": "https://farfish.app/stake",
+    "fc:frame:button:2:target": "https://farfish-miniapp5.vercel.app/stake",
   },
 };
 

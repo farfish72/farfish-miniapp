@@ -4,9 +4,47 @@
 import Image from "next/image";
 import Header from "./components/Header";
 import useFarcasterGate from "./hooks/useFarcasterGate";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ConnectWallet, useAddress, useContract, useContractRead } from "@thirdweb-dev/react";
+import { sdk } from "@farcaster/miniapp-sdk";
+import { NFT_CONTRACT_ADDRESS, NFT_SUPPLY_TOTAL } from "./constants";
 
 export default function Home() {
   const { blocked, message } = useFarcasterGate();
+  const [minted, setMinted] = useState<number | null>(null);
+  const address = useAddress();
+  const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined);
+  const { data: totalSupplyData } = useContractRead(contract, "totalSupply", []);
+  const shareMessage =
+    "Everyone in my Farcaster circle is talking about FarFISH! NFT stake multipliers, daily rewards and airdrops";
+
+  useEffect(() => {
+    try {
+      const v = Number(totalSupplyData ?? 0);
+      if (!Number.isNaN(v) && v >= 0) setMinted(v);
+    } catch {
+      setMinted(null);
+    }
+  }, [totalSupplyData]);
+
+  const mintedDisplay = useMemo(() => (minted === null ? "—" : minted), [minted]);
+  const mintedProgress = useMemo(() => {
+    if (minted === null) return 0;
+    return Math.min(100, Math.max(0, (minted / NFT_SUPPLY_TOTAL) * 100));
+  }, [minted]);
+  const remainingSupply = minted === null ? "—" : Math.max(0, NFT_SUPPLY_TOTAL - minted);
+
+  const handleShare = useCallback(() => {
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareMessage)}`;
+    try {
+      sdk.actions.openUrl(warpcastUrl);
+    } catch {
+      if (typeof window !== "undefined") {
+        window.open(warpcastUrl, "_blank", "noopener,noreferrer");
+      }
+    }
+  }, [shareMessage]);
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* উপরের FarFISH + Follow us + Home টাইটেল */}
@@ -29,21 +67,26 @@ export default function Home() {
           <div className="grid grid-cols-3 gap-2 mt-4 text-center">
             <div>
               <p className="text-xs text-white/60">Minted</p>
-              <p className="font-bold">15</p>
+              <p className="font-bold">{mintedDisplay}</p>
             </div>
             <div>
               <p className="text-xs text-white/60">Progress</p>
-              <p className="font-bold">0.15%</p>
+              <p className="font-bold">
+                {minted === null ? "—" : `${mintedProgress.toFixed(2)}%`}
+              </p>
             </div>
             <div>
               <p className="text-xs text-white/60">Remaining</p>
-              <p className="font-bold">9984</p>
+              <p className="font-bold">{remainingSupply}</p>
             </div>
           </div>
 
           {/* PROGRESS BAR */}
           <div className="w-full bg-white/10 rounded-full h-2 mt-4 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] w-[15%]" />
+            <div
+              className="h-full bg-gradient-to-r from-[#00d4c4] to-[#80ffd1]"
+              style={{ width: `${mintedProgress}%` }}
+            />
           </div>
 
           {/* MINT BUTTON */}
@@ -52,13 +95,22 @@ export default function Home() {
               {message}
             </div>
           ) : (
-            <button className="w-full mt-4 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg">
-              Connect &amp; Mint
-            </button>
+            <div className="w-full mt-4">
+              <ConnectWallet
+                theme="dark"
+                btnTitle={address ? "Mint with connected wallet" : "Connect Farcaster wallet"}
+                className="w-full"
+                modalTitle="Connect wallet"
+              />
+            </div>
           )}
 
           {/* SHARE BUTTON */}
-          <button className="w-full mt-2 bg-white/10 text-white py-2 rounded-lg text-sm">
+          <button
+            type="button"
+            onClick={handleShare}
+            className="w-full mt-2 bg-white/10 text-white py-2 rounded-lg text-sm transition hover:bg-white/20"
+          >
             Share
           </button>
 
