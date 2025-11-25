@@ -33,16 +33,8 @@ export const metadata: Metadata = {
     description: "Mint. Stake. Earn. Dominate the seas.",
     images: ["https://farfish-miniapp5.vercel.app/frame-image.png"],
   },
-  other: {
-    "fc:frame": "vNext",
-    "fc:frame:image": "https://farfish-miniapp5.vercel.app/frame-image.png",
-    "fc:frame:post_url": "https://farfish-miniapp5.vercel.app/api/frame",
-    "fc:frame:button:1": "Mint",
-    "fc:frame:button:1:action": "post",
-    "fc:frame:button:2": "Stake",
-    "fc:frame:button:2:action": "post_redirect",
-    "fc:frame:button:2:target": "https://farfish-miniapp5.vercel.app/stake",
-  },
+  // REMOVE the "other" metadata section completely ❌
+  // Frame metadata should ONLY be in /api/frame endpoint
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
