@@ -26,6 +26,18 @@ export default function StakingPage() {
   const [syncing, setSyncing] = useState(false);
   const walletAddress = user?.walletAddress;
 
+  // Farcaster environment detection
+  useEffect(() => {
+    const isInFarcaster = 
+      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
+      typeof window !== 'undefined' && window.parent !== window ||
+      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
+    
+    if (isInFarcaster) {
+      console.log('Stake page running in Farcaster environment');
+    }
+  }, []);
+
   useEffect(() => {
     const i = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(i);
@@ -163,7 +175,6 @@ export default function StakingPage() {
           <p className="text-xs text-white/60 mt-2">Unstake is disabled until lock ends.</p>
         </section>
       </div>
-
     </div>
   );
 }

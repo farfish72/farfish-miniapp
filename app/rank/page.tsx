@@ -6,6 +6,20 @@ import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import { supabase } from "../lib/supabase";
 
+// Farcaster environment detection
+const useFarcasterDetection = () => {
+  useEffect(() => {
+    const isInFarcaster = 
+      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
+      typeof window !== 'undefined' && window.parent !== window ||
+      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
+    
+    if (isInFarcaster) {
+      console.log('Rank page running in Farcaster environment');
+    }
+  }, []);
+};
+
 // Type definition for leaderboard entries (ready for backend integration)
 type LeaderboardEntry = {
   rank: number;
@@ -84,6 +98,9 @@ const shortenAddress = (address: string): string => {
 
 export default function LeaderboardPage() {
   const { user } = useUser();
+  
+  // Farcaster detection
+  useFarcasterDetection();
   
   const leaderboardData = useLeaderboardData();
   
@@ -178,8 +195,6 @@ export default function LeaderboardPage() {
             <li>• Higher rarity NFTs earn more FRH when staked</li>
           </ul>
         </section>
-
-        
       </div>
 
       {/* Sticky Current User Row - Always visible at bottom */}

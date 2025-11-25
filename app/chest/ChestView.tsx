@@ -46,6 +46,18 @@ export default function ChestView() {
   const [stakingUnlockedFlag, setStakingUnlockedFlag] = useState(false);
   const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
 
+  // Farcaster environment detection
+  useEffect(() => {
+    const isInFarcaster = 
+      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
+      typeof window !== 'undefined' && window.parent !== window ||
+      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
+    
+    if (isInFarcaster) {
+      console.log('ChestView running in Farcaster environment');
+    }
+  }, []);
+
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
   const isFirstDay = now.getDate() === 1;
@@ -255,8 +267,6 @@ export default function ChestView() {
           onAction={handleStakingClaim}
           onInfo={() => openModal("NFT Staking Rewards", infoCopy.staking)}
         />
-
-        
       </div>
 
       {infoModal && (
@@ -277,4 +287,3 @@ export default function ChestView() {
     </div>
   );
 }
-

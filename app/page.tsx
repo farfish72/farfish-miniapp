@@ -6,7 +6,6 @@ import Header from "./components/Header";
 import useFarcasterGate from "./hooks/useFarcasterGate";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConnectWallet, useAddress, useContract, useContractRead } from "@thirdweb-dev/react";
-import { sdk } from "@farcaster/miniapp-sdk";
 import { NFT_CONTRACT_ADDRESS, NFT_SUPPLY_TOTAL } from "./constants";
 
 export default function Home() {
@@ -36,14 +35,31 @@ export default function Home() {
 
   const handleShare = useCallback(() => {
     const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareMessage)}`;
-    try {
-      sdk.actions.openUrl(warpcastUrl);
-    } catch {
-      if (typeof window !== "undefined") {
-        window.open(warpcastUrl, "_blank", "noopener,noreferrer");
-      }
+    
+    // Farcaster environment detection
+    const isInFarcaster = 
+      typeof navigator !== 'undefined' && navigator.userAgent.includes('Farcaster') ||
+      typeof window !== 'undefined' && window.parent !== window;
+    
+    if (isInFarcaster && typeof window !== 'undefined' && (window as any).sdk) {
+      // Farcaster environment - use SDK
+      (window as any).sdk.actions.openUrl(warpcastUrl);
+    } else {
+      // Regular browser - open in new tab
+      window.open(warpcastUrl, "_blank", "noopener,noreferrer");
     }
   }, [shareMessage]);
+
+  // Farcaster environment detection for proper opening
+  useEffect(() => {
+    const isInFarcaster = 
+      typeof navigator !== 'undefined' && navigator.userAgent.includes('Farcaster') ||
+      typeof window !== 'undefined' && window.parent !== window;
+    
+    if (isInFarcaster) {
+      console.log('Running in Farcaster environment');
+    }
+  }, []);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -152,8 +168,6 @@ export default function Home() {
             )}
           </div>
         </div>
-
-        
       </div>
     </div>
   );

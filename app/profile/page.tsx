@@ -10,6 +10,20 @@ import { FARCASTER_PROFILE_URL, X_PROFILE_URL, referralMultiplierByTokenId } fro
 import { supabase } from "../lib/supabase";
 import useFarcasterGate from "../hooks/useFarcasterGate";
 
+// Farcaster environment detection
+const useFarcasterDetection = () => {
+  useEffect(() => {
+    const isInFarcaster = 
+      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
+      typeof window !== 'undefined' && window.parent !== window ||
+      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
+    
+    if (isInFarcaster) {
+      console.log('Profile page running in Farcaster environment');
+    }
+  }, []);
+};
+
 const faqItems = [
   {
     question: "What is FarFish?",
@@ -60,6 +74,9 @@ export default function ProfilePage() {
   const [referralLink, setReferralLink] = useState<string | null>(null);
   const { blocked, message } = useFarcasterGate();
   const [refMultiplier, setRefMultiplier] = useState<number | null>(null);
+
+  // Farcaster detection
+  useFarcasterDetection();
 
   const stats = useMemo(
     () => [
@@ -251,8 +268,6 @@ export default function ProfilePage() {
             })}
           </div>
         </section>
-
-        
       </div>
     </div>
   );
