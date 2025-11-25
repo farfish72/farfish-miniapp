@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   title: "FarFISH Frame",
   description: "Catch and stake fish with FarFISH.",
   openGraph: {
-    title: "FarFISH Chest",
-    description: "Open your FarFISH chest or go to the app.",
+    title: "FarFISH",
+    description: "Your daily chest, staking & rewards.",
     images: [`${SITE_URL}/frame-image.png`],
     url: `${SITE_URL}/frame`,
   },
@@ -15,13 +15,10 @@ export const metadata: Metadata = {
     "fc:frame": "vNext",
     "fc:frame:image": `${SITE_URL}/frame-image.png`,
 
+    // ONE BUTTON ONLY
     "fc:frame:button:1": "Open FarFISH",
     "fc:frame:button:1:action": "link",
     "fc:frame:button:1:target": SITE_URL,
-
-    "fc:frame:button:2": "Open Chest",
-    "fc:frame:button:2:action": "link",
-    "fc:frame:button:2:target": `${SITE_URL}/chest`,
   },
 };
 
@@ -40,7 +37,7 @@ export default function FramePage() {
     >
       <h1 style={{ fontSize: "2rem", fontWeight: 700 }}>FarFISH Frame</h1>
       <p style={{ opacity: 0.7, maxWidth: 480, textAlign: "center" }}>
-        This page is used as a Farcaster Frame. Share <code>{SITE_URL}/frame</code> in your cast.
+        Share <code>{SITE_URL}/frame</code> in your cast.
       </p>
     </main>
   );
