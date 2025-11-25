@@ -11,6 +11,7 @@ async function handler() {
         <title>Launch FarFISH</title>
         <meta property="fc:frame" content="vNext" />
         <meta property="fc:frame:image" content="${appUrl}/splash.png" />
+        <meta property="fc:frame:post_url" content="${appUrl}/api/start" />
         <meta property="fc:frame:button:1" content="Play FarFISH 🎣" />
         <meta property="fc:frame:button:1:action" content="launch" />
         <meta property="fc:frame:button:1:target" content="${appUrl}/game" />

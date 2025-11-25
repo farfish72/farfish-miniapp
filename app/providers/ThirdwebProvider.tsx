@@ -7,7 +7,6 @@ import { THIRDWEB_CLIENT_ID } from "../constants";
 const ThirdwebProvider = ({ children }: PropsWithChildren) => {
   const clientId = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ?? THIRDWEB_CLIENT_ID;
 
-
   return (
     <ThirdwebReactProvider
       clientId={clientId}
@@ -25,4 +24,3 @@ const ThirdwebProvider = ({ children }: PropsWithChildren) => {
 };
 
 export default ThirdwebProvider;
-

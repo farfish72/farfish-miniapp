@@ -20,10 +20,10 @@ export async function GET(req: Request) {
         <meta property="fc:frame" content="vNext" />
         <meta property="fc:frame:image" content="${appUrl}/frame-image.png" />
         <meta property="fc:frame:button:1" content="🎣 Play FarFISH" />
-        <meta property="fc:frame:button:1:action" content="post_redirect" />
+        <meta property="fc:frame:button:1:action" content="launch" />
         <meta property="fc:frame:button:1:target" content="${targetUrl}" />
         <meta property="fc:frame:button:2" content="Stake NFTs" />
-        <meta property="fc:frame:button:2:action" content="post_redirect" />
+        <meta property="fc:frame:button:2:action" content="launch" />
         <meta property="fc:frame:button:2:target" content="${appUrl}/stake${refQuery}" />
         <meta property="fc:frame:post_url" content="${postUrlWithRef}" />
         
@@ -41,27 +41,94 @@ export async function GET(req: Request) {
 }
 
 // Handles POST request (for button click callback)
-export async function POST() {
-  const appUrl = "https://farfish-miniapp5.vercel.app";
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { untrustedData } = body;
+    const address = untrustedData?.address;
+    const fid = untrustedData?.fid;
+    
+    // Calculate multiplier based on address or use default
+    const multiplier = address ? await calculateMultiplier(address) : 1.5;
+    
+    const { searchParams } = new URL(req.url);
+    const refParam = searchParams.get('ref') || '';
+    const refQuery = refParam ? `?ref=${encodeURIComponent(refParam)}` : '';
+    const targetUrl = `${appUrl}${refQuery}`;
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta property="fc:frame" content="vNext" />
-        <meta property="fc:frame:image" content="${appUrl}/frame-image.png" />
-        <meta property="fc:frame:post_url" content="${appUrl}/api/frame" />
-        <meta property="fc:frame:button:1" content="Open FarFISH" />
-        <meta property="fc:frame:button:1:action" content="launch" />
-        <meta property="fc:frame:button:1:target" content="${appUrl}" />
-        <meta property="og:title" content="FarFISH" />
-        <meta property="og:description" content="5X stake multipliers and daily rewards" />
-        <meta property="og:image" content="${appUrl}/frame-image.png" />
-      </head>
-    </html>
-  `;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta property="fc:frame" content="vNext" />
+          <meta property="fc:frame:image" content="${appUrl}/frame-image.png" />
+          <meta property="fc:frame:post_url" content="${appUrl}/api/frame" />
+          <meta property="fc:frame:button:1" content="🎣 Open FarFISH (x${multiplier})" />
+          <meta property="fc:frame:button:1:action" content="launch" />
+          <meta property="fc:frame:button:1:target" content="${targetUrl}" />
+          <meta property="fc:frame:button:2" content="💰 Stake NFTs" />
+          <meta property="fc:frame:button:2:action" content="launch" />
+          <meta property="fc:frame:button:2:target" content="${appUrl}/stake${refQuery}" />
+          <meta property="og:title" content="FarFISH" />
+          <meta property="og:description" content="5X stake multipliers and daily rewards" />
+          <meta property="og:image" content="${appUrl}/frame-image.png" />
+        </head>
+      </html>
+    `;
 
-  return new NextResponse(html, {
-    headers: { 'Content-Type': 'text/html' },
+    return new NextResponse(html, {
+      headers: { 'Content-Type': 'text/html' },
+    });
+  } catch (error) {
+    console.error('Frame POST error:', error);
+    // Fallback response
+    const fallbackHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta property="fc:frame" content="vNext" />
+          <meta property="fc:frame:image" content="${appUrl}/frame-image.png" />
+          <meta property="fc:frame:button:1" content="🎣 Open FarFISH" />
+          <meta property="fc:frame:button:1:action" content="launch" />
+          <meta property="fc:frame:button:1:target" content="${appUrl}" />
+        </head>
+      </html>
+    `;
+    return new NextResponse(fallbackHtml, { 
+      headers: { 'Content-Type': 'text/html' } 
+    });
+  }
+}
+
+// Multiplier calculation function
+async function calculateMultiplier(address: string): Promise<number> {
+  try {
+    // Add your actual multiplier logic here using Supabase
+    // Check NFT ownership, staking, etc.
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('multiplier')
+      .eq('wallet_address', address)
+      .single();
+    
+    if (error || !data) {
+      return 1.5; // Default multiplier
+    }
+    
+    return data.multiplier || 1.5;
+  } catch (error) {
+    console.error('Multiplier calculation error:', error);
+    return 1.5; // Fallback multiplier
+  }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
   });
 }

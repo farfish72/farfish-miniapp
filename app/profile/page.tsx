@@ -3,7 +3,7 @@
 
 import Image from "next/image";
 import { useMemo, useState, useEffect } from "react";
-import { ConnectWallet } from "@thirdweb-dev/react";
+import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import { FARCASTER_PROFILE_URL, X_PROFILE_URL, referralMultiplierByTokenId } from "../constants";
@@ -142,7 +142,7 @@ export default function ProfilePage() {
                 {message}
               </div>
             ) : (
-              <ConnectWallet />
+              <WalletConnect />
             )}
           </div>
           <div className="flex items-center gap-3">
