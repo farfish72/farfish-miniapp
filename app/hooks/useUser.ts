@@ -1,11 +1,7 @@
 "use client";
 
-import {
-  useAddress,
-  useBalance,
-  useContract,
-  useUser as useThirdwebUser,
-} from "@thirdweb-dev/react";
+import { useContract } from "@thirdweb-dev/react";
+import { useAccount } from "wagmi";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -19,7 +15,6 @@ type UserStats = {
   streakDays?: number;
   rankLabel?: string;
   rarityBreakdown?: RarityBreakdown;
-  walletBalance?: string;
 };
 
 type FarcasterUser = {
@@ -68,22 +63,19 @@ type ProfileRow = {
 };
 
 export default function useUser() {
-  const address = useAddress();
-  const { user } = useThirdwebUser();
+  const { address } = useAccount();
   const { contract: nftContract } = useContract(CONTRACTS.nftCollection, "nft-drop");
-  const { data: balanceData } = useBalance(address);
   const [loadingNFTs, setLoadingNFTs] = useState(false);
   const [rarityBreakdown, setRarityBreakdown] = useState<RarityBreakdown>(defaultBreakdown());
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [stakedCount, setStakedCount] = useState(0);
 
-  const rawData = user?.data as any;
   const displayName =
-    (profile?.display_name as string | undefined) ?? (rawData?.name as string) ?? "FarFISH Captain";
+    (profile?.display_name as string | undefined) ?? "FarFISH Captain";
   const fid = Number(
-    profile?.fid ?? (rawData?.fid as number | undefined) ?? 0
+    profile?.fid ?? 0
   );
-  const rawPfp = (profile?.pfp_url as string | undefined) ?? (rawData?.pfp as string | undefined);
+  const rawPfp = (profile?.pfp_url as string | undefined) ?? undefined;
   const pfpUrl = rawPfp && !String(rawPfp).startsWith("data:")
     ? String(rawPfp)
     : "https://avatar.vercel.sh/1";
@@ -167,9 +159,6 @@ export default function useUser() {
       profile?.rank_label ??
       (nftsOwned >= 5 ? "Gold" : nftsOwned >= 3 ? "Silver" : nftsOwned > 0 ? "Bronze" : "Unranked"),
     rarityBreakdown,
-    walletBalance: balanceData?.displayValue
-      ? `${Number(balanceData.displayValue).toFixed(4)} ${balanceData.symbol}`
-      : undefined,
   };
 
   const connectedUser: FarcasterUser | null = address

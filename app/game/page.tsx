@@ -83,13 +83,7 @@ export default function Game() {
           </button> 
         </div> 
         
-        <style jsx global>{` 
-          @keyframes jump { 
-            0% { transform: translateX(-50%) translateY(0); } 
-            50% { transform: translateX(-50%) translateY(-30px); } 
-            100% { transform: translateX(-50%) translateY(0); } 
-          } 
-        `}</style> 
+        
       </div> 
     </> 
   ); 

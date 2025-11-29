@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useAddress, useContract } from "@thirdweb-dev/react";
+import { useContract } from "@thirdweb-dev/react";
+import { useAccount } from "wagmi";
 import { supabase } from "../lib/supabase";
 import { NFT_CONTRACT_ADDRESS } from "../constants";
 
@@ -18,7 +19,7 @@ export default function StakeModal({ onClose, onSelectNFT, initialFocusId }: Sta
   const [choices, setChoices] = useState<Choice[]>([]);
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const firstButtonRef = useRef<HTMLButtonElement | null>(null);
-  const address = useAddress();
+  const { address } = useAccount();
   const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined, "nft-drop");
 
   useEffect(() => {

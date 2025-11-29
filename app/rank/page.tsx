@@ -4,21 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
+import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { supabase } from "../lib/supabase";
-
-// Farcaster environment detection
-const useFarcasterDetection = () => {
-  useEffect(() => {
-    const isInFarcaster = 
-      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
-      typeof window !== 'undefined' && window.parent !== window ||
-      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
-    
-    if (isInFarcaster) {
-      console.log('Rank page running in Farcaster environment');
-    }
-  }, []);
-};
 
 // Type definition for leaderboard entries (ready for backend integration)
 type LeaderboardEntry = {
@@ -98,9 +85,8 @@ const shortenAddress = (address: string): string => {
 
 export default function LeaderboardPage() {
   const { user } = useUser();
-  
-  // Farcaster detection
-  useFarcasterDetection();
+
+  useFarcasterEnvironment("Rank page");
   
   const leaderboardData = useLeaderboardData();
   

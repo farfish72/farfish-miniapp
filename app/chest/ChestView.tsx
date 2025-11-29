@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
+import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { supabase } from "../lib/supabase";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
@@ -42,21 +43,13 @@ export default function ChestView() {
 
   const [dailyAvailable, setDailyAvailable] = useState(true);
   const [dailyRemainingMs, setDailyRemainingMs] = useState(0);
+  const [dailyCount, setDailyCount] = useState(0);
+  const [monthlyTotal, setMonthlyTotal] = useState(0);
   const [activityUnlocked, setActivityUnlocked] = useState(false);
   const [stakingUnlockedFlag, setStakingUnlockedFlag] = useState(false);
   const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
 
-  // Farcaster environment detection
-  useEffect(() => {
-    const isInFarcaster = 
-      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
-      typeof window !== 'undefined' && window.parent !== window ||
-      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
-    
-    if (isInFarcaster) {
-      console.log('ChestView running in Farcaster environment');
-    }
-  }, []);
+  useFarcasterEnvironment("ChestView");
 
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
@@ -74,11 +67,17 @@ export default function ChestView() {
       try {
         const { data } = await supabase
           .from("profiles")
-          .select("last_daily_claim_at")
+          .select("last_daily_claim_at, daily_claim_count, monthly_claim_total")
           .eq("wallet_address", wallet)
           .limit(1)
           .maybeSingle();
         const lastClaim = Number((data as any)?.last_daily_claim_at ?? 0);
+        const dailyCountVal = Number((data as any)?.daily_claim_count ?? 0);
+        const monthlyTotalVal = Number((data as any)?.monthly_claim_total ?? 0);
+        
+        setDailyCount(dailyCountVal);
+        setMonthlyTotal(monthlyTotalVal);
+
         if (!lastClaim) {
           setDailyAvailable(true);
           setDailyRemainingMs(0);
@@ -174,17 +173,59 @@ export default function ChestView() {
     const wallet = user?.walletAddress;
     if (!wallet) return;
     try {
+      const { data: current } = await supabase
+        .from("profiles")
+        .select("daily_claim_count, monthly_claim_total")
+        .eq("wallet_address", wallet)
+        .maybeSingle();
+      
+      const newDailyCount = (Number(current?.daily_claim_count ?? 0) + 1);
+      const newMonthlyTotal = (Number(current?.monthly_claim_total ?? 0) + 1);
+      
       await supabase
         .from("profiles")
-        .update({ last_daily_claim_at: Date.now() })
+        .update({ 
+          last_daily_claim_at: Date.now(),
+          daily_claim_count: newDailyCount,
+          monthly_claim_total: newMonthlyTotal,
+        })
         .eq("wallet_address", wallet);
       setDailyAvailable(false);
       setDailyRemainingMs(DAY_MS);
-    } catch {}
+      setDailyCount(newDailyCount);
+      setMonthlyTotal(newMonthlyTotal);
+    } catch (error) {
+      console.error("Failed to claim daily reward", error);
+    }
   };
 
-  const handleStakeClaim = () => {
+  const handleStakeClaim = async () => {
     if (stakedCount <= 0) return;
+    const wallet = user?.walletAddress;
+    if (!wallet) return;
+    try {
+      const { data: current } = await supabase
+        .from("profiles")
+        .select("daily_claim_count, monthly_claim_total")
+        .eq("wallet_address", wallet)
+        .maybeSingle();
+      
+      const newDailyCount = (Number(current?.daily_claim_count ?? 0) + 1);
+      const newMonthlyTotal = (Number(current?.monthly_claim_total ?? 0) + 3);
+      
+      await supabase
+        .from("profiles")
+        .update({ 
+          last_daily_claim_at: Date.now(),
+          daily_claim_count: newDailyCount,
+          monthly_claim_total: newMonthlyTotal,
+        })
+        .eq("wallet_address", wallet);
+      setDailyCount(newDailyCount);
+      setMonthlyTotal(newMonthlyTotal);
+    } catch (error) {
+      console.error("Failed to claim stake reward", error);
+    }
   };
 
   const handleActivityClaim = () => {
@@ -215,7 +256,7 @@ export default function ChestView() {
 
         <ChestCard
           title="Daily Bronze Chest"
-          description={chestDescriptions.daily}
+          description={`${chestDescriptions.daily} Today: ${dailyCount} / Month total: ${monthlyTotal}`}
           badge={dailyAvailable ? "Ready" : "Cooling"}
           progress={dailyProgress}
           variant="bronze"
@@ -228,7 +269,7 @@ export default function ChestView() {
 
         <ChestCard
           title="Stake Chest (Silver)"
-          description={chestDescriptions.stake}
+          description={`${chestDescriptions.stake} Today: ${dailyCount} / Month total: ${monthlyTotal}`}
           badge={stakedCount > 0 ? "Ready" : "Locked"}
           progress={stakedCount > 0 ? 100 : 0}
           variant="silver"

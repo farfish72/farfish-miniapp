@@ -5,8 +5,11 @@ import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
+import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { supabase } from "../lib/supabase";
-import { tierById, powerById } from "../constants";
+import { tierById, powerById, STAKING_CONTRACT_ADDRESS } from "../constants";
+import stakeAbi from "../abi/stake.json";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -21,22 +24,27 @@ type StakedItem = {
 
 export default function StakingPage() {
   const { user } = useUser();
+  const { address } = useAccount();
   const [nowTick, setNowTick] = useState(Date.now());
   const [staked, setStaked] = useState<StakedItem[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"stake" | "unstake" | null>(null);
   const walletAddress = user?.walletAddress;
+  useFarcasterEnvironment("Stake page");
 
-  // Farcaster environment detection
-  useEffect(() => {
-    const isInFarcaster = 
-      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
-      typeof window !== 'undefined' && window.parent !== window ||
-      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
-    
-    if (isInFarcaster) {
-      console.log('Stake page running in Farcaster environment');
-    }
-  }, []);
+  const {
+    writeContract,
+    data: stakeTxHash,
+    isPending: isWritePending,
+    error: writeError,
+  } = useWriteContract();
+
+  const {
+    isLoading: isTxConfirming,
+    isSuccess: isTxConfirmed,
+  } = useWaitForTransactionReceipt({
+    hash: stakeTxHash,
+  });
 
   useEffect(() => {
     const i = setInterval(() => setNowTick(Date.now()), 1000);
@@ -75,6 +83,35 @@ export default function StakingPage() {
     fetchStakedPositions();
   }, [fetchStakedPositions]);
 
+  const handleStakeTx = useCallback(() => {
+    if (!address || !STAKING_CONTRACT_ADDRESS) return;
+    setPendingAction("stake");
+    writeContract({
+      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+      abi: stakeAbi as any,
+      functionName: "stake",
+      args: [],
+    } as any);
+  }, [address, writeContract]);
+
+  const handleUnstakeTx = useCallback(() => {
+    if (!address || !STAKING_CONTRACT_ADDRESS) return;
+    setPendingAction("unstake");
+    writeContract({
+      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+      abi: stakeAbi as any,
+      functionName: "unstake",
+      args: [],
+    } as any);
+  }, [address, writeContract]);
+
+  useEffect(() => {
+    if (!isTxConfirmed || !pendingAction) return;
+    // Re-sync positions after a successful stake/unstake.
+    fetchStakedPositions();
+    setPendingAction(null);
+  }, [isTxConfirmed, pendingAction, fetchStakedPositions]);
+
   const formatRemaining = (ms: number) => {
     if (ms <= 0) return "Unlocked";
     const totalMinutes = Math.ceil(ms / 60000);
@@ -94,9 +131,49 @@ export default function StakingPage() {
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h2 className="text-xl font-bold">Locked Staking</h2>
           <p className="text-sm text-white/70 mt-1">
-            Confirm your stake or unstake directly inside the Farcaster mini-app wallet. When you finish, sync
-            the dashboard below to pull the live Supabase snapshot.
+            Stake and unstake your FarFISH NFTs using your connected Farcaster wallet. After each transaction,
+            sync the dashboard below to pull the live Supabase snapshot.
           </p>
+
+          {!STAKING_CONTRACT_ADDRESS && (
+            <div className="w-full mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-center text-xs font-semibold text-red-200">
+              Staking disabled — contract address is not configured.
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={handleStakeTx}
+              disabled={!walletAddress || !STAKING_CONTRACT_ADDRESS || isWritePending || isTxConfirming}
+              className={`w-full bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg ${
+                !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+            >
+              {pendingAction === "stake" && (isWritePending || isTxConfirming)
+                ? "Staking..."
+                : "Stake via Farcaster"}
+            </button>
+            <button
+              onClick={handleUnstakeTx}
+              disabled={!walletAddress || !STAKING_CONTRACT_ADDRESS || isWritePending || isTxConfirming}
+              className={`w-full bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20 ${
+                !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+            >
+              {pendingAction === "unstake" && (isWritePending || isTxConfirming)
+                ? "Unstaking..."
+                : "Unstake via Farcaster"}
+            </button>
+          </div>
+          {writeError && (
+            <p className="text-xs text-red-300 mt-2">
+              {writeError.message}
+            </p>
+          )}
+          {isTxConfirmed && (
+            <p className="text-xs text-green-300 mt-2">
+              Staking transaction confirmed. Positions will update after sync.
+            </p>
+          )}
 
           <button
             onClick={fetchStakedPositions}

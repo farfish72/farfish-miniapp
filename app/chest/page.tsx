@@ -3,24 +3,17 @@
 
 import { useEffect } from "react";
 import ChestView from "./ChestView";
+import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 
 export default function ChestPage() {
-  // Farcaster environment detection for proper opening
+  const isFarcaster = useFarcasterEnvironment("Chest page");
+
   useEffect(() => {
-    const isInFarcaster = 
-      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
-      typeof window !== 'undefined' && window.parent !== window ||
-      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
-    
-    if (isInFarcaster) {
-      console.log('Chest page running in Farcaster environment');
+    if (!isFarcaster) return;
+    if (typeof window !== "undefined" && window.top !== window.self) {
+      console.log("Staying in Farcaster browser");
     }
-    
-    // Prevent redirect to Chrome in Farcaster environment
-    if (isInFarcaster && typeof window !== 'undefined' && window.top !== window.self) {
-      console.log('Staying in Farcaster browser');
-    }
-  }, []);
+  }, [isFarcaster]);
 
   return <ChestView />;
 }

@@ -6,23 +6,10 @@ import { useMemo, useState, useEffect } from "react";
 import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
+import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { FARCASTER_PROFILE_URL, X_PROFILE_URL, referralMultiplierByTokenId } from "../constants";
 import { supabase } from "../lib/supabase";
 import useFarcasterGate from "../hooks/useFarcasterGate";
-
-// Farcaster environment detection
-const useFarcasterDetection = () => {
-  useEffect(() => {
-    const isInFarcaster = 
-      typeof navigator !== 'undefined' && /Farcaster|Warpcast/i.test(navigator.userAgent || "") ||
-      typeof window !== 'undefined' && window.parent !== window ||
-      typeof document !== 'undefined' && document.referrer?.includes('farcaster');
-    
-    if (isInFarcaster) {
-      console.log('Profile page running in Farcaster environment');
-    }
-  }, []);
-};
 
 const faqItems = [
   {
@@ -74,9 +61,10 @@ export default function ProfilePage() {
   const [referralLink, setReferralLink] = useState<string | null>(null);
   const { blocked, message } = useFarcasterGate();
   const [refMultiplier, setRefMultiplier] = useState<number | null>(null);
+  const [multiplierStatus, setMultiplierStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   // Farcaster detection
-  useFarcasterDetection();
+  useFarcasterEnvironment("Profile page");
 
   const stats = useMemo(
     () => [
@@ -114,10 +102,18 @@ export default function ProfilePage() {
     })();
   }, [user?.walletAddress]);
 
+  const multiplierCopy = useMemo(() => {
+    if (!user?.walletAddress) return "Connect wallet to unlock multipliers";
+    if (multiplierStatus === "loading") return "Loading multiplier...";
+    if (multiplierStatus === "error") return "Multiplier unavailable";
+    if (refMultiplier === null) return "Loading multiplier...";
+    return `x${refMultiplier}`;
+  }, [user?.walletAddress, multiplierStatus, refMultiplier]);
+
   const handleVerifyAndGetLink = () => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://farfish-miniapp5.vercel.app";
-    const id = user?.walletAddress ?? (user?.fid ? `fid-${user.fid}` : "guest");
-    const link = `${origin}/api/frame?ref=${encodeURIComponent(id)}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://farfish-miniapp5.vercel.app";
+    const id = user?.fid ?? user?.walletAddress ?? "guest";
+    const link = `${baseUrl}/?ref=${encodeURIComponent(id)}`;
     setReferralLink(link);
   };
 
@@ -125,8 +121,13 @@ export default function ProfilePage() {
     const wallet = user?.walletAddress;
     if (!wallet) {
       setRefMultiplier(null);
+      setMultiplierStatus("idle");
       return;
     }
+
+    let cancelled = false;
+    setMultiplierStatus("loading");
+
     (async () => {
       try {
         const { data } = await supabase
@@ -136,15 +137,26 @@ export default function ProfilePage() {
           .order("token_tier", { ascending: false })
           .limit(1)
           .maybeSingle();
+
+        if (cancelled) return;
+
         const tokenId = Number((data as any)?.token_id);
         const fallbackTier = Number((data as any)?.token_tier ?? 0);
         const resolvedId = Number.isFinite(tokenId) ? tokenId : fallbackTier;
         setRefMultiplier(referralMultiplierByTokenId(resolvedId));
+        setMultiplierStatus("ready");
       } catch (error) {
-        console.error("Failed to load referral multiplier", error);
-        setRefMultiplier(1);
+        if (!cancelled) {
+          console.error("Failed to load referral multiplier", error);
+          setRefMultiplier(null);
+          setMultiplierStatus("error");
+        }
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.walletAddress]);
 
   return (
@@ -201,8 +213,8 @@ export default function ProfilePage() {
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
           <p className="text-sm text-white/70">
-            Base reward: 10 FRH per referral. Current multiplier:{" "}
-            {refMultiplier === null ? "Loading..." : `x${refMultiplier}`} (based on highest staked NFT token ID).
+            Base reward: 10 FRH per referral. Current multiplier: {multiplierCopy} (based on highest staked NFT token
+            ID).
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <a
