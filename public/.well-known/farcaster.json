@@ -5,7 +5,7 @@
     "signature": "/+Xz2VEsFs+or3MqhYhmw5tR27EwiXKehqWIPGY9CIFr4Iuu7/2VrDWa11m33xSj93xAjJCk8DJ2QgLfrQUJBRw="
   },
   "miniapp": {
-    "version": 1,
+    "version": "1",
     "name": "FarFISH",
     "iconUrl": "https://farfish-miniapp5.vercel.app/icon.png",
     "homeUrl": "https://farfish-miniapp5.vercel.app",
@@ -13,15 +13,20 @@
     "buttonTitle": "Open FarFISH",
     "splashImageUrl": "https://farfish-miniapp5.vercel.app/splash.png",
     "splashBackgroundColor": "#000000",
+  
     "webhookUrl": "https://farfish-miniapp5.vercel.app/api/webhook",
     "castShareUrl": "https://farfish-miniapp5.vercel.app/share",
+  
     "subtitle": "Mint • Stake • Earn",
     "tagline": "Earn Rewards Daily",
     "description": "Mint. Stake. Earn. Dominate the Seas. Premium NFT collection built for Farcaster. NFT Staking • Leaderboard • Monthly Rewards.",
+  
     "screenshotUrls": [
       "https://farfish-miniapp5.vercel.app/frame-image.png"
     ],
+  
     "primaryCategory": "games",
+  
     "tags": [
       "nft",
       "staking",
@@ -29,9 +34,12 @@
       "game",
       "rewards"
     ],
+  
     "heroImageUrl": "https://farfish-miniapp5.vercel.app/og-image.png",
+  
     "ogTitle": "FarFISH",
     "ogDescription": "Stake NFT • Earn Rewards • Dominate the Seas",
     "ogImageUrl": "https://farfish-miniapp5.vercel.app/og-image.png"
   }
+  
 }
