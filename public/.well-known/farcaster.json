@@ -5,7 +5,7 @@
     "signature": "/+Xz2VEsFs+or3MqhYhmw5tR27EwiXKehqWIPGY9CIFr4Iuu7/2VrDWa11m33xSj93xAjJCk8DJ2QgLfrQUJBRw="
   },
   "miniapp": {
-    "version": 2,
+    "version": 1,
     "name": "FarFISH",
     "iconUrl": "https://farfish-miniapp5.vercel.app/icon.png",
     "homeUrl": "https://farfish-miniapp5.vercel.app",
