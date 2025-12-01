@@ -45,8 +45,19 @@ export default function HomeClient() {
     data: mintedCountRaw,
     error: mintedCountError,
   } = useContractRead(contract, "nextTokenIdToMint", []);
-  const shareMessage = "Everyone is curious about FarFISH Limited NFT!";
-  const shareLink = "https://farfish-miniapp5.vercel.app/?utm_source=share";
+  // Generate referral link using user's FID
+  const shareLink = useMemo(() => {
+    const baseUrl = "https://farfish-miniapp5.vercel.app";
+    const fid = user?.fid;
+    if (fid) {
+      return `${baseUrl}/share?ref=${fid}`;
+    }
+    return `${baseUrl}/share`;
+  }, [user?.fid]);
+
+  const shareMessage = useMemo(() => {
+    return `Join FarFISH — Mint • Stake • Earn. Daily free chest + referral rewards. My link: ${shareLink}`;
+  }, [shareLink]);
   const isFarcasterEnv = useFarcasterEnvironment("Home page");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
     null,
@@ -155,7 +166,7 @@ export default function HomeClient() {
   }, [address, handleConnect, writeMint]);
 
   const handleShare = useCallback(() => {
-    const payload = `${shareMessage} ${shareLink}`;
+    const payload = shareMessage;
     const isInFarcaster = isFarcasterEnv || detectFarcasterEnvironment();
 
     if (isInFarcaster && typeof window !== "undefined" && (window as any).sdk) {

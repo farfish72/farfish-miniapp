@@ -111,11 +111,42 @@ export default function ProfilePage() {
   }, [user?.walletAddress, multiplierStatus, refMultiplier]);
 
   const handleVerifyAndGetLink = () => {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://farfish-miniapp5.vercel.app";
-    const id = user?.fid ?? user?.walletAddress ?? "guest";
-    const link = `${baseUrl}/?ref=${encodeURIComponent(id)}`;
-    setReferralLink(link);
+    const baseUrl = "https://farfish-miniapp5.vercel.app";
+    const fid = user?.fid;
+    if (fid) {
+      const link = `${baseUrl}/share?ref=${fid}`;
+      setReferralLink(link);
+    }
   };
+
+  const handleCopyReferralLink = async () => {
+    const baseUrl = "https://farfish-miniapp5.vercel.app";
+    const fid = user?.fid;
+    if (!fid) {
+      return;
+    }
+    const link = `${baseUrl}/share?ref=${fid}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+        setReferralLink(link);
+        // Optionally show a success message
+      }
+    } catch (error) {
+      console.error("Failed to copy referral link", error);
+    }
+  };
+
+  // Auto-generate referral link if user has FID
+  useEffect(() => {
+    if (user?.fid) {
+      const baseUrl = "https://farfish-miniapp5.vercel.app";
+      const link = `${baseUrl}/share?ref=${user.fid}`;
+      setReferralLink(link);
+    } else {
+      setReferralLink(null);
+    }
+  }, [user?.fid]);
 
   useEffect(() => {
     const wallet = user?.walletAddress;
@@ -243,11 +274,20 @@ export default function ProfilePage() {
               Verify & Get Link
             </button>
           </div>
+          {user?.fid && referralLink && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-white/70 break-all">Your referral link: {referralLink}</p>
+              <button
+                type="button"
+                onClick={handleCopyReferralLink}
+                className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 hover:bg-white/20 transition"
+              >
+                Copy Referral Link
+              </button>
+            </div>
+          )}
           <div className="mt-3 space-y-1">
             <p className="text-sm">Referrals completed: {referralsCompleted}</p>
-            {referralLink && (
-              <p className="text-xs text-white/70 break-all">Your referral link: {referralLink}</p>
-            )}
           </div>
         </section>
 

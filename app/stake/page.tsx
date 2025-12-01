@@ -8,6 +8,7 @@ import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { supabase } from "../lib/supabase";
+import { MULTIPLIERS } from "../lib/multipliers";
 import { tierById, powerById, STAKING_CONTRACT_ADDRESS } from "../constants";
 import stakeAbi from "../abi/stake.json";
 
@@ -29,6 +30,7 @@ export default function StakingPage() {
   const [staked, setStaked] = useState<StakedItem[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [pendingAction, setPendingAction] = useState<"stake" | "unstake" | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
   const walletAddress = user?.walletAddress;
   useFarcasterEnvironment("Stake page");
 
@@ -134,6 +136,126 @@ export default function StakingPage() {
             Stake and unstake your FarFISH NFTs using your connected Farcaster wallet. After each transaction,
             sync the dashboard below to pull the live Supabase snapshot.
           </p>
+
+          {/* Choose a staking period section */}
+          <div className="mt-4 space-y-3">
+            <div>
+              <h3 className="text-lg font-semibold">Choose a staking period</h3>
+              <p className="text-sm text-white/70 mt-1">Select a lock duration to boost your rewards.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* 30 Days */}
+              <button
+                type="button"
+                onClick={() => setSelectedDuration(30)}
+                className={`rounded-xl p-4 border text-left transition ${
+                  selectedDuration === 30
+                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-base font-semibold">30 Days</span>
+                  {/* TODO: replace with server computed multiplier */}
+                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
+                    Multiplier ~ x{MULTIPLIERS[30]}
+                  </span>
+                </div>
+                <p className="text-xs text-white/70">Short lock. Easy exit.</p>
+              </button>
+
+              {/* 90 Days */}
+              <button
+                type="button"
+                onClick={() => setSelectedDuration(90)}
+                className={`rounded-xl p-4 border text-left transition ${
+                  selectedDuration === 90
+                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-base font-semibold">90 Days</span>
+                  {/* TODO: replace with server computed multiplier */}
+                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
+                    Multiplier ~ x{MULTIPLIERS[90]}
+                  </span>
+                </div>
+                <p className="text-xs text-white/70">Popular choice.</p>
+              </button>
+
+              {/* 180 Days */}
+              <button
+                type="button"
+                onClick={() => setSelectedDuration(180)}
+                className={`rounded-xl p-4 border text-left transition ${
+                  selectedDuration === 180
+                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-base font-semibold">180 Days</span>
+                  {/* TODO: replace with server computed multiplier */}
+                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
+                    Multiplier ~ x{MULTIPLIERS[180]}
+                  </span>
+                </div>
+                <p className="text-xs text-white/70">Higher rewards.</p>
+              </button>
+
+              {/* 360 Days */}
+              <button
+                type="button"
+                onClick={() => setSelectedDuration(360)}
+                className={`rounded-xl p-4 border text-left transition ${
+                  selectedDuration === 360
+                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-base font-semibold">360 Days</span>
+                  {/* TODO: replace with server computed multiplier */}
+                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
+                    Multiplier ~ x{MULTIPLIERS[360]}
+                  </span>
+                </div>
+                <p className="text-xs text-white/70">Max multiplier.</p>
+              </button>
+            </div>
+
+            {/* TODO: replace UI placeholders with server computed multipliers */}
+
+            {/* CTA Button */}
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  // Find and trigger the existing "Stake via Farcaster" button
+                  const buttons = Array.from(document.querySelectorAll("button"));
+                  const stakeButton = buttons.find(
+                    (btn) => btn.textContent?.trim() === "Stake via Farcaster" || btn.textContent?.trim() === "Staking..."
+                  );
+                  if (stakeButton && walletAddress && STAKING_CONTRACT_ADDRESS) {
+                    stakeButton.click();
+                  }
+                }}
+                disabled={!selectedDuration || !walletAddress || !STAKING_CONTRACT_ADDRESS}
+                className={`w-full rounded-lg py-3 text-sm font-semibold transition ${
+                  selectedDuration && walletAddress && STAKING_CONTRACT_ADDRESS
+                    ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+                    : "bg-white/10 text-white/50 cursor-not-allowed"
+                }`}
+              >
+                {selectedDuration ? `Stake selected (${selectedDuration} days)` : "Select a staking period"}
+              </button>
+              {(!walletAddress || !STAKING_CONTRACT_ADDRESS) && (
+                <p className="text-xs text-white/60 mt-2 text-center">Connect wallet to continue.</p>
+              )}
+            </div>
+          </div>
 
           {!STAKING_CONTRACT_ADDRESS && (
             <div className="w-full mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-center text-xs font-semibold text-red-200">
