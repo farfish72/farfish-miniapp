@@ -62,6 +62,7 @@ export default function ProfilePage() {
   const { blocked, message } = useFarcasterGate();
   const [refMultiplier, setRefMultiplier] = useState<number | null>(null);
   const [multiplierStatus, setMultiplierStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [resolvedFid, setResolvedFid] = useState<string | null>(null);
 
   // Farcaster detection
   useFarcasterEnvironment("Profile page");
@@ -102,6 +103,44 @@ export default function ProfilePage() {
     })();
   }, [user?.walletAddress]);
 
+  // Resolve FID from existing Farcaster/SIWF context or Supabase profile as fallback
+  useEffect(() => {
+    const directFid = user?.fid;
+    if (directFid) {
+      setResolvedFid(String(directFid));
+      return;
+    }
+
+    const wallet = user?.walletAddress;
+    if (!wallet) {
+      setResolvedFid(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("fid")
+          .eq("wallet_address", wallet)
+          .maybeSingle();
+
+        if (cancelled) return;
+        setResolvedFid(data?.fid ? String((data as any).fid) : null);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to resolve FID from profile", error);
+          setResolvedFid(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.fid, user?.walletAddress]);
+
   const multiplierCopy = useMemo(() => {
     if (!user?.walletAddress) return "Connect wallet to unlock multipliers";
     if (multiplierStatus === "loading") return "Loading multiplier...";
@@ -112,7 +151,7 @@ export default function ProfilePage() {
 
   const handleVerifyAndGetLink = () => {
     const baseUrl = "https://farfish-miniapp5.vercel.app";
-    const fid = user?.fid;
+    const fid = resolvedFid;
     if (fid) {
       const link = `${baseUrl}/share?ref=${fid}`;
       setReferralLink(link);
@@ -121,7 +160,7 @@ export default function ProfilePage() {
 
   const handleCopyReferralLink = async () => {
     const baseUrl = "https://farfish-miniapp5.vercel.app";
-    const fid = user?.fid;
+    const fid = resolvedFid;
     if (!fid) {
       return;
     }
@@ -139,14 +178,14 @@ export default function ProfilePage() {
 
   // Auto-generate referral link if user has FID
   useEffect(() => {
-    if (user?.fid) {
+    if (resolvedFid) {
       const baseUrl = "https://farfish-miniapp5.vercel.app";
-      const link = `${baseUrl}/share?ref=${user.fid}`;
+      const link = `${baseUrl}/share?ref=${resolvedFid}`;
       setReferralLink(link);
     } else {
       setReferralLink(null);
     }
-  }, [user?.fid]);
+  }, [resolvedFid]);
 
   useEffect(() => {
     const wallet = user?.walletAddress;
@@ -206,22 +245,23 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="flex items-center gap-3">
-          <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
-            <Image
-              src={user?.pfpUrl ?? "/farfish-logo.png"}
-              alt={user?.displayName ?? "FarFISH user"}
-              fill
-              sizes="64px"
-              className="object-cover"
-              unoptimized
-            />
-          </div>
+            <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
+              <Image
+                src={user?.pfpUrl ?? "/farfish-logo.png"}
+                alt={user?.displayName ?? "FarFISH user"}
+                fill
+                sizes="64px"
+                className="object-cover"
+                unoptimized
+              />
+            </div>
             <div>
               <p className="text-lg font-semibold">
                 {user?.displayName ?? "FarFISH Captain"}
               </p>
               <p className="text-xs text-white/60">
-                FID: {user?.fid ?? "—"} • {shortenAddress(user?.walletAddress)}
+                {shortenAddress(user?.walletAddress)} • FID:{" "}
+                {resolvedFid ?? "FID not available"}
               </p>
             </div>
           </div>
@@ -274,7 +314,7 @@ export default function ProfilePage() {
               Verify & Get Link
             </button>
           </div>
-          {user?.fid && referralLink && (
+          {resolvedFid && referralLink && (
             <div className="mt-3 space-y-2">
               <p className="text-xs text-white/70 break-all">Your referral link: {referralLink}</p>
               <button

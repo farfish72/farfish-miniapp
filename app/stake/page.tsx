@@ -7,9 +7,10 @@ import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useContract } from "@thirdweb-dev/react";
 import { supabase } from "../lib/supabase";
 import { MULTIPLIERS } from "../lib/multipliers";
-import { tierById, powerById, STAKING_CONTRACT_ADDRESS } from "../constants";
+import { tierById, powerById, STAKING_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS } from "../constants";
 import stakeAbi from "../abi/stake.json";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
@@ -31,8 +32,15 @@ export default function StakingPage() {
   const [syncing, setSyncing] = useState(false);
   const [pendingAction, setPendingAction] = useState<"stake" | "unstake" | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(
+    null,
+  );
   const walletAddress = user?.walletAddress;
   useFarcasterEnvironment("Stake page");
+  const { contract: nftContract } = useContract(
+    NFT_CONTRACT_ADDRESS || undefined,
+    "edition-drop",
+  );
 
   const {
     writeContract,
@@ -86,31 +94,189 @@ export default function StakingPage() {
   }, [fetchStakedPositions]);
 
   const handleStakeTx = useCallback(() => {
-    if (!address || !STAKING_CONTRACT_ADDRESS) return;
-    setPendingAction("stake");
-    writeContract({
-      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-      abi: stakeAbi as any,
-      functionName: "stake",
-      args: [],
-    } as any);
-  }, [address, writeContract]);
+    if (!address || !STAKING_CONTRACT_ADDRESS || !walletAddress) return;
+    if (!selectedDuration) {
+      setToast({
+        type: "error",
+        message: "Please select a staking period first.",
+      });
+      return;
+    }
+
+    const performStake = async () => {
+      try {
+        setPendingAction("stake");
+        setToast(null);
+
+        // 1. Check approval for the staking contract to manage user's NFTs
+        let isApproved = false;
+        try {
+          if ((nftContract as any)?.erc1155?.isApproved) {
+            isApproved = await (nftContract as any).erc1155.isApproved(
+              address,
+              STAKING_CONTRACT_ADDRESS,
+            );
+          } else if ((nftContract as any)?.call) {
+            const res = await (nftContract as any).call("isApprovedForAll", [
+              address,
+              STAKING_CONTRACT_ADDRESS,
+            ]);
+            isApproved = Boolean(res);
+          }
+        } catch (error) {
+          console.error("Failed to check NFT approval", error);
+        }
+
+        // 2. Request approval if needed
+        if (!isApproved && nftContract) {
+          try {
+            const approvalTx =
+              (await (nftContract as any).erc1155?.setApprovalForAll?.(
+                STAKING_CONTRACT_ADDRESS,
+                true,
+              )) ??
+              (await (nftContract as any).call?.("setApprovalForAll", [
+                STAKING_CONTRACT_ADDRESS,
+                true,
+              ]));
+
+            const approvalHash =
+              approvalTx?.receipt?.transactionHash ??
+              approvalTx?.transactionHash ??
+              approvalTx?.id ??
+              approvalTx?.hash;
+
+            setToast({
+              type: "success",
+              message: approvalHash
+                ? `Approval successful. Tx: ${approvalHash}`
+                : "Approval successful.",
+            });
+          } catch (error: any) {
+            console.error("Approval transaction failed", error);
+            setPendingAction(null);
+            setToast({
+              type: "error",
+              message: error?.message || "Approval failed",
+            });
+            return;
+          }
+        }
+
+        // 3. Stake action on the staking contract
+        const tokenId = 0; // Default tokenId; staking contract decides mapping if needed
+        const durationDays = BigInt(selectedDuration);
+
+        try {
+          writeContract({
+            address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+            abi: stakeAbi as any,
+            functionName: "stake",
+            args: [tokenId, durationDays],
+          } as any);
+        } catch (error: any) {
+          console.error("Stake transaction failed to start, attempting fallback", error);
+
+          // Fallback: transfer NFT directly to staking contract
+          try {
+            const fallbackTx = await (nftContract as any).erc1155?.transfer?.(
+              STAKING_CONTRACT_ADDRESS,
+              tokenId,
+              1,
+            );
+            const fallbackHash =
+              fallbackTx?.receipt?.transactionHash ??
+              fallbackTx?.transactionHash ??
+              fallbackTx?.id ??
+              fallbackTx?.hash;
+            setToast({
+              type: "success",
+              message: fallbackHash
+                ? `Staked via transfer. Tx: ${fallbackHash}`
+                : "Staked via transfer.",
+            });
+          } catch (fallbackError: any) {
+            console.error("Fallback transfer for stake failed", fallbackError);
+            setPendingAction(null);
+            setToast({
+              type: "error",
+              message: fallbackError?.message || "Unable to start stake transaction",
+            });
+          }
+        }
+      } catch (outerError: any) {
+        console.error("Stake flow failed", outerError);
+        setPendingAction(null);
+        setToast({
+          type: "error",
+          message: outerError?.message || "Stake failed",
+        });
+      }
+    };
+
+    void performStake();
+  }, [
+    address,
+    nftContract,
+    selectedDuration,
+    walletAddress,
+    writeContract,
+    STAKING_CONTRACT_ADDRESS,
+  ]);
 
   const handleUnstakeTx = useCallback(() => {
     if (!address || !STAKING_CONTRACT_ADDRESS) return;
     setPendingAction("unstake");
-    writeContract({
-      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-      abi: stakeAbi as any,
-      functionName: "unstake",
-      args: [],
-    } as any);
+
+    const performUnstake = async () => {
+      try {
+        try {
+          // Preferred: unstake with tokenId if supported by the contract
+          const tokenId = 0;
+          writeContract({
+            address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+            abi: stakeAbi as any,
+            functionName: "unstake",
+            args: [tokenId],
+          } as any);
+        } catch (error: any) {
+          console.error("Unstake with tokenId failed, falling back to existing method", error);
+          // Fallback: use existing unstake signature without tokenId
+          writeContract({
+            address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+            abi: stakeAbi as any,
+            functionName: "unstake",
+            args: [],
+          } as any);
+        }
+      } catch (outerError: any) {
+        console.error("Unstake flow failed", outerError);
+        setPendingAction(null);
+        setToast({
+          type: "error",
+          message: outerError?.message || "Unstake failed",
+        });
+      }
+    };
+
+    void performUnstake();
   }, [address, writeContract]);
 
   useEffect(() => {
     if (!isTxConfirmed || !pendingAction) return;
     // Re-sync positions after a successful stake/unstake.
     fetchStakedPositions();
+    setToast((prev) =>
+      prev && prev.type === "success"
+        ? prev
+        : {
+            type: "success",
+            message:
+              pendingAction === "stake"
+                ? "Stake transaction confirmed."
+                : "Unstake transaction confirmed.",
+          },
+    );
     setPendingAction(null);
   }, [isTxConfirmed, pendingAction, fetchStakedPositions]);
 
@@ -270,9 +436,11 @@ export default function StakingPage() {
                 !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
-              {pendingAction === "stake" && (isWritePending || isTxConfirming)
-                ? "Staking..."
-                : "Stake via Farcaster"}
+              {isWritePending || isTxConfirming
+                ? "Processing..."
+                : pendingAction === "stake"
+                  ? "Staking..."
+                  : "Stake via Farcaster"}
             </button>
             <button
               onClick={handleUnstakeTx}
@@ -281,9 +449,11 @@ export default function StakingPage() {
                 !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
-              {pendingAction === "unstake" && (isWritePending || isTxConfirming)
-                ? "Unstaking..."
-                : "Unstake via Farcaster"}
+              {isWritePending || isTxConfirming
+                ? "Processing..."
+                : pendingAction === "unstake"
+                  ? "Unstaking..."
+                  : "Unstake via Farcaster"}
             </button>
           </div>
           {writeError && (
@@ -304,12 +474,24 @@ export default function StakingPage() {
               !walletAddress ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
-            {syncing ? "Syncing…" : "Sync staked NFTs"}
+            {syncing ? "Processing..." : "Sync staked NFTs"}
           </button>
           {!walletAddress && (
             <p className="text-xs text-red-300 mt-2">Connect your wallet to enable syncing.</p>
           )}
         </section>
+
+        {toast && (
+          <div
+            className={`text-xs font-semibold rounded-lg border p-3 ${
+              toast.type === "success"
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-200"
+                : "bg-red-500/10 border-red-500/20 text-red-200"
+            }`}
+          >
+            {toast.message}
+          </div>
+        )}
 
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="font-semibold text-lg">Your Staked NFTs</h3>

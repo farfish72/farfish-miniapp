@@ -7,15 +7,9 @@ import useFarcasterGate from "./hooks/useFarcasterGate";
 import useFarcasterEnvironment from "./hooks/useFarcasterEnvironment";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  useAccount,
-  useConnect,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
+import { useAccount, useConnect } from "wagmi";
 import { useContract, useContractRead } from "@thirdweb-dev/react";
 import { NFT_CONTRACT_ADDRESS, NFT_SUPPLY_TOTAL } from "./constants";
-import nftDropAbi from "./abi/nftDrop.json";
 import { detectFarcasterEnvironment } from "./utils/farcaster";
 import { supabase } from "./lib/supabase";
 import useUser from "./hooks/useUser";
@@ -26,21 +20,11 @@ export default function HomeClient() {
   const searchParams = useSearchParams();
   const [minted, setMinted] = useState<number | null>(null);
   const [mintedErrorMessage, setMintedErrorMessage] = useState<string | null>(null);
+  const [selectedTokenId, setSelectedTokenId] = useState<number>(0);
+  const [isMinting, setIsMinting] = useState(false);
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
-  const {
-    writeContract: writeMint,
-    data: mintTxHash,
-    isPending: isMintPending,
-    error: mintError,
-  } = useWriteContract();
-  const {
-    isLoading: isMintConfirming,
-    isSuccess: isMintConfirmed,
-  } = useWaitForTransactionReceipt({
-    hash: mintTxHash,
-  });
-  const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined, "nft-drop");
+  const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined, "edition-drop");
   const {
     data: mintedCountRaw,
     error: mintedCountError,
@@ -134,9 +118,10 @@ export default function HomeClient() {
   }, [connect, connectors]);
 
   const handleMint = useCallback(() => {
+    if (isMinting) return;
     setToast(null);
 
-    if (!NFT_CONTRACT_ADDRESS) {
+    if (!NFT_CONTRACT_ADDRESS || !contract) {
       setToast({
         type: "error",
         message: "Contract missing — mint disabled",
@@ -149,21 +134,84 @@ export default function HomeClient() {
       return;
     }
 
-    try {
-      writeMint({
-        address: NFT_CONTRACT_ADDRESS as `0x${string}`,
-        abi: nftDropAbi as any,
-        functionName: "claim",
-        args: [address as `0x${string}`, BigInt(1)],
-      } as any);
-    } catch (error) {
-      console.error("Mint transaction failed to start", error);
-      setToast({
-        type: "error",
-        message: "Unable to start mint transaction",
-      });
-    }
-  }, [address, handleConnect, writeMint]);
+    const performMint = async () => {
+      try {
+        setIsMinting(true);
+        setToast({
+          type: "success",
+          message: "Minting...",
+        });
+
+        const tokenId = BigInt(selectedTokenId);
+        const quantity = 1;
+
+        // Validate claim condition before minting
+        const claimConditions = (contract as any)?.erc1155?.claimConditions;
+        if (!claimConditions?.getClaimConditionById) {
+          throw new Error("Claim conditions not available for this token");
+        }
+
+        const condition = await claimConditions.getClaimConditionById(tokenId, 0);
+        if (!condition) {
+          throw new Error("No active claim condition found");
+        }
+
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const startTimestampSeconds = Number(
+          (condition.startTimestamp ?? condition.startTimestampInSeconds ?? 0) as number,
+        );
+
+        if (Number.isFinite(startTimestampSeconds) && startTimestampSeconds > nowSeconds) {
+          throw new Error("Mint has not started yet");
+        }
+
+        const expectedNativeCurrency =
+          "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".toLowerCase();
+        const currencyAddress =
+          (condition.currencyAddress ?? condition.currency)?.toString().toLowerCase() ?? "";
+
+        if (currencyAddress !== expectedNativeCurrency) {
+          throw new Error("Mint currency must be native ETH");
+        }
+
+        // Optional price validation against frontend expectation, if provided via env
+        const expectedPriceEnv = process.env.NEXT_PUBLIC_MINT_PRICE_PER_TOKEN_WEI;
+        const onChainPrice =
+          (condition.pricePerToken ?? condition.price)?.toString() ?? "0";
+
+        if (expectedPriceEnv) {
+          try {
+            const expected = BigInt(expectedPriceEnv);
+            const onChain = BigInt(onChainPrice);
+            if (onChain !== expected) {
+              throw new Error("Mint price mismatch with on-chain configuration");
+            }
+          } catch {
+            // If parsing fails, fall back to trusting on-chain price
+          }
+        }
+
+        const tx = await (contract as any).erc1155.claim(tokenId, quantity);
+        const txHash =
+          tx?.receipt?.transactionHash ?? tx?.transactionHash ?? tx?.id ?? tx?.hash;
+
+        setToast({
+          type: "success",
+          message: txHash ? `Minted successfully. Tx: ${txHash}` : "Mint successful",
+        });
+      } catch (error: any) {
+        console.error("Mint transaction failed", error);
+        setToast({
+          type: "error",
+          message: error?.message || "Mint failed",
+        });
+      } finally {
+        setIsMinting(false);
+      }
+    };
+
+    void performMint();
+  }, [NFT_CONTRACT_ADDRESS, address, contract, handleConnect, isMinting, selectedTokenId]);
 
   const handleShare = useCallback(() => {
     const payload = shareMessage;
@@ -200,14 +248,6 @@ export default function HomeClient() {
 
     void tryShare();
   }, [shareMessage, shareLink, isFarcasterEnv]);
-
-  useEffect(() => {
-    if (!mintError) return;
-    setToast({
-      type: "error",
-      message: mintError.message || "Mint failed",
-    });
-  }, [mintError]);
 
   const toastMessage = useMemo(() => toast?.message ?? null, [toast]);
 
@@ -266,9 +306,9 @@ export default function HomeClient() {
   const primaryButtonLabel = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) return "Mint disabled";
     if (!address || !isConnected) return "Connect Farcaster wallet";
-    if (isMintPending || isMintConfirming) return "Minting...";
+    if (isMinting) return "Minting...";
     return "Mint FarFISH NFT";
-  }, [address, isConnected, isMintPending, isMintConfirming]);
+  }, [address, isConnected, isMinting, NFT_CONTRACT_ADDRESS]);
 
   const primaryButtonClasses = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) {
@@ -278,10 +318,9 @@ export default function HomeClient() {
       return "w-full py-4 text-lg font-semibold rounded-xl bg-white/15 text-white hover:bg-white/25 transition";
     }
     return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black transition disabled:opacity-60";
-  }, [address, isConnected]);
+  }, [address, isConnected, NFT_CONTRACT_ADDRESS]);
 
-  const primaryButtonDisabled =
-    isConnecting || isMintPending || isMintConfirming || !NFT_CONTRACT_ADDRESS;
+  const primaryButtonDisabled = isConnecting || isMinting || !NFT_CONTRACT_ADDRESS;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -291,7 +330,7 @@ export default function HomeClient() {
       {/* নিচে আসল হোম / মিন্ট কনটেন্ট */}
       <div className="mt-4 flex-1 flex flex-col">
         {/* MINT CARD */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
@@ -349,16 +388,6 @@ export default function HomeClient() {
               >
                 {primaryButtonLabel}
               </button>
-              {mintError && (
-                <p className="mt-2 text-xs text-red-400">
-                  {mintError.message}
-                </p>
-              )}
-              {isMintConfirmed && (
-                <p className="mt-2 text-xs text-green-400">
-                  Mint transaction confirmed on-chain.
-                </p>
-              )}
             </div>
           )}
 
@@ -401,26 +430,36 @@ export default function HomeClient() {
         </div>
 
         {/* COLLECTION PREVIEW */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-          <h3 className="font-bold mb-2">Collection Preview</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {GALLERY_IMAGES.map((src, idx) => (
-              <div
-                key={src}
-                className="relative bg-white/10 rounded-lg aspect-square overflow-hidden"
-              >
-                <Image
-                  src={src}
-                  alt={`Artwork ${idx + 1}`}
-                  fill
-                  priority={idx === 0}
-                  sizes="(max-width: 768px) 50vw, 200px"
-                  className="object-cover"
-                />
-              </div>
-            ))}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+            <h3 className="font-bold mb-2">Collection Preview</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {GALLERY_IMAGES.map((src, idx) => {
+                const tokenIdForCard = idx;
+                const isSelected = selectedTokenId === tokenIdForCard;
+                return (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => setSelectedTokenId(tokenIdForCard)}
+                    className={`relative bg-white/10 rounded-lg aspect-square overflow-hidden border transition ${
+                      isSelected
+                        ? "border-[#00d4c4] shadow-[0_0_0_2px_rgba(0,212,196,0.6)]"
+                        : "border-white/5 hover:border-white/20"
+                    }`}
+                  >
+                    <Image
+                      src={src}
+                      alt={`Artwork ${idx + 1}`}
+                      fill
+                      priority={idx === 0}
+                      sizes="(max-width: 768px) 50vw, 200px"
+                      className="object-cover"
+                    />
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
       </div>
     </div>
   );
