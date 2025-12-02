@@ -6,12 +6,15 @@ import Image from "next/image";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount } from "wagmi";
 import { useContract } from "@thirdweb-dev/react";
+import { ethers } from "ethers";
 import { supabase } from "../lib/supabase";
 import { MULTIPLIERS } from "../lib/multipliers";
 import { tierById, powerById, STAKING_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS } from "../constants";
 import stakeAbi from "../abi/stake.json";
+import editionDropAbi from "../abi/editionDrop.json";
+import { useFarcasterSigner } from "../contexts/FarcasterSignerContext";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -27,6 +30,7 @@ type StakedItem = {
 export default function StakingPage() {
   const { user } = useUser();
   const { address } = useAccount();
+  const { signer, isConnected: isSignerConnected } = useFarcasterSigner();
   const [nowTick, setNowTick] = useState(Date.now());
   const [staked, setStaked] = useState<StakedItem[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -42,19 +46,6 @@ export default function StakingPage() {
     "edition-drop",
   );
 
-  const {
-    writeContract,
-    data: stakeTxHash,
-    isPending: isWritePending,
-    error: writeError,
-  } = useWriteContract();
-
-  const {
-    isLoading: isTxConfirming,
-    isSuccess: isTxConfirmed,
-  } = useWaitForTransactionReceipt({
-    hash: stakeTxHash,
-  });
 
   useEffect(() => {
     const i = setInterval(() => setNowTick(Date.now()), 1000);
@@ -94,7 +85,13 @@ export default function StakingPage() {
   }, [fetchStakedPositions]);
 
   const handleStakeTx = useCallback(() => {
-    if (!address || !STAKING_CONTRACT_ADDRESS || !walletAddress) return;
+    if (!isSignerConnected || !signer || !address || !STAKING_CONTRACT_ADDRESS || !walletAddress) {
+      setToast({
+        type: "error",
+        message: "Please connect your Farcaster wallet first.",
+      });
+      return;
+    }
     if (!selectedDuration) {
       setToast({
         type: "error",
@@ -108,43 +105,37 @@ export default function StakingPage() {
         setPendingAction("stake");
         setToast(null);
 
-        // 1. Check approval for the staking contract to manage user's NFTs
+        if (!NFT_CONTRACT_ADDRESS) {
+          throw new Error("NFT contract address not configured");
+        }
+
+        // 1. Check approval using ethers contract with signer
         let isApproved = false;
         try {
-          if ((nftContract as any)?.erc1155?.isApproved) {
-            isApproved = await (nftContract as any).erc1155.isApproved(
-              address,
-              STAKING_CONTRACT_ADDRESS,
-            );
-          } else if ((nftContract as any)?.call) {
-            const res = await (nftContract as any).call("isApprovedForAll", [
-              address,
-              STAKING_CONTRACT_ADDRESS,
-            ]);
-            isApproved = Boolean(res);
-          }
+          // Check isApprovedForAll using ERC1155 standard
+          const erc1155Abi = [
+            "function isApprovedForAll(address account, address operator) view returns (bool)",
+            "function setApprovalForAll(address operator, bool approved)",
+          ];
+          const erc1155Contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, erc1155Abi, signer);
+          isApproved = await erc1155Contract.isApprovedForAll(address, STAKING_CONTRACT_ADDRESS);
         } catch (error) {
           console.error("Failed to check NFT approval", error);
         }
 
-        // 2. Request approval if needed
-        if (!isApproved && nftContract) {
+        // 2. Request approval if needed - using Farcaster signer
+        if (!isApproved) {
           try {
-            const approvalTx =
-              (await (nftContract as any).erc1155?.setApprovalForAll?.(
-                STAKING_CONTRACT_ADDRESS,
-                true,
-              )) ??
-              (await (nftContract as any).call?.("setApprovalForAll", [
-                STAKING_CONTRACT_ADDRESS,
-                true,
-              ]));
-
-            const approvalHash =
-              approvalTx?.receipt?.transactionHash ??
-              approvalTx?.transactionHash ??
-              approvalTx?.id ??
-              approvalTx?.hash;
+            const erc1155Abi = [
+              "function setApprovalForAll(address operator, bool approved)",
+            ];
+            const erc1155Contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, erc1155Abi, signer);
+            const approvalTx = await erc1155Contract.setApprovalForAll(
+              STAKING_CONTRACT_ADDRESS,
+              true,
+            );
+            const approvalReceipt = await approvalTx.wait();
+            const approvalHash = approvalReceipt?.hash || approvalReceipt?.transactionHash;
 
             setToast({
               type: "success",
@@ -157,59 +148,38 @@ export default function StakingPage() {
             setPendingAction(null);
             setToast({
               type: "error",
-              message: error?.message || "Approval failed",
+              message: error?.reason || error?.message || "Approval failed",
             });
             return;
           }
         }
 
-        // 3. Stake action on the staking contract
-        const tokenId = 0; // Default tokenId; staking contract decides mapping if needed
+        // 3. Stake action on the staking contract using Farcaster signer
+        const tokenId = 0;
         const durationDays = BigInt(selectedDuration);
 
-        try {
-          writeContract({
-            address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-            abi: stakeAbi as any,
-            functionName: "stake",
-            args: [tokenId, durationDays],
-          } as any);
-        } catch (error: any) {
-          console.error("Stake transaction failed to start, attempting fallback", error);
+        const stakingContractInstance = new ethers.Contract(
+          STAKING_CONTRACT_ADDRESS,
+          stakeAbi,
+          signer,
+        );
 
-          // Fallback: transfer NFT directly to staking contract
-          try {
-            const fallbackTx = await (nftContract as any).erc1155?.transfer?.(
-              STAKING_CONTRACT_ADDRESS,
-              tokenId,
-              1,
-            );
-            const fallbackHash =
-              fallbackTx?.receipt?.transactionHash ??
-              fallbackTx?.transactionHash ??
-              fallbackTx?.id ??
-              fallbackTx?.hash;
-            setToast({
-              type: "success",
-              message: fallbackHash
-                ? `Staked via transfer. Tx: ${fallbackHash}`
-                : "Staked via transfer.",
-            });
-          } catch (fallbackError: any) {
-            console.error("Fallback transfer for stake failed", fallbackError);
-            setPendingAction(null);
-            setToast({
-              type: "error",
-              message: fallbackError?.message || "Unable to start stake transaction",
-            });
-          }
-        }
-      } catch (outerError: any) {
-        console.error("Stake flow failed", outerError);
+        const stakeTx = await stakingContractInstance.stake(tokenId, durationDays);
+        const stakeReceipt = await stakeTx.wait();
+        const stakeHash = stakeReceipt?.hash || stakeReceipt?.transactionHash;
+
+        setToast({
+          type: "success",
+          message: stakeHash
+            ? `Staked successfully. Tx: ${stakeHash}`
+            : "Staked successfully.",
+        });
+      } catch (error: any) {
+        console.error("Stake flow failed", error);
         setPendingAction(null);
         setToast({
           type: "error",
-          message: outerError?.message || "Stake failed",
+          message: error?.reason || error?.message || "Stake failed",
         });
       }
     };
@@ -217,68 +187,71 @@ export default function StakingPage() {
     void performStake();
   }, [
     address,
-    nftContract,
+    signer,
+    isSignerConnected,
     selectedDuration,
     walletAddress,
-    writeContract,
     STAKING_CONTRACT_ADDRESS,
+    NFT_CONTRACT_ADDRESS,
   ]);
 
   const handleUnstakeTx = useCallback(() => {
-    if (!address || !STAKING_CONTRACT_ADDRESS) return;
+    if (!isSignerConnected || !signer || !address || !STAKING_CONTRACT_ADDRESS) {
+      setToast({
+        type: "error",
+        message: "Please connect your Farcaster wallet first.",
+      });
+      return;
+    }
     setPendingAction("unstake");
 
     const performUnstake = async () => {
       try {
+        const stakingContractInstance = new ethers.Contract(
+          STAKING_CONTRACT_ADDRESS,
+          stakeAbi,
+          signer,
+        );
+
+        // Try unstake with tokenId first, fallback to no args
+        let unstakeTx;
         try {
-          // Preferred: unstake with tokenId if supported by the contract
           const tokenId = 0;
-          writeContract({
-            address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-            abi: stakeAbi as any,
-            functionName: "unstake",
-            args: [tokenId],
-          } as any);
+          unstakeTx = await stakingContractInstance.unstake(tokenId);
         } catch (error: any) {
-          console.error("Unstake with tokenId failed, falling back to existing method", error);
-          // Fallback: use existing unstake signature without tokenId
-          writeContract({
-            address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-            abi: stakeAbi as any,
-            functionName: "unstake",
-            args: [],
-          } as any);
+          // Fallback: try unstake without tokenId
+          unstakeTx = await stakingContractInstance.unstake();
         }
-      } catch (outerError: any) {
-        console.error("Unstake flow failed", outerError);
+
+        const unstakeReceipt = await unstakeTx.wait();
+        const unstakeHash = unstakeReceipt?.hash || unstakeReceipt?.transactionHash;
+
+        setToast({
+          type: "success",
+          message: unstakeHash
+            ? `Unstaked successfully. Tx: ${unstakeHash}`
+            : "Unstaked successfully.",
+        });
+      } catch (error: any) {
+        console.error("Unstake flow failed", error);
         setPendingAction(null);
         setToast({
           type: "error",
-          message: outerError?.message || "Unstake failed",
+          message: error?.reason || error?.message || "Unstake failed",
         });
       }
     };
 
     void performUnstake();
-  }, [address, writeContract]);
+  }, [address, signer, isSignerConnected, STAKING_CONTRACT_ADDRESS]);
 
+  // Transaction confirmation is handled in the handlers above
+  // Re-sync positions after successful transactions
   useEffect(() => {
-    if (!isTxConfirmed || !pendingAction) return;
-    // Re-sync positions after a successful stake/unstake.
-    fetchStakedPositions();
-    setToast((prev) =>
-      prev && prev.type === "success"
-        ? prev
-        : {
-            type: "success",
-            message:
-              pendingAction === "stake"
-                ? "Stake transaction confirmed."
-                : "Unstake transaction confirmed.",
-          },
-    );
-    setPendingAction(null);
-  }, [isTxConfirmed, pendingAction, fetchStakedPositions]);
+    if (pendingAction && toast?.type === "success") {
+      fetchStakedPositions();
+    }
+  }, [toast, pendingAction, fetchStakedPositions]);
 
   const formatRemaining = (ms: number) => {
     if (ms <= 0) return "Unlocked";
@@ -431,41 +404,27 @@ export default function StakingPage() {
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               onClick={handleStakeTx}
-              disabled={!walletAddress || !STAKING_CONTRACT_ADDRESS || isWritePending || isTxConfirming}
+              disabled={!isSignerConnected || !walletAddress || !STAKING_CONTRACT_ADDRESS || pendingAction === "stake"}
               className={`w-full bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg ${
-                !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
+                !isSignerConnected || !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
-              {isWritePending || isTxConfirming
+              {pendingAction === "stake"
                 ? "Processing..."
-                : pendingAction === "stake"
-                  ? "Staking..."
-                  : "Stake via Farcaster"}
+                : "Stake via Farcaster"}
             </button>
             <button
               onClick={handleUnstakeTx}
-              disabled={!walletAddress || !STAKING_CONTRACT_ADDRESS || isWritePending || isTxConfirming}
+              disabled={!isSignerConnected || !walletAddress || !STAKING_CONTRACT_ADDRESS || pendingAction === "unstake"}
               className={`w-full bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20 ${
-                !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
+                !isSignerConnected || !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
-              {isWritePending || isTxConfirming
+              {pendingAction === "unstake"
                 ? "Processing..."
-                : pendingAction === "unstake"
-                  ? "Unstaking..."
-                  : "Unstake via Farcaster"}
+                : "Unstake via Farcaster"}
             </button>
           </div>
-          {writeError && (
-            <p className="text-xs text-red-300 mt-2">
-              {writeError.message}
-            </p>
-          )}
-          {isTxConfirmed && (
-            <p className="text-xs text-green-300 mt-2">
-              Staking transaction confirmed. Positions will update after sync.
-            </p>
-          )}
 
           <button
             onClick={fetchStakedPositions}

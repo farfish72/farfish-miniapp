@@ -9,10 +9,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccount, useConnect } from "wagmi";
 import { useContract, useContractRead } from "@thirdweb-dev/react";
+import { ethers } from "ethers";
 import { NFT_CONTRACT_ADDRESS, NFT_SUPPLY_TOTAL } from "./constants";
 import { detectFarcasterEnvironment } from "./utils/farcaster";
 import { supabase } from "./lib/supabase";
 import useUser from "./hooks/useUser";
+import { useFarcasterSigner } from "./contexts/FarcasterSignerContext";
+import editionDropAbi from "./abi/editionDrop.json";
 
 export default function HomeClient() {
   const { blocked, message } = useFarcasterGate();
@@ -24,6 +27,7 @@ export default function HomeClient() {
   const [isMinting, setIsMinting] = useState(false);
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
+  const { signer, isConnected: isSignerConnected } = useFarcasterSigner();
   const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined, "edition-drop");
   const {
     data: mintedCountRaw,
@@ -121,12 +125,12 @@ export default function HomeClient() {
     if (isMinting) return;
     setToast(null);
 
-    if (!address) {
+    if (!isSignerConnected || !signer || !address) {
       handleConnect();
       return;
     }
 
-    if (!contract) {
+    if (!NFT_CONTRACT_ADDRESS) {
       return;
     }
 
@@ -138,13 +142,25 @@ export default function HomeClient() {
           message: "Minting...",
         });
 
+        // Create contract instance with Farcaster signer
+        const contractInstance = new ethers.Contract(
+          NFT_CONTRACT_ADDRESS,
+          editionDropAbi,
+          signer,
+        );
+
         const tokenId = BigInt(selectedTokenId);
         const quantity = 1;
 
-        // Direct blockchain call - no frontend validation
-        const tx = await (contract as any).erc1155.claim(tokenId, quantity);
-        const txHash =
-          tx?.receipt?.transactionHash ?? tx?.transactionHash ?? tx?.id ?? tx?.hash;
+        // Direct blockchain call with Farcaster signer - no frontend validation
+        // Wallet will show mint fee + gas, user confirms, blockchain executes
+        const tx = await contractInstance.claim(address, tokenId, quantity, {
+          value: 0, // Price handled by contract
+        });
+
+        // Wait for transaction confirmation
+        const receipt = await tx.wait();
+        const txHash = receipt?.hash || receipt?.transactionHash;
 
         setToast({
           type: "success",
@@ -152,9 +168,15 @@ export default function HomeClient() {
         });
       } catch (error: any) {
         console.error("Mint transaction failed", error);
+        // Blockchain/wallet error - show to user
+        const errorMessage =
+          error?.reason ||
+          error?.message ||
+          error?.data?.message ||
+          "Mint failed. Check your balance and try again.";
         setToast({
           type: "error",
-          message: error?.message || "Mint failed",
+          message: errorMessage,
         });
       } finally {
         setIsMinting(false);
@@ -162,7 +184,7 @@ export default function HomeClient() {
     };
 
     void performMint();
-  }, [address, contract, handleConnect, isMinting, selectedTokenId]);
+  }, [address, signer, isSignerConnected, handleConnect, isMinting, selectedTokenId]);
 
   const handleShare = useCallback(() => {
     const payload = shareMessage;
@@ -255,21 +277,17 @@ export default function HomeClient() {
   );
 
   const primaryButtonLabel = useMemo(() => {
-    if (!NFT_CONTRACT_ADDRESS) return "Mint disabled";
-    if (!address || !isConnected) return "Connect Farcaster wallet";
+    if (!address || !isSignerConnected) return "Connect Farcaster wallet";
     if (isMinting) return "Minting...";
     return "Mint FarFISH NFT";
-  }, [address, isConnected, isMinting, NFT_CONTRACT_ADDRESS]);
+  }, [address, isSignerConnected, isMinting]);
 
   const primaryButtonClasses = useMemo(() => {
-    if (!NFT_CONTRACT_ADDRESS) {
-      return "w-full py-4 text-lg font-semibold rounded-xl bg-white/10 text-white/50 cursor-not-allowed";
-    }
-    if (!address || !isConnected) {
+    if (!address || !isSignerConnected) {
       return "w-full py-4 text-lg font-semibold rounded-xl bg-white/15 text-white hover:bg-white/25 transition";
     }
     return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black transition disabled:opacity-60";
-  }, [address, isConnected, NFT_CONTRACT_ADDRESS]);
+  }, [address, isSignerConnected]);
 
   const primaryButtonDisabled = isConnecting || isMinting;
 
