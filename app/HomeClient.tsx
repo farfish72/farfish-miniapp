@@ -121,16 +121,12 @@ export default function HomeClient() {
     if (isMinting) return;
     setToast(null);
 
-    if (!NFT_CONTRACT_ADDRESS || !contract) {
-      setToast({
-        type: "error",
-        message: "Contract missing — mint disabled",
-      });
+    if (!address) {
+      handleConnect();
       return;
     }
 
-    if (!address) {
-      handleConnect();
+    if (!contract) {
       return;
     }
 
@@ -145,52 +141,7 @@ export default function HomeClient() {
         const tokenId = BigInt(selectedTokenId);
         const quantity = 1;
 
-        // Validate claim condition before minting
-        const claimConditions = (contract as any)?.erc1155?.claimConditions;
-        if (!claimConditions?.getClaimConditionById) {
-          throw new Error("Claim conditions not available for this token");
-        }
-
-        const condition = await claimConditions.getClaimConditionById(tokenId, 0);
-        if (!condition) {
-          throw new Error("No active claim condition found");
-        }
-
-        const nowSeconds = Math.floor(Date.now() / 1000);
-        const startTimestampSeconds = Number(
-          (condition.startTimestamp ?? condition.startTimestampInSeconds ?? 0) as number,
-        );
-
-        if (Number.isFinite(startTimestampSeconds) && startTimestampSeconds > nowSeconds) {
-          throw new Error("Mint has not started yet");
-        }
-
-        const expectedNativeCurrency =
-          "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".toLowerCase();
-        const currencyAddress =
-          (condition.currencyAddress ?? condition.currency)?.toString().toLowerCase() ?? "";
-
-        if (currencyAddress !== expectedNativeCurrency) {
-          throw new Error("Mint currency must be native ETH");
-        }
-
-        // Optional price validation against frontend expectation, if provided via env
-        const expectedPriceEnv = process.env.NEXT_PUBLIC_MINT_PRICE_PER_TOKEN_WEI;
-        const onChainPrice =
-          (condition.pricePerToken ?? condition.price)?.toString() ?? "0";
-
-        if (expectedPriceEnv) {
-          try {
-            const expected = BigInt(expectedPriceEnv);
-            const onChain = BigInt(onChainPrice);
-            if (onChain !== expected) {
-              throw new Error("Mint price mismatch with on-chain configuration");
-            }
-          } catch {
-            // If parsing fails, fall back to trusting on-chain price
-          }
-        }
-
+        // Direct blockchain call - no frontend validation
         const tx = await (contract as any).erc1155.claim(tokenId, quantity);
         const txHash =
           tx?.receipt?.transactionHash ?? tx?.transactionHash ?? tx?.id ?? tx?.hash;
@@ -211,7 +162,7 @@ export default function HomeClient() {
     };
 
     void performMint();
-  }, [NFT_CONTRACT_ADDRESS, address, contract, handleConnect, isMinting, selectedTokenId]);
+  }, [address, contract, handleConnect, isMinting, selectedTokenId]);
 
   const handleShare = useCallback(() => {
     const payload = shareMessage;
@@ -320,7 +271,7 @@ export default function HomeClient() {
     return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black transition disabled:opacity-60";
   }, [address, isConnected, NFT_CONTRACT_ADDRESS]);
 
-  const primaryButtonDisabled = isConnecting || isMinting || !NFT_CONTRACT_ADDRESS;
+  const primaryButtonDisabled = isConnecting || isMinting;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
