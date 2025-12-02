@@ -8,7 +8,8 @@ import FarcasterMiniAppReady from "./components/FarcasterMiniAppReady";
 import FarcasterWalletProvider from "./providers/FarcasterWalletProvider";
 import { FarcasterSignerProvider } from "./contexts/FarcasterSignerContext";
 
- 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

@@ -1,6 +1,8 @@
 // app/profile/page.tsx
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import Image from "next/image";
 import { useMemo, useState, useEffect } from "react";
 import WalletConnect from "../components/WalletConnect";
@@ -63,6 +65,7 @@ export default function ProfilePage() {
   const [refMultiplier, setRefMultiplier] = useState<number | null>(null);
   const [multiplierStatus, setMultiplierStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [resolvedFid, setResolvedFid] = useState<string | null>(null);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
 
   // Farcaster detection
   useFarcasterEnvironment("Profile page");
@@ -169,10 +172,13 @@ export default function ProfilePage() {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
         setReferralLink(link);
-        // Optionally show a success message
+        setCopyToast("Referral link copied!");
+        setTimeout(() => setCopyToast(null), 3000);
       }
     } catch (error) {
       console.error("Failed to copy referral link", error);
+      setCopyToast("Failed to copy link");
+      setTimeout(() => setCopyToast(null), 3000);
     }
   };
 
@@ -324,6 +330,9 @@ export default function ProfilePage() {
               >
                 Copy Referral Link
               </button>
+              {copyToast && (
+                <p className="text-xs text-green-400 text-center">{copyToast}</p>
+              )}
             </div>
           )}
           <div className="mt-3 space-y-1">
