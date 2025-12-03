@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import HomeClient from "./HomeClient";
 
-export const dynamic = "force-dynamic";
-
 // ✔ This metadata must stay here (top of file)
 export const metadata: Metadata = {
   title: "FarFISH – Mint & Rewards",

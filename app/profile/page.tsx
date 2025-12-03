@@ -1,8 +1,6 @@
 // app/profile/page.tsx
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import Image from "next/image";
 import { useMemo, useState, useEffect } from "react";
 import WalletConnect from "../components/WalletConnect";
@@ -64,8 +62,6 @@ export default function ProfilePage() {
   const { blocked, message } = useFarcasterGate();
   const [refMultiplier, setRefMultiplier] = useState<number | null>(null);
   const [multiplierStatus, setMultiplierStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [resolvedFid, setResolvedFid] = useState<string | null>(null);
-  const [copyToast, setCopyToast] = useState<string | null>(null);
 
   // Farcaster detection
   useFarcasterEnvironment("Profile page");
@@ -106,44 +102,6 @@ export default function ProfilePage() {
     })();
   }, [user?.walletAddress]);
 
-  // Resolve FID from existing Farcaster/SIWF context or Supabase profile as fallback
-  useEffect(() => {
-    const directFid = user?.fid;
-    if (directFid) {
-      setResolvedFid(String(directFid));
-      return;
-    }
-
-    const wallet = user?.walletAddress;
-    if (!wallet) {
-      setResolvedFid(null);
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from("profiles")
-          .select("fid")
-          .eq("wallet_address", wallet)
-          .maybeSingle();
-
-        if (cancelled) return;
-        setResolvedFid(data?.fid ? String((data as any).fid) : null);
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to resolve FID from profile", error);
-          setResolvedFid(null);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.fid, user?.walletAddress]);
-
   const multiplierCopy = useMemo(() => {
     if (!user?.walletAddress) return "Connect wallet to unlock multipliers";
     if (multiplierStatus === "loading") return "Loading multiplier...";
@@ -154,7 +112,7 @@ export default function ProfilePage() {
 
   const handleVerifyAndGetLink = () => {
     const baseUrl = "https://farfish-miniapp5.vercel.app";
-    const fid = resolvedFid;
+    const fid = user?.fid;
     if (fid) {
       const link = `${baseUrl}/share?ref=${fid}`;
       setReferralLink(link);
@@ -163,7 +121,7 @@ export default function ProfilePage() {
 
   const handleCopyReferralLink = async () => {
     const baseUrl = "https://farfish-miniapp5.vercel.app";
-    const fid = resolvedFid;
+    const fid = user?.fid;
     if (!fid) {
       return;
     }
@@ -172,26 +130,23 @@ export default function ProfilePage() {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
         setReferralLink(link);
-        setCopyToast("Referral link copied!");
-        setTimeout(() => setCopyToast(null), 3000);
+        // Optionally show a success message
       }
     } catch (error) {
       console.error("Failed to copy referral link", error);
-      setCopyToast("Failed to copy link");
-      setTimeout(() => setCopyToast(null), 3000);
     }
   };
 
   // Auto-generate referral link if user has FID
   useEffect(() => {
-    if (resolvedFid) {
+    if (user?.fid) {
       const baseUrl = "https://farfish-miniapp5.vercel.app";
-      const link = `${baseUrl}/share?ref=${resolvedFid}`;
+      const link = `${baseUrl}/share?ref=${user.fid}`;
       setReferralLink(link);
     } else {
       setReferralLink(null);
     }
-  }, [resolvedFid]);
+  }, [user?.fid]);
 
   useEffect(() => {
     const wallet = user?.walletAddress;
@@ -251,23 +206,22 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
-              <Image
-                src={user?.pfpUrl ?? "/farfish-logo.png"}
-                alt={user?.displayName ?? "FarFISH user"}
-                fill
-                sizes="64px"
-                className="object-cover"
-                unoptimized
-              />
-            </div>
+          <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
+            <Image
+              src={user?.pfpUrl ?? "/farfish-logo.png"}
+              alt={user?.displayName ?? "FarFISH user"}
+              fill
+              sizes="64px"
+              className="object-cover"
+              unoptimized
+            />
+          </div>
             <div>
               <p className="text-lg font-semibold">
                 {user?.displayName ?? "FarFISH Captain"}
               </p>
               <p className="text-xs text-white/60">
-                {shortenAddress(user?.walletAddress)} • FID:{" "}
-                {resolvedFid ?? "FID not available"}
+                FID: {user?.fid ?? "—"} • {shortenAddress(user?.walletAddress)}
               </p>
             </div>
           </div>
@@ -320,7 +274,7 @@ export default function ProfilePage() {
               Verify & Get Link
             </button>
           </div>
-          {resolvedFid && referralLink && (
+          {user?.fid && referralLink && (
             <div className="mt-3 space-y-2">
               <p className="text-xs text-white/70 break-all">Your referral link: {referralLink}</p>
               <button
@@ -330,9 +284,6 @@ export default function ProfilePage() {
               >
                 Copy Referral Link
               </button>
-              {copyToast && (
-                <p className="text-xs text-green-400 text-center">{copyToast}</p>
-              )}
             </div>
           )}
           <div className="mt-3 space-y-1">

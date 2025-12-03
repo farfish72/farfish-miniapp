@@ -1,8 +1,6 @@
 // app/chest/page.tsx
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useEffect } from "react";
 import ChestView from "./ChestView";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
