@@ -1,6 +1,7 @@
 // app/layout.tsx
 import "./globals.css";
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import BottomNav from "./components/BottomNav";
 import Footer from "./components/Footer";
 import ThirdwebProvider from "./providers/ThirdwebProvider";
@@ -36,7 +37,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </FarcasterSignerProvider>
         </FarcasterWalletProvider>
 
-        <BottomNav />
+        <Suspense fallback={null}>
+          <BottomNav />
+        </Suspense>
       </body>
     </html>
   );
