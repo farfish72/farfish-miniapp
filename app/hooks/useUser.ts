@@ -1,9 +1,8 @@
 "use client";
 
-import { useContract } from "@thirdweb-dev/react";
 import { useAccount } from "wagmi";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
+ 
 
 type Rarity = "common" | "rare" | "epic" | "legendary";
 
@@ -64,7 +63,6 @@ type ProfileRow = {
 
 export default function useUser() {
   const { address } = useAccount();
-  const { contract: nftContract } = useContract(CONTRACTS.nftCollection, "nft-drop");
   const [loadingNFTs, setLoadingNFTs] = useState(false);
   const [rarityBreakdown, setRarityBreakdown] = useState<RarityBreakdown>(defaultBreakdown());
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -90,26 +88,9 @@ export default function useUser() {
         }
         return;
       }
-      try {
-        const [{ data: profileData }, { data: stakingData }] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("display_name, fid, pfp_url, streak_days, rank_label")
-            .eq("wallet_address", address)
-            .limit(1)
-            .maybeSingle(),
-          supabase.from("staking_positions").select("token_id").eq("wallet_address", address),
-        ]);
-        if (cancelled) return;
-        setProfile((profileData as ProfileRow) ?? null);
-        setStakedCount((stakingData as { token_id: number }[] | null)?.length ?? 0);
-      } catch (error) {
-        if (!cancelled) {
-          setProfile(null);
-          setStakedCount(0);
-          console.error("Failed to fetch profile data", error);
-        }
-      }
+      if (cancelled) return;
+      setProfile(null);
+      setStakedCount(0);
     };
     fetchProfile();
     return () => {
@@ -119,22 +100,14 @@ export default function useUser() {
 
   useEffect(() => {
     const fetchNFTs = async () => {
-      if (!nftContract || !address) {
+      if (!address) {
         setRarityBreakdown(defaultBreakdown());
         return;
       }
 
       setLoadingNFTs(true);
       try {
-        const owned = await nftContract.getOwned(address);
-        const breakdown = defaultBreakdown();
-
-        owned.forEach((nft) => {
-          const rarity = rarityFromAttributes(nft.metadata?.attributes);
-          breakdown[rarity] += 1;
-        });
-
-        setRarityBreakdown(breakdown);
+        setRarityBreakdown(defaultBreakdown());
       } catch (error) {
         console.error("Failed to fetch owned NFTs", error);
         setRarityBreakdown(defaultBreakdown());
@@ -144,7 +117,7 @@ export default function useUser() {
     };
 
     fetchNFTs();
-  }, [address, nftContract]);
+  }, [address]);
 
   const nftsOwned = useMemo(
     () => rarityOrder.reduce((total, rarity) => total + (rarityBreakdown[rarity] ?? 0), 0),

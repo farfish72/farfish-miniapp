@@ -3,7 +3,6 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import BottomNav from "./components/BottomNav";
 import Footer from "./components/Footer";
-import ThirdwebProvider from "./providers/ThirdwebProvider";
 import FarcasterMiniAppReady from "./components/FarcasterMiniAppReady";
 import FarcasterWalletProvider from "./providers/FarcasterWalletProvider";
 
@@ -15,7 +14,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen flex flex-col relative items-center overflow-x-hidden text-white">
         <FarcasterMiniAppReady />
         <FarcasterWalletProvider>
-          <ThirdwebProvider>
             <main
               className="w-full max-w-md min-h-screen flex flex-col px-4"
               style={{
@@ -29,7 +27,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
               <Footer />
             </main>
-          </ThirdwebProvider>
         </FarcasterWalletProvider>
 
         <BottomNav />

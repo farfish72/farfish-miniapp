@@ -2,14 +2,23 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { FARCASTER_PROFILE_URL, X_PROFILE_URL, referralMultiplierByTokenId } from "../constants";
-import { supabase } from "../lib/supabase";
+import { FARCASTER_PROFILE_URL, X_PROFILE_URL } from "../constants";
 import useFarcasterGate from "../hooks/useFarcasterGate";
+import { REFERRAL_APP_URL } from "../config/referral";
+
+type ToastState = { type: "error" | "success"; message: string } | null;
+
+type ReferralState = {
+  bound: boolean;
+  referrer?: string;
+  link?: string;
+  referralsCount: number;
+};
 
 const faqItems = [
   {
@@ -54,14 +63,17 @@ const shortenAddress = (address?: string) => {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
+const walletRegex = /^0x[a-fA-F0-9]{40}$/;
+
 export default function ProfilePage() {
   const { user } = useUser();
   const [openIdx, setOpenIdx] = useState<number | null>(0);
-  const [referralsCompleted, setReferralsCompleted] = useState<number>(0);
-  const [referralLink, setReferralLink] = useState<string | null>(null);
+  const [referrerInput, setReferrerInput] = useState("");
+  const [referralState, setReferralState] = useState<ReferralState>({ bound: false, referralsCount: 0 });
+  const [loadingReferral, setLoadingReferral] = useState(false);
+  const [binding, setBinding] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
   const { blocked, message } = useFarcasterGate();
-  const [refMultiplier, setRefMultiplier] = useState<number | null>(null);
-  const [multiplierStatus, setMultiplierStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   // Farcaster detection
   useFarcasterEnvironment("Profile page");
@@ -88,107 +100,128 @@ export default function ProfilePage() {
     [user?.stats]
   );
 
-  useEffect(() => {
-    const wallet = user?.walletAddress;
-    if (!wallet) return;
-    (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("referrals_completed")
-        .eq("wallet_address", wallet)
-        .limit(1)
-        .single();
-      setReferralsCompleted((data as any)?.referrals_completed ?? 0);
-    })();
-  }, [user?.walletAddress]);
+  const showToast = useCallback(
+    (type: "error" | "success", msg: string) => setToast({ type, message: msg }),
+    []
+  );
 
-  const multiplierCopy = useMemo(() => {
-    if (!user?.walletAddress) return "Connect wallet to unlock multipliers";
-    if (multiplierStatus === "loading") return "Loading multiplier...";
-    if (multiplierStatus === "error") return "Multiplier unavailable";
-    if (refMultiplier === null) return "Loading multiplier...";
-    return `x${refMultiplier}`;
-  }, [user?.walletAddress, multiplierStatus, refMultiplier]);
+  const createReferralLink = useCallback((wallet: string) => `${REFERRAL_APP_URL}?ref=${wallet.toLowerCase()}`, []);
 
-  const handleVerifyAndGetLink = () => {
-    const baseUrl = "https://farfish-miniapp5.vercel.app";
-    const fid = user?.fid;
-    if (fid) {
-      const link = `${baseUrl}/share?ref=${fid}`;
-      setReferralLink(link);
+  const fetchReferralInfo = useCallback(
+    async (wallet: string) => {
+      if (!wallet) return;
+      setLoadingReferral(true);
+      try {
+        const res = await fetch(`/api/referral/link?user=${wallet}`, {
+          headers: { "x-user-wallet": wallet },
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to load referral info");
+        }
+        const data = await res.json();
+        const link = data?.link ?? createReferralLink(wallet);
+        setReferralState({
+          bound: Boolean(data?.bound),
+          referrer: data?.referrer ?? undefined,
+          link,
+          referralsCount: Number(data?.referralsCount ?? 0),
+        });
+      } catch (error) {
+        console.error("Failed to load referral info", error);
+        showToast("error", "Failed to load referral info. Please try again.");
+        setReferralState({
+          bound: false,
+          referrer: undefined,
+          link: wallet ? createReferralLink(wallet) : undefined,
+          referralsCount: 0,
+        });
+      } finally {
+        setLoadingReferral(false);
+      }
+    },
+    [createReferralLink, showToast]
+  );
+
+  const handleBindReferral = async () => {
+    if (!user?.walletAddress) {
+      showToast("error", "Connect your wallet first.");
+      return;
+    }
+
+    const referrer = referrerInput.trim();
+    if (!referrer) {
+      showToast("error", "Enter your friend's wallet address.");
+      return;
+    }
+    if (!walletRegex.test(referrer)) {
+      showToast("error", "Please enter a valid wallet (0x...)");
+      return;
+    }
+
+    setBinding(true);
+    try {
+      const res = await fetch("/api/referral/bind", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-wallet": user.walletAddress,
+        },
+        body: JSON.stringify({ referrer }),
+      });
+
+      if (res.status === 409) {
+        const data = await res.json();
+        showToast("error", data?.error || "Already bound");
+        await fetchReferralInfo(user.walletAddress);
+        return;
+      }
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to bind referral");
+      }
+
+      showToast("success", "Referral bound successfully");
+      setReferrerInput("");
+      await fetchReferralInfo(user.walletAddress);
+    } catch (error) {
+      console.error("Bind referral failed", error);
+      showToast("error", "Could not bind referral. Please try again.");
+    } finally {
+      setBinding(false);
     }
   };
 
   const handleCopyReferralLink = async () => {
-    const baseUrl = "https://farfish-miniapp5.vercel.app";
-    const fid = user?.fid;
-    if (!fid) {
+    if (!referralState.link) {
+      showToast("error", "No referral link yet.");
       return;
     }
-    const link = `${baseUrl}/share?ref=${fid}`;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
-        setReferralLink(link);
-        // Optionally show a success message
-      }
+      await navigator.clipboard.writeText(referralState.link);
+      showToast("success", "Referral link copied");
     } catch (error) {
       console.error("Failed to copy referral link", error);
+      showToast("error", "Unable to copy link");
     }
   };
 
-  // Auto-generate referral link if user has FID
   useEffect(() => {
-    if (user?.fid) {
-      const baseUrl = "https://farfish-miniapp5.vercel.app";
-      const link = `${baseUrl}/share?ref=${user.fid}`;
-      setReferralLink(link);
+    if (user?.walletAddress) {
+      fetchReferralInfo(user.walletAddress);
     } else {
-      setReferralLink(null);
+      setReferralState({ bound: false, referrer: undefined, link: undefined, referralsCount: 0 });
+      setReferrerInput("");
     }
-  }, [user?.fid]);
+  }, [user?.walletAddress, fetchReferralInfo]);
 
   useEffect(() => {
-    const wallet = user?.walletAddress;
-    if (!wallet) {
-      setRefMultiplier(null);
-      setMultiplierStatus("idle");
-      return;
-    }
-
-    let cancelled = false;
-    setMultiplierStatus("loading");
-
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from("staking_positions")
-          .select("token_id, token_tier")
-          .eq("wallet_address", wallet)
-          .order("token_tier", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (cancelled) return;
-
-        const tokenId = Number((data as any)?.token_id);
-        const fallbackTier = Number((data as any)?.token_tier ?? 0);
-        const resolvedId = Number.isFinite(tokenId) ? tokenId : fallbackTier;
-        setRefMultiplier(referralMultiplierByTokenId(resolvedId));
-        setMultiplierStatus("ready");
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to load referral multiplier", error);
-          setRefMultiplier(null);
-          setMultiplierStatus("error");
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.walletAddress]);
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -244,8 +277,7 @@ export default function ProfilePage() {
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
           <p className="text-sm text-white/70">
-            Base reward: 10 FRH per referral. Current multiplier: {multiplierCopy} (based on highest staked NFT token
-            ID).
+            Bind once to your friend's wallet, then share your link to earn referral rewards. Manual bind is permanent.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <a
@@ -265,29 +297,67 @@ export default function ProfilePage() {
               Follow on Farcaster
             </a>
           </div>
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={handleVerifyAndGetLink}
-              className="w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-2 text-sm font-semibold text-black"
-            >
-              Verify & Get Link
-            </button>
-          </div>
-          {user?.fid && referralLink && (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs text-white/70 break-all">Your referral link: {referralLink}</p>
-              <button
-                type="button"
-                onClick={handleCopyReferralLink}
-                className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 hover:bg-white/20 transition"
-              >
-                Copy Referral Link
-              </button>
-            </div>
-          )}
-          <div className="mt-3 space-y-1">
-            <p className="text-sm">Referrals completed: {referralsCompleted}</p>
+          <div className="mt-4 space-y-3">
+            {!user?.walletAddress && (
+              <div className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-sm text-yellow-100">
+                Connect your wallet to bind a referral.
+              </div>
+            )}
+            {user?.walletAddress && !referralState.bound && (
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-wide text-white/60 font-semibold">
+                  Friend’s wallet address (bind once)
+                </label>
+                <input
+                  value={referrerInput}
+                  onChange={(e) => setReferrerInput(e.target.value)}
+                  placeholder="0x1234..."
+                  disabled={binding || loadingReferral}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#00d4c4] disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={handleBindReferral}
+                  disabled={binding || loadingReferral}
+                  className="w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-2 text-sm font-semibold text-black disabled:opacity-60"
+                >
+                  {binding ? "Binding..." : "Bind Referral"}
+                </button>
+                <p className="text-xs text-white/60">You can only bind a referrer once. This action cannot be undone.</p>
+              </div>
+            )}
+
+            {user?.walletAddress && referralState.bound && (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-xs text-white/70 break-all">
+                    Your referral link: {referralState.link ?? createReferralLink(user.walletAddress)}
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyReferralLink}
+                      className="rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 hover:bg-white/20 transition"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fetchReferralInfo(user.walletAddress!)}
+                      className="rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 hover:bg-white/20 transition"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm">Referrals completed: {referralState.referralsCount ?? 0}</p>
+                {referralState.referrer && (
+                  <p className="text-xs text-white/60">
+                    Bound to referrer: {shortenAddress(referralState.referrer)}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -321,6 +391,20 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
+
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md">
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm shadow-lg ${
+              toast.type === "success"
+                ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
+                : "border-red-400/40 bg-red-500/15 text-red-100"
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

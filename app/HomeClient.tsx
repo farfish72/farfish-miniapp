@@ -1,4 +1,10 @@
-// app/HomeClient.tsx
+/**
+ * DropERC1155 Mint Flow on Base (chainId 8453)
+ * 
+ * One-per-wallet rule enforced by checking balanceOf(address, id) for all tokenIds 0-15.
+ * Mint price read from NEXT_PUBLIC_MINT_PRICE_WEI environment variable.
+ * Random tokenId selection weighted by remaining supply (maxTotalSupply - totalSupply).
+ */
 "use client";
 
 import Image from "next/image";
@@ -6,28 +12,81 @@ import Header from "./components/Header";
 import useFarcasterGate from "./hooks/useFarcasterGate";
 import useFarcasterEnvironment from "./hooks/useFarcasterEnvironment";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import {
   useAccount,
   useConnect,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { useContract, useContractRead } from "@thirdweb-dev/react";
-import { NFT_CONTRACT_ADDRESS, NFT_SUPPLY_TOTAL } from "./constants";
+import { getPublicClient } from "@wagmi/core";
+import { wagmiConfig } from "./lib/wagmi";
+import { NFT_CONTRACT_ADDRESS } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { detectFarcasterEnvironment } from "./utils/farcaster";
-import { supabase } from "./lib/supabase";
-import useUser from "./hooks/useUser";
+
+interface SupplyInfo {
+  id: number;
+  totalSupply: bigint;
+  maxTotalSupply: bigint;
+  remaining: bigint;
+}
+
+/**
+ * Weighted random selection using browser crypto API.
+ * Returns the selected tokenId from candidates based on remaining supply weights.
+ */
+function pickWeightedTokenId(candidates: SupplyInfo[]): number {
+  if (candidates.length === 0) {
+    throw new Error("No candidates available");
+  }
+
+  // Calculate total weight (sum of all remaining supplies)
+  const totalWeight = candidates.reduce((sum, item) => sum + item.remaining, BigInt(0));
+
+  if (totalWeight === BigInt(0)) {
+    throw new Error("All tokens are sold out");
+  }
+
+  // Generate random number using crypto API
+  const randomArray = new Uint32Array(1);
+  crypto.getRandomValues(randomArray);
+  const randomValue = randomArray[0];
+
+  // Convert to BigInt and scale to [0, totalWeight)
+  // Use modulo to map random value into the weight range
+  const randomBigInt = BigInt(randomValue);
+  const scaledRandom = randomBigInt % totalWeight;
+
+  // Walk through candidates to find the selected one
+  let accumulated = BigInt(0);
+  for (const candidate of candidates) {
+    accumulated += candidate.remaining;
+    if (scaledRandom < accumulated) {
+      return candidate.id;
+    }
+  }
+
+  // Fallback to last candidate (should not happen)
+  return candidates[candidates.length - 1].id;
+}
+
+const TOKEN_IDS = Array.from({ length: 16 }, (_, i) => i); // 0-15
 
 export default function HomeClient() {
   const { blocked, message } = useFarcasterGate();
-  const { user } = useUser();
-  const searchParams = useSearchParams();
-  const [minted, setMinted] = useState<number | null>(null);
-  const [mintedErrorMessage, setMintedErrorMessage] = useState<string | null>(null);
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
+
+  // State
+  const [supplyInfo, setSupplyInfo] = useState<SupplyInfo[]>([]);
+  const [loadingSupplies, setLoadingSupplies] = useState(false);
+  const [hasMinted, setHasMinted] = useState(false);
+  const [isMinting, setIsMinting] = useState(false);
+  const [lastMintedTokenId, setLastMintedTokenId] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+  const [mintedTokenUri, setMintedTokenUri] = useState<string | null>(null);
+
   const {
     writeContract: writeMint,
     data: mintTxHash,
@@ -40,92 +99,163 @@ export default function HomeClient() {
   } = useWaitForTransactionReceipt({
     hash: mintTxHash,
   });
-  const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined, "nft-drop");
-  const {
-    data: mintedCountRaw,
-    error: mintedCountError,
-  } = useContractRead(contract, "nextTokenIdToMint", []);
-  // Generate referral link using user's FID
-  const shareLink = useMemo(() => {
-    const baseUrl = "https://farfish-miniapp5.vercel.app";
-    const fid = user?.fid;
-    if (fid) {
-      return `${baseUrl}/share?ref=${fid}`;
-    }
-    return `${baseUrl}/share`;
-  }, [user?.fid]);
 
-  const shareMessage = useMemo(() => {
-    return `Join FarFISH — Mint • Stake • Earn. Daily free chest + referral rewards. My link: ${shareLink}`;
-  }, [shareLink]);
   const isFarcasterEnv = useFarcasterEnvironment("Home page");
-  const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
-    null,
-  );
 
-  useEffect(() => {
-    let cancelled = false;
-    const deriveMinted = async () => {
-      if (!NFT_CONTRACT_ADDRESS || !contract) {
-        setMinted(null);
-        setMintedErrorMessage(
-          NFT_CONTRACT_ADDRESS ? "Unable to load supply data" : "Contract not configured",
-        );
+  // Get mint price from environment variable
+  const mintPriceWei = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const priceStr = process.env.NEXT_PUBLIC_MINT_PRICE_WEI;
+    if (!priceStr) return null;
+    try {
+      return BigInt(priceStr);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Fetch supply info for all tokenIds (0-15)
+  const fetchSupplyInfo = useCallback(async () => {
+    if (typeof window === "undefined" || !NFT_CONTRACT_ADDRESS) return;
+
+    setLoadingSupplies(true);
+    setErrorMessage(null);
+
+    try {
+      const publicClient = getPublicClient(wagmiConfig);
+      if (!publicClient) {
+        setErrorMessage("Public client not available");
         return;
       }
 
-      try {
-        if (mintedCountRaw !== undefined && mintedCountRaw !== null) {
-          const value = Number(mintedCountRaw ?? 0);
-          if (!Number.isFinite(value)) {
-            throw new Error("Minted count is not a finite number");
-          }
-          if (!cancelled) {
-            setMinted(value);
-            setMintedErrorMessage(null);
-          }
-          return;
-        }
+      const supplyPromises = TOKEN_IDS.map(async (id) => {
+        const [totalSupply, maxTotalSupply] = await Promise.all([
+          (publicClient.readContract as any)({
+            address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+            abi: nftDropAbi as any,
+            functionName: "totalSupply",
+            args: [BigInt(id)],
+          }) as Promise<bigint>,
+          (publicClient.readContract as any)({
+            address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+            abi: nftDropAbi as any,
+            functionName: "maxTotalSupply",
+            args: [BigInt(id)],
+          }) as Promise<bigint>,
+        ]);
 
-        if (mintedCountError) {
-          const fallback = await contract.call?.("totalSupply");
-          const fallbackValue = Number(fallback ?? 0);
-          if (!Number.isFinite(fallbackValue)) {
-            throw new Error("Fallback totalSupply value is not finite");
+        const remaining = maxTotalSupply > totalSupply ? maxTotalSupply - totalSupply : BigInt(0);
+
+        return {
+          id,
+          totalSupply,
+          maxTotalSupply,
+          remaining,
+        } as SupplyInfo;
+      });
+
+      const supplies = await Promise.all(supplyPromises);
+      setSupplyInfo(supplies);
+    } catch (error) {
+      console.error("Failed to fetch supply info:", error);
+      setErrorMessage("Failed to load supply data");
+    } finally {
+      setLoadingSupplies(false);
+    }
+  }, []);
+
+  // Check if wallet has already minted (balanceOf > 0 for any tokenId)
+  const checkHasMinted = useCallback(async () => {
+    if (typeof window === "undefined" || !address || !NFT_CONTRACT_ADDRESS) {
+      setHasMinted(false);
+      return;
+    }
+
+    try {
+      const publicClient = getPublicClient(wagmiConfig);
+      if (!publicClient) {
+        return;
+      }
+
+      const balancePromises = TOKEN_IDS.map((id) =>
+        (publicClient.readContract as any)({
+          address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+          abi: nftDropAbi as any,
+          functionName: "balanceOf",
+          args: [address as `0x${string}`, BigInt(id)],
+        }) as Promise<bigint>
+      );
+
+      const balances = await Promise.all(balancePromises);
+      const hasAnyBalance = balances.some((balance) => balance > BigInt(0));
+      setHasMinted(hasAnyBalance);
+
+      // If user has minted, find which tokenId and fetch its URI
+      if (hasAnyBalance) {
+        const mintedId = balances.findIndex((balance) => balance > BigInt(0));
+        if (mintedId >= 0) {
+          setLastMintedTokenId(mintedId);
+          try {
+            const uri = (await (publicClient.readContract as any)({
+              address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+              abi: nftDropAbi as any,
+              functionName: "uri",
+              args: [BigInt(mintedId)],
+            })) as string;
+            if (uri) {
+              setMintedTokenUri(uri);
+            }
+          } catch {
+            // URI fetch failed, continue without it
           }
-          if (!cancelled) {
-            setMinted(fallbackValue);
-            setMintedErrorMessage(null);
-          }
-          return;
-        }
-      } catch (error) {
-        console.error("Failed to fetch minted supply", error);
-        if (!cancelled) {
-          setMinted(0);
-          setMintedErrorMessage("Unable to load supply data");
         }
       }
-    };
+    } catch (error) {
+      console.error("Failed to check mint status:", error);
+    }
+  }, [address]);
 
-    deriveMinted();
+  // Fetch supply info on mount and when contract address changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      fetchSupplyInfo();
+    }
+  }, [fetchSupplyInfo]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [contract, mintedCountRaw, mintedCountError]);
+  // Check mint status when wallet connects or address changes
+  useEffect(() => {
+    if (typeof window !== "undefined" && isConnected && address) {
+      checkHasMinted();
+    } else {
+      setHasMinted(false);
+      setLastMintedTokenId(null);
+      setMintedTokenUri(null);
+    }
+  }, [isConnected, address, checkHasMinted]);
 
-  const mintedDisplay = useMemo(() => (minted === null ? "—" : minted), [minted]);
+  // Refetch after successful mint
+  useEffect(() => {
+    if (isMintConfirmed && mintTxHash) {
+      fetchSupplyInfo();
+      checkHasMinted();
+      setIsMinting(false);
+      setToast({ type: "success", message: "Mint successful!" });
+    }
+  }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, checkHasMinted]);
 
-  const mintedProgress = useMemo(() => {
-    if (minted === null) return 0;
-    return Math.min(100, Math.max(0, (minted / NFT_SUPPLY_TOTAL) * 100));
-  }, [minted]);
-
-  const remainingSupply = useMemo(() => {
-    if (minted === null) return "—";
-    return Math.max(0, NFT_SUPPLY_TOTAL - minted);
-  }, [minted]);
+  // Handle mint errors
+  useEffect(() => {
+    if (mintError) {
+      setIsMinting(false);
+      const errorMsg = mintError.message || "Mint failed";
+      if (errorMsg.includes("reject") || errorMsg.includes("denied") || errorMsg.includes("User rejected")) {
+        setToast({ type: "error", message: "Transaction rejected" });
+      } else {
+        setErrorMessage(`Mint failed: ${errorMsg}`);
+        setToast({ type: "error", message: `Mint failed: ${errorMsg}` });
+      }
+    }
+  }, [mintError]);
 
   const handleConnect = useCallback(() => {
     const connector = connectors[0];
@@ -135,140 +265,118 @@ export default function HomeClient() {
 
   const handleMint = useCallback(() => {
     setToast(null);
+    setErrorMessage(null);
 
     if (!NFT_CONTRACT_ADDRESS) {
-      setToast({
-        type: "error",
-        message: "Contract missing — mint disabled",
-      });
+      setToast({ type: "error", message: "Contract missing — mint disabled" });
       return;
     }
 
-    if (!address) {
+    if (!address || !isConnected) {
       handleConnect();
       return;
     }
 
+    if (hasMinted) {
+      setToast({ type: "error", message: "You have already minted" });
+      return;
+    }
+
+    if (!mintPriceWei) {
+      setToast({ type: "error", message: "Mint price not configured" });
+      return;
+    }
+
+    // Build candidates with remaining supply > 0
+    const candidates = supplyInfo.filter((info) => info.remaining > BigInt(0));
+
+    if (candidates.length === 0) {
+      setToast({ type: "error", message: "All tokens are sold out" });
+      return;
+    }
+
     try {
+      // Select random tokenId weighted by remaining supply
+      const tokenId = pickWeightedTokenId(candidates);
+
+      setIsMinting(true);
+
       writeMint({
         address: NFT_CONTRACT_ADDRESS as `0x${string}`,
         abi: nftDropAbi as any,
         functionName: "claim",
-        args: [address as `0x${string}`, BigInt(1)],
+        args: [address as `0x${string}`, BigInt(tokenId), BigInt(1)],
+        value: mintPriceWei,
       } as any);
     } catch (error) {
       console.error("Mint transaction failed to start", error);
-      setToast({
-        type: "error",
-        message: "Unable to start mint transaction",
-      });
+      setIsMinting(false);
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Unable to start mint transaction" });
     }
-  }, [address, handleConnect, writeMint]);
+  }, [address, isConnected, hasMinted, supplyInfo, mintPriceWei, writeMint, handleConnect]);
 
   const handleShare = useCallback(() => {
-    const payload = shareMessage;
     const isInFarcaster = isFarcasterEnv || detectFarcasterEnvironment();
-
-    if (isInFarcaster && typeof window !== "undefined" && (window as any).sdk) {
-      (window as any).sdk.actions.openUrl(shareLink);
-      setToast({ type: "success", message: "Share link opened in Farcaster" });
-      return;
-    }
 
     if (typeof window === "undefined") return;
 
-    const tryShare = async () => {
+    const castText = "I just mint FarFISH limited edition NFT. Join the wave...\n`https://farfish-miniapp5.vercel.app`";
+
+    if (isInFarcaster) {
       try {
-        if (navigator.share) {
-          await navigator.share({ text: payload, url: shareLink });
-          setToast({ type: "success", message: "Share sheet opened" });
-          return;
-        }
-
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(payload);
-          setToast({ type: "success", message: "Link copied" });
-          return;
-        }
-
-        throw new Error("No share or clipboard support");
+        window.parent?.postMessage(
+          {
+            type: "createCast",
+            data: {
+              cast: {
+                text: castText,
+              },
+            },
+          },
+          "*",
+        );
+        setToast({ type: "success", message: "Composer opened" });
+        return;
       } catch (error) {
-        console.error("Failed to share FarFISH", error);
-        setToast({ type: "error", message: "Unable to share link" });
+        console.error("Failed to open native composer", error);
       }
-    };
+    }
 
-    void tryShare();
-  }, [shareMessage, shareLink, isFarcasterEnv]);
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
+    window.open(warpcastUrl, "_blank", "noopener,noreferrer");
+    setToast({ type: "success", message: "Composer opened" });
+  }, [isFarcasterEnv]);
 
-  useEffect(() => {
-    if (!mintError) return;
-    setToast({
-      type: "error",
-      message: mintError.message || "Mint failed",
-    });
-  }, [mintError]);
+  // Calculate total minted and remaining across all tokenIds
+  const totalMinted = useMemo(() => {
+    return supplyInfo.reduce((sum, info) => sum + Number(info.totalSupply), 0);
+  }, [supplyInfo]);
 
-  const toastMessage = useMemo(() => toast?.message ?? null, [toast]);
+  const totalMaxSupply = useMemo(() => {
+    return supplyInfo.reduce((sum, info) => sum + Number(info.maxTotalSupply), 0);
+  }, [supplyInfo]);
 
-  useEffect(() => {
-    if (!toastMessage) return;
-    const timer = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(timer);
-  }, [toastMessage]);
+  const totalRemaining = useMemo(() => {
+    return Math.max(0, totalMaxSupply - totalMinted);
+  }, [totalMinted, totalMaxSupply]);
 
-  // Handle referral attribution
-  useEffect(() => {
-    const refParam = searchParams.get("ref");
-    if (!refParam || !user?.walletAddress) return;
+  const mintedProgress = useMemo(() => {
+    if (totalMaxSupply === 0) return 0;
+    return Math.min(100, Math.max(0, (totalMinted / totalMaxSupply) * 100));
+  }, [totalMinted, totalMaxSupply]);
 
-    const attributeReferral = async () => {
-      try {
-        const { data: existing } = await supabase
-          .from("profiles")
-          .select("referred_by")
-          .eq("wallet_address", user.walletAddress)
-          .maybeSingle();
-
-        if (existing?.referred_by) return; // Already attributed
-
-        await supabase
-          .from("profiles")
-          .update({ referred_by: refParam })
-          .eq("wallet_address", user.walletAddress);
-
-        // Increment referrer's count
-        const { data: referrer } = await supabase
-          .from("profiles")
-          .select("referrals_completed")
-          .or(`wallet_address.eq.${refParam},fid.eq.${refParam}`)
-          .maybeSingle();
-
-        if (referrer) {
-          await supabase
-            .from("profiles")
-            .update({ referrals_completed: (referrer.referrals_completed ?? 0) + 1 })
-            .or(`wallet_address.eq.${refParam},fid.eq.${refParam}`);
-        }
-      } catch (error) {
-        console.error("Failed to attribute referral", error);
-      }
-    };
-
-    void attributeReferral();
-  }, [searchParams, user?.walletAddress]);
-
-  const GALLERY_IMAGES = useMemo(
-    () => ["/fish1.jpg", "/fish2.jpg", "/fish3.jpg", "/fish4.jpg"],
-    [],
-  );
-
+  // Button states and labels
   const primaryButtonLabel = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) return "Mint disabled";
-    if (!address || !isConnected) return "Connect Farcaster wallet";
-    if (isMintPending || isMintConfirming) return "Minting...";
-    return "Mint FarFISH NFT";
-  }, [address, isConnected, isMintPending, isMintConfirming]);
+    if (!address || !isConnected) return "Connect Farcaster";
+    if (hasMinted) return "Already minted";
+    if (isMinting || isMintPending || isMintConfirming) return "Minting…";
+    if (mintPriceWei) {
+      const priceEth = Number(mintPriceWei) / 1e18;
+      return `Mint (${priceEth.toFixed(4)} ETH)`;
+    }
+    return "Mint";
+  }, [address, isConnected, hasMinted, isMinting, isMintPending, isMintConfirming, mintPriceWei]);
 
   const primaryButtonClasses = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) {
@@ -277,25 +385,46 @@ export default function HomeClient() {
     if (!address || !isConnected) {
       return "w-full py-4 text-lg font-semibold rounded-xl bg-white/15 text-white hover:bg-white/25 transition";
     }
+    if (hasMinted) {
+      return "w-full py-4 text-lg font-semibold rounded-xl bg-white/10 text-white/50 cursor-not-allowed";
+    }
     return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black transition disabled:opacity-60";
-  }, [address, isConnected]);
+  }, [address, isConnected, hasMinted]);
 
   const primaryButtonDisabled =
-    isConnecting || isMintPending || isMintConfirming || !NFT_CONTRACT_ADDRESS;
+    isConnecting ||
+    isMinting ||
+    isMintPending ||
+    isMintConfirming ||
+    !NFT_CONTRACT_ADDRESS ||
+    hasMinted ||
+    loadingSupplies;
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const GALLERY_IMAGES = useMemo(
+    () => ["/fish1.jpg", "/fish2.jpg", "/fish3.jpg", "/fish4.jpg"],
+    [],
+  );
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* উপরের FarFISH + Follow us + Home টাইটেল */}
       <Header title="Home" />
 
-      {/* নিচে আসল হোম / মিন্ট কনটেন্ট */}
       <div className="mt-4 flex-1 flex flex-col">
         {/* MINT CARD */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
-              <p className="text-xs text-white/60">Total supply: 9999 • Reserved: 20</p>
+              <p className="text-xs text-white/60">
+                Total supply: {totalMaxSupply || "—"} • Token IDs: 0-15
+              </p>
             </div>
           </div>
 
@@ -309,20 +438,20 @@ export default function HomeClient() {
           <div className="grid grid-cols-3 gap-2 mt-4 text-center">
             <div>
               <p className="text-xs text-white/60">Minted</p>
-              <p className="font-bold">{mintedDisplay}</p>
-              {mintedErrorMessage && (
+              <p className="font-bold">{loadingSupplies ? "—" : totalMinted}</p>
+              {errorMessage && (
                 <p className="text-[11px] text-red-300 mt-1">Supply data unavailable</p>
               )}
             </div>
             <div>
               <p className="text-xs text-white/60">Progress</p>
               <p className="font-bold">
-                {minted === null ? "—" : `${mintedProgress.toFixed(2)}%`}
+                {loadingSupplies ? "—" : `${mintedProgress.toFixed(2)}%`}
               </p>
             </div>
             <div>
               <p className="text-xs text-white/60">Remaining</p>
-              <p className="font-bold">{remainingSupply}</p>
+              <p className="font-bold">{loadingSupplies ? "—" : totalRemaining}</p>
             </div>
           </div>
 
@@ -349,9 +478,19 @@ export default function HomeClient() {
               >
                 {primaryButtonLabel}
               </button>
-              {mintError && (
-                <p className="mt-2 text-xs text-red-400">
-                  {mintError.message}
+              {lastMintedTokenId !== null && (
+                <p className="mt-2 text-xs text-green-400">
+                  Minted token ID: {lastMintedTokenId}
+                  {mintedTokenUri && (
+                    <a
+                      href={mintedTokenUri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 underline"
+                    >
+                      View NFT
+                    </a>
+                  )}
                 </p>
               )}
               {isMintConfirmed && (
@@ -384,10 +523,6 @@ export default function HomeClient() {
               {toast.message}
             </div>
           )}
-
-          <p className="text-xs text-white/60 mt-2">
-            Note: 20 NFTs are reserved for team/partners.
-          </p>
         </div>
 
         {/* WHY MINT */}
@@ -397,6 +532,7 @@ export default function HomeClient() {
             <li>• Staking rewards (30/90/180/360 days)</li>
             <li>• Tier system &amp; exclusive drops</li>
             <li>• Limited editions</li>
+            <li>• Powering growth in the Base ecosystem</li>
           </ul>
         </div>
 
@@ -425,4 +561,3 @@ export default function HomeClient() {
     </div>
   );
 }
-

@@ -1,130 +1,273 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { useContract } from "@thirdweb-dev/react";
-import { useAccount } from "wagmi";
-import { supabase } from "../lib/supabase";
-import { NFT_CONTRACT_ADDRESS } from "../constants";
+import React, { useState, useEffect } from "react";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
+import { STAKING_CONTRACT_ADDRESS, STAKING_TOKEN_RANGES, getRepresentativeTokenId } from "../constants";
+import stakeAbi from "../abi/stake.json";
 
 interface StakeModalProps {
+  isOpen: boolean;
   onClose: () => void;
-  onSelectNFT: (id: string) => void;
-  initialFocusId?: string;
+  onSuccess?: () => void;
 }
 
-type Choice = { id: string; title: string };
+const LOCK_DURATIONS = [30, 90, 180, 360] as const;
+type LockDuration = typeof LOCK_DURATIONS[number];
+type Rarity = keyof typeof STAKING_TOKEN_RANGES;
 
-export default function StakeModal({ onClose, onSelectNFT, initialFocusId }: StakeModalProps) {
-  const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [choices, setChoices] = useState<Choice[]>([]);
-  const backdropRef = useRef<HTMLDivElement | null>(null);
-  const firstButtonRef = useRef<HTMLButtonElement | null>(null);
-  const { address } = useAccount();
-  const { contract } = useContract(NFT_CONTRACT_ADDRESS || undefined, "nft-drop");
+const BASESCAN_URL = "https://basescan.org/tx";
+const BASE_CHAIN_ID = 8453;
 
+export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalProps) {
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const [selectedRarity, setSelectedRarity] = useState<Rarity | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState<LockDuration>(30);
+  const [amount, setAmount] = useState<string>("1");
+  const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+
+  const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
+  const { isLoading: isTxConfirming, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
+
+  const expectedChainId = process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
+  const isBaseNetwork = chainId === expectedChainId;
+  const canStake = isConnected && isBaseNetwork && selectedRarity && selectedDuration && amount && Number(amount) > 0;
+  const isPending = isWritePending || isTxConfirming;
+
+  // Reset state when modal closes
   useEffect(() => {
-    const toFocus = initialFocusId ? document.getElementById(initialFocusId) : firstButtonRef.current;
-    (toFocus as HTMLElement | null)?.focus();
-  }, [initialFocusId]);
+    if (!isOpen) {
+      setSelectedRarity(null);
+      setSelectedDuration(30);
+      setAmount("1");
+      setToast(null);
+    }
+  }, [isOpen]);
 
+  // Handle transaction success
   useEffect(() => {
-    async function load() {
-      if (!address || !contract) {
-        setChoices([]);
-        return;
+    if (isTxSuccess && txHash) {
+      setToast({ type: "success", message: "NFT staked successfully!" });
+      setTimeout(() => {
+        onSuccess?.();
+        onClose();
+      }, 2000);
+    }
+  }, [isTxSuccess, txHash, onSuccess, onClose]);
+
+  // Refetch stake info after successful transaction
+  useEffect(() => {
+    if (isTxSuccess) {
+      // onSuccess callback will trigger refetch in parent
+    }
+  }, [isTxSuccess, onSuccess]);
+
+  // Handle write errors
+  useEffect(() => {
+    if (writeError) {
+      const errorMsg = writeError.message || String(writeError);
+      console.error("Stake error:", writeError);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
-      let owned: any[] = [];
-      let stakedIds = new Set<number>();
-      try {
-        owned = await contract.getOwned(address);
-      } catch {}
-      try {
-        const { data } = await supabase
-          .from("staking_positions")
-          .select("token_id")
-          .eq("wallet_address", address);
-        (data ?? []).forEach((row: any) => stakedIds.add(Number(row.token_id)));
-      } catch {}
-
-      const list: Choice[] = owned
-        .map((nft: any) => {
-          const tokenId = Number(nft?.id ?? nft?.metadata?.id ?? nft?.metadata?.tokenId ?? 0);
-          return { tokenId };
-        })
-        .filter((x: { tokenId: number }) => Number.isFinite(x.tokenId) && !stakedIds.has(x.tokenId))
-        .map((x) => ({ id: `nft-${x.tokenId}`, title: `Fishing NFT #${x.tokenId}` }));
-
-      setChoices(list);
     }
-    load();
-  }, [address, contract]);
+  }, [writeError]);
 
+  // Auto-dismiss toast
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const handleStake = () => {
+    if (!canStake || !address || !STAKING_CONTRACT_ADDRESS || !selectedRarity || !selectedDuration) return;
+
+    // Precondition checks
+    if (!isConnected) {
+      setToast({ type: "error", message: "Please connect your wallet" });
+      return;
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
-  function onBackdropClick(e: React.MouseEvent) {
-    if (e.target === backdropRef.current) onClose();
-  }
+    if (!isBaseNetwork) {
+      setToast({ type: "error", message: `Please switch to the correct network (chainId ${expectedChainId})` });
+      return;
+    }
 
-  async function handleSelect(id: string) {
-    if (loadingId) return;
+    const tokenId = getRepresentativeTokenId(selectedRarity);
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      setToast({ type: "error", message: "Please enter a valid amount" });
+      return;
+    }
+
     try {
-      setLoadingId(id);
-      onSelectNFT(id);
-      onClose();
-    } catch {
-    } finally {
-      setLoadingId(null);
+      writeContract({
+        address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+        abi: stakeAbi as any,
+        functionName: "stake",
+        args: [BigInt(tokenId), BigInt(amountNum)],
+      } as any);
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      console.error("Stake error:", error);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
     }
-  }
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div
-      ref={backdropRef}
-      onClick={onBackdropClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Select an NFT to stake"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-[92%] max-w-lg bg-[#0b1220] rounded-xl p-6 border border-white/10 shadow-lg">
-        <h2 className="text-xl font-semibold mb-3 text-white">Select NFT to Stake</h2>
-
-        <div className="space-y-3">
-          {choices.length === 0 ? (
-            <div className="text-sm text-white/60">No eligible NFTs to stake.</div>
-          ) : (
-            choices.map((n, idx) => {
-              const idAttr = `stake-btn-${n.id}`;
-              return (
-                <button
-                  id={idAttr}
-                  key={n.id}
-                  ref={idx === 0 ? firstButtonRef : undefined}
-                  onClick={() => handleSelect(n.id)}
-                  disabled={!!loadingId}
-                  className="w-full text-left p-3 bg-white/5 rounded-md hover:bg-white/6 transition flex justify-between items-center"
-                >
-                  <span className="text-white">{n.title}</span>
-                  <span className="text-sm text-white/70">{loadingId === n.id ? "Staking..." : "Stake"}</span>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        <div className="mt-5 flex justify-end">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#050e18] p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">Stake NFT</h2>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-red-600 rounded-md text-white"
+            className="text-white/70 hover:text-white transition"
             aria-label="Close modal"
           >
-            Close
+            ✕
+          </button>
+        </div>
+
+        {!isConnected && (
+          <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <p className="text-sm text-yellow-200">Please connect your wallet to stake NFTs.</p>
+          </div>
+        )}
+
+        {isConnected && !isBaseNetwork && (
+          <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <p className="text-sm text-yellow-200">Please switch to the correct network (chainId {expectedChainId}).</p>
+          </div>
+        )}
+
+        {/* Rarity Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Select NFT Rarity</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(STAKING_TOKEN_RANGES) as Rarity[]).map((rarity) => {
+              const range = STAKING_TOKEN_RANGES[rarity];
+              const rangeStr = range.min === range.max ? `${range.min}` : `${range.min}–${range.max}`;
+              return (
+                <button
+                  key={rarity}
+                  type="button"
+                  onClick={() => setSelectedRarity(rarity)}
+                  disabled={isPending}
+                  className={`rounded-xl p-3 border text-left transition ${
+                    selectedRarity === rarity
+                      ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
+                      : "border-white/10 bg-white/5 hover:bg-white/10"
+                  } ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <span className="text-sm font-semibold block">{rarity}</span>
+                  <span className="text-xs text-white/70">Token IDs: {rangeStr}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Lock Duration Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Select Lock Duration</label>
+          <div className="grid grid-cols-4 gap-2">
+            {LOCK_DURATIONS.map((duration) => (
+              <button
+                key={duration}
+                type="button"
+                onClick={() => setSelectedDuration(duration)}
+                disabled={isPending}
+                className={`rounded-xl p-3 border text-center transition ${
+                  selectedDuration === duration
+                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                } ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                <span className="text-sm font-semibold">{duration}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Amount Input */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Amount</label>
+          <input
+            type="number"
+            min="1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            disabled={isPending}
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#00d4c4] disabled:opacity-50"
+            placeholder="Enter amount"
+          />
+        </div>
+
+        {/* Transaction Status */}
+        {isPending && (
+          <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <p className="text-sm text-blue-200">
+              {isTxConfirming ? "Confirming transaction..." : "Transaction pending..."}
+            </p>
+            {txHash && (
+              <a
+                href={`${BASESCAN_URL}/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-[#00d4c4] hover:underline mt-2 block"
+              >
+                View on BaseScan
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Toast Notification */}
+        {toast && (
+          <div
+            className={`mb-4 p-3 rounded-lg border ${
+              toast.type === "success"
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-200"
+                : "bg-red-500/10 border-red-500/20 text-red-200"
+            }`}
+          >
+            <p className="text-sm">{toast.message}</p>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleStake}
+            disabled={!canStake || isPending}
+            className={`flex-1 rounded-lg py-3 text-sm font-semibold transition ${
+              canStake && !isPending
+                ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+                : "bg-white/10 text-white/40 cursor-not-allowed"
+            }`}
+          >
+            {isPending ? "Processing..." : "Stake"}
           </button>
         </div>
       </div>

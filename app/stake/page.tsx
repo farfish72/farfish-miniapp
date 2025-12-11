@@ -1,128 +1,140 @@
 // app/stake/page.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Image from "next/image";
+import { useMemo, useState, useEffect } from "react";
 import Header from "../components/Header";
-import useUser from "../hooks/useUser";
-import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { supabase } from "../lib/supabase";
-import { MULTIPLIERS } from "../lib/multipliers";
-import { tierById, powerById, STAKING_CONTRACT_ADDRESS } from "../constants";
+import { useAccount, useReadContract, useChainId } from "wagmi";
+import { STAKING_CONTRACT_ADDRESS, getRarityFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
+import StakeModal from "../components/StakeModal";
+import UnstakeModal from "../components/UnstakeModal";
+import StakeTable from "../components/StakeTable";
 
-const DAY_MS = 1000 * 60 * 60 * 24;
+const BASE_CHAIN_ID = 8453;
 
-type StakedItem = {
-  id: string;
-  name: string;
-  image: string;
-  lockDays: number;
-  stakedAt: number;
-  tierId?: number;
+const getExpectedChainId = () => {
+  return process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
 };
 
+interface StakedPosition {
+  tokenId: number;
+  rarity: string | null;
+  quantity: bigint;
+  stakedAt: bigint;
+  lockDays: bigint;
+  isUnlocked: boolean;
+}
+
 export default function StakingPage() {
-  const { user } = useUser();
-  const { address } = useAccount();
-  const [nowTick, setNowTick] = useState(Date.now());
-  const [staked, setStaked] = useState<StakedItem[]>([]);
-  const [syncing, setSyncing] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"stake" | "unstake" | null>(null);
-  const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
-  const walletAddress = user?.walletAddress;
-  useFarcasterEnvironment("Stake page");
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const [isStakeModalOpen, setIsStakeModalOpen] = useState(false);
+  const [isUnstakeModalOpen, setIsUnstakeModalOpen] = useState(false);
+  const [selectedUnstakePosition, setSelectedUnstakePosition] = useState<StakedPosition | null>(null);
 
-  const {
-    writeContract,
-    data: stakeTxHash,
-    isPending: isWritePending,
-    error: writeError,
-  } = useWriteContract();
+  const expectedChainId = getExpectedChainId();
+  const isBaseNetwork = chainId === expectedChainId;
+  const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
 
-  const {
-    isLoading: isTxConfirming,
-    isSuccess: isTxConfirmed,
-  } = useWaitForTransactionReceipt({
-    hash: stakeTxHash,
-  });
+  // Read stake info to get all staked tokens
+  const { data: stakeInfo, refetch: refetchStakeInfo, isLoading: isLoadingStakeInfo } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+    abi: stakeAbi as any,
+    functionName: "getStakeInfo",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: { enabled: readEnabled, refetchInterval: 30000 },
+  } as any);
 
-  useEffect(() => {
-    const i = setInterval(() => setNowTick(Date.now()), 1000);
-    return () => clearInterval(i);
-  }, []);
-
-  const fetchStakedPositions = useCallback(async () => {
-    if (!walletAddress) {
-      setStaked([]);
-      return;
+  // Parse staked token IDs and total rewards from getStakeInfo
+  const { stakedTokenIds, totalRewards } = useMemo(() => {
+    if (!stakeInfo || !Array.isArray(stakeInfo) || stakeInfo.length < 3) {
+      return { stakedTokenIds: [], totalRewards: BigInt(0) };
     }
-    setSyncing(true);
-    try {
-      const { data } = await supabase
-        .from("staking_positions")
-        .select("token_id, token_tier, lock_days, staked_at, image_url")
-        .eq("wallet_address", walletAddress);
-      const mapped: StakedItem[] = (data ?? []).map((row: any) => ({
-        id: `nft-${row.token_id}`,
-        name: `Fishing NFT #${row.token_id}`,
-        image: row.image_url ?? "https://placehold.co/400x400/222/00ffff?text=Item",
-        lockDays: Number(row.lock_days ?? 0),
-        stakedAt: Number(row.staked_at ?? Date.now()),
-        tierId: Number(row.token_tier ?? 0),
-      }));
-      setStaked(mapped);
-    } catch (error) {
-      console.error("Failed to sync staking positions", error);
-      setStaked([]);
-    } finally {
-      setSyncing(false);
+    
+    const tokensStaked = stakeInfo[0] as bigint[];
+    const totalRewardsValue = stakeInfo[2] as bigint;
+    
+    if (!tokensStaked) {
+      return { stakedTokenIds: [], totalRewards: totalRewardsValue || BigInt(0) };
     }
-  }, [walletAddress]);
+    
+    return {
+      stakedTokenIds: tokensStaked.map((tokenId) => Number(tokenId)),
+      totalRewards: totalRewardsValue || BigInt(0),
+    };
+  }, [stakeInfo]);
 
-  useEffect(() => {
-    fetchStakedPositions();
-  }, [fetchStakedPositions]);
+  // Query tokens 0-15 unconditionally (hooks must be called in same order every render)
+  // We'll filter results to only show staked tokens
+  const query0 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(0), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(0), refetchInterval: 30000 } } as any);
+  const query1 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(1), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(1), refetchInterval: 30000 } } as any);
+  const query2 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(2), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(2), refetchInterval: 30000 } } as any);
+  const query3 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(3), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(3), refetchInterval: 30000 } } as any);
+  const query4 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(4), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(4), refetchInterval: 30000 } } as any);
+  const query5 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(5), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(5), refetchInterval: 30000 } } as any);
+  const query6 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(6), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(6), refetchInterval: 30000 } } as any);
+  const query7 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(7), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(7), refetchInterval: 30000 } } as any);
+  const query8 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(8), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(8), refetchInterval: 30000 } } as any);
+  const query9 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(9), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(9), refetchInterval: 30000 } } as any);
+  const query10 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(10), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(10), refetchInterval: 30000 } } as any);
+  const query11 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(11), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(11), refetchInterval: 30000 } } as any);
+  const query12 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(12), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(12), refetchInterval: 30000 } } as any);
+  const query13 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(13), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(13), refetchInterval: 30000 } } as any);
+  const query14 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(14), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(14), refetchInterval: 30000 } } as any);
+  const query15 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(15), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(15), refetchInterval: 30000 } } as any);
 
-  const handleStakeTx = useCallback(() => {
-    if (!address || !STAKING_CONTRACT_ADDRESS) return;
-    setPendingAction("stake");
-    writeContract({
-      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-      abi: stakeAbi as any,
-      functionName: "stake",
-      args: [],
-    } as any);
-  }, [address, writeContract]);
+  const allQueries = [
+    { tokenId: 0, query: query0 }, { tokenId: 1, query: query1 }, { tokenId: 2, query: query2 }, { tokenId: 3, query: query3 },
+    { tokenId: 4, query: query4 }, { tokenId: 5, query: query5 }, { tokenId: 6, query: query6 }, { tokenId: 7, query: query7 },
+    { tokenId: 8, query: query8 }, { tokenId: 9, query: query9 }, { tokenId: 10, query: query10 }, { tokenId: 11, query: query11 },
+    { tokenId: 12, query: query12 }, { tokenId: 13, query: query13 }, { tokenId: 14, query: query14 }, { tokenId: 15, query: query15 },
+  ];
 
-  const handleUnstakeTx = useCallback(() => {
-    if (!address || !STAKING_CONTRACT_ADDRESS) return;
-    setPendingAction("unstake");
-    writeContract({
-      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-      abi: stakeAbi as any,
-      functionName: "unstake",
-      args: [],
-    } as any);
-  }, [address, writeContract]);
+  // Combine positions with detailed info - only include tokens that are actually staked
+  const stakedPositions: StakedPosition[] = useMemo(() => {
+    const result: StakedPosition[] = [];
+    
+    allQueries.forEach(({ tokenId, query }) => {
+      // Only process tokens that are in the staked list
+      if (!stakedTokenIds.includes(tokenId)) return;
+      if (!query.data) return;
+      
+      const data = query.data;
+      const quantity = typeof data === "object" && "quantity" in data ? data.quantity : (Array.isArray(data) ? data[0] : BigInt(0));
+      const stakedAt = typeof data === "object" && "stakedAt" in data ? data.stakedAt : (Array.isArray(data) ? data[1] : BigInt(0));
+      const lockDays = typeof data === "object" && "lockDays" in data ? data.lockDays : (Array.isArray(data) ? data[2] : BigInt(0));
+      
+      if (quantity <= 0) return;
+      
+      // Assuming stakedAt is in seconds (Unix timestamp)
+      const stakedAtMs = Number(stakedAt) * 1000;
+      const lockDaysNum = Number(lockDays);
+      const unlockMs = stakedAtMs + (lockDaysNum * 24 * 60 * 60 * 1000);
+      const isUnlocked = Date.now() >= unlockMs;
+      
+      result.push({
+        tokenId,
+        rarity: getRarityFromTokenId(tokenId),
+        quantity,
+        stakedAt,
+        lockDays,
+        isUnlocked,
+      });
+    });
+    
+    return result;
+  }, [allQueries, stakedTokenIds]);
 
-  useEffect(() => {
-    if (!isTxConfirmed || !pendingAction) return;
-    // Re-sync positions after a successful stake/unstake.
-    fetchStakedPositions();
-    setPendingAction(null);
-  }, [isTxConfirmed, pendingAction, fetchStakedPositions]);
+  const isLoading = isLoadingStakeInfo || allQueries.some(({ query }) => query.isLoading);
 
-  const formatRemaining = (ms: number) => {
-    if (ms <= 0) return "Unlocked";
-    const totalMinutes = Math.ceil(ms / 60000);
-    const days = Math.floor(totalMinutes / (60 * 24));
-    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-    const minutes = totalMinutes % 60;
-    if (days > 0) return `Unlocks in: ${days}d ${hours}h`;
-    if (hours > 0) return `Unlocks in: ${hours}h ${minutes}m`;
-    return `Unlocks in: ${minutes}m`;
+  const handleStakeSuccess = () => {
+    refetchStakeInfo();
+    allQueries.forEach(({ query }) => (query as any).refetch?.());
+  };
+
+  const handleUnstakeSuccess = () => {
+    refetchStakeInfo();
+    allQueries.forEach(({ query }) => (query as any).refetch?.());
   };
 
   return (
@@ -130,250 +142,100 @@ export default function StakingPage() {
       <Header title="Stake" />
 
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
+        {/* Action Buttons */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h2 className="text-xl font-bold">Locked Staking</h2>
-          <p className="text-sm text-white/70 mt-1">
-            Stake and unstake your FarFISH NFTs using your connected Farcaster wallet. After each transaction,
-            sync the dashboard below to pull the live Supabase snapshot.
-          </p>
-
-          {/* Choose a staking period section */}
-          <div className="mt-4 space-y-3">
-            <div>
-              <h3 className="text-lg font-semibold">Choose a staking period</h3>
-              <p className="text-sm text-white/70 mt-1">Select a lock duration to boost your rewards.</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {/* 30 Days */}
-              <button
-                type="button"
-                onClick={() => setSelectedDuration(30)}
-                className={`rounded-xl p-4 border text-left transition ${
-                  selectedDuration === 30
-                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-base font-semibold">30 Days</span>
-                  {/* TODO: replace with server computed multiplier */}
-                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
-                    Multiplier ~ x{MULTIPLIERS[30]}
-                  </span>
-                </div>
-                <p className="text-xs text-white/70">Short lock. Easy exit.</p>
-              </button>
-
-              {/* 90 Days */}
-              <button
-                type="button"
-                onClick={() => setSelectedDuration(90)}
-                className={`rounded-xl p-4 border text-left transition ${
-                  selectedDuration === 90
-                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-base font-semibold">90 Days</span>
-                  {/* TODO: replace with server computed multiplier */}
-                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
-                    Multiplier ~ x{MULTIPLIERS[90]}
-                  </span>
-                </div>
-                <p className="text-xs text-white/70">Popular choice.</p>
-              </button>
-
-              {/* 180 Days */}
-              <button
-                type="button"
-                onClick={() => setSelectedDuration(180)}
-                className={`rounded-xl p-4 border text-left transition ${
-                  selectedDuration === 180
-                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-base font-semibold">180 Days</span>
-                  {/* TODO: replace with server computed multiplier */}
-                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
-                    Multiplier ~ x{MULTIPLIERS[180]}
-                  </span>
-                </div>
-                <p className="text-xs text-white/70">Higher rewards.</p>
-              </button>
-
-              {/* 360 Days */}
-              <button
-                type="button"
-                onClick={() => setSelectedDuration(360)}
-                className={`rounded-xl p-4 border text-left transition ${
-                  selectedDuration === 360
-                    ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-base font-semibold">360 Days</span>
-                  {/* TODO: replace with server computed multiplier */}
-                  <span className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 font-medium">
-                    Multiplier ~ x{MULTIPLIERS[360]}
-                  </span>
-                </div>
-                <p className="text-xs text-white/70">Max multiplier.</p>
-              </button>
-            </div>
-
-            {/* TODO: replace UI placeholders with server computed multipliers */}
-
-            {/* CTA Button */}
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => {
-                  // Find and trigger the existing "Stake via Farcaster" button
-                  const buttons = Array.from(document.querySelectorAll("button"));
-                  const stakeButton = buttons.find(
-                    (btn) => btn.textContent?.trim() === "Stake via Farcaster" || btn.textContent?.trim() === "Staking..."
-                  );
-                  if (stakeButton && walletAddress && STAKING_CONTRACT_ADDRESS) {
-                    stakeButton.click();
-                  }
-                }}
-                disabled={!selectedDuration || !walletAddress || !STAKING_CONTRACT_ADDRESS}
-                className={`w-full rounded-lg py-3 text-sm font-semibold transition ${
-                  selectedDuration && walletAddress && STAKING_CONTRACT_ADDRESS
-                    ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
-                    : "bg-white/10 text-white/50 cursor-not-allowed"
-                }`}
-              >
-                {selectedDuration ? `Stake selected (${selectedDuration} days)` : "Select a staking period"}
-              </button>
-              {(!walletAddress || !STAKING_CONTRACT_ADDRESS) && (
-                <p className="text-xs text-white/60 mt-2 text-center">Connect wallet to continue.</p>
-              )}
-            </div>
-          </div>
-
-          {!STAKING_CONTRACT_ADDRESS && (
-            <div className="w-full mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-center text-xs font-semibold text-red-200">
-              Staking disabled — contract address is not configured.
-            </div>
-          )}
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <h2 className="text-xl font-bold mb-4">Stake Your NFTs</h2>
+          <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={handleStakeTx}
-              disabled={!walletAddress || !STAKING_CONTRACT_ADDRESS || isWritePending || isTxConfirming}
-              className={`w-full bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg ${
-                !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
-              }`}
+              type="button"
+              onClick={() => setIsStakeModalOpen(true)}
+              className="w-full bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg transition hover:opacity-90"
             >
-              {pendingAction === "stake" && (isWritePending || isTxConfirming)
-                ? "Staking..."
-                : "Stake via Farcaster"}
+              Stake NFT
             </button>
             <button
-              onClick={handleUnstakeTx}
-              disabled={!walletAddress || !STAKING_CONTRACT_ADDRESS || isWritePending || isTxConfirming}
-              className={`w-full bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20 ${
-                !walletAddress || !STAKING_CONTRACT_ADDRESS ? "opacity-50 cursor-not-allowed" : ""
-              }`}
+              type="button"
+              onClick={() => setIsUnstakeModalOpen(true)}
+              className="w-full bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20 transition hover:bg-white/15"
             >
-              {pendingAction === "unstake" && (isWritePending || isTxConfirming)
-                ? "Unstaking..."
-                : "Unstake via Farcaster"}
+              Unstake NFT
             </button>
           </div>
-          {writeError && (
-            <p className="text-xs text-red-300 mt-2">
-              {writeError.message}
-            </p>
-          )}
-          {isTxConfirmed && (
-            <p className="text-xs text-green-300 mt-2">
-              Staking transaction confirmed. Positions will update after sync.
-            </p>
-          )}
-
-          <button
-            onClick={fetchStakedPositions}
-            disabled={syncing || !walletAddress}
-            className={`w-full mt-4 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg ${
-              !walletAddress ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          >
-            {syncing ? "Syncing…" : "Sync staked NFTs"}
-          </button>
-          {!walletAddress && (
-            <p className="text-xs text-red-300 mt-2">Connect your wallet to enable syncing.</p>
-          )}
         </section>
 
+        {/* Master Reward Table */}
+        <StakeTable />
+
+        {/* My Staked NFTs Section */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h3 className="font-semibold text-lg">Your Staked NFTs</h3>
-          {staked.length === 0 ? (
-            <p className="text-sm text-white/70 mt-1">No NFTs are staked yet.</p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {staked.map((item) => {
-                const unlockAt = item.stakedAt + item.lockDays * DAY_MS;
-                const remainingMs = unlockAt - nowTick;
-                const unlocked = remainingMs <= 0;
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg">My Staked NFTs</h3>
+            {readEnabled && !isLoading && totalRewards > 0 && (
+              <div className="text-sm text-white/70">
+                Total Rewards: <span className="font-semibold text-[#00d4c4]">{Number(totalRewards).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+          {!readEnabled && (
+            <p className="text-sm text-white/70">Connect wallet to load staked NFTs.</p>
+          )}
+          {readEnabled && isLoading && (
+            <p className="text-sm text-white/70">Loading staked NFTs...</p>
+          )}
+          {readEnabled && !isLoading && stakedPositions.length === 0 && (
+            <p className="text-sm text-white/70">You have no staked NFTs yet. Use the Stake NFT button above to get started.</p>
+          )}
+          {readEnabled && !isLoading && stakedPositions.length > 0 && (
+            <div className="space-y-3">
+              {stakedPositions.map((position) => {
                 return (
                   <div
-                    key={`${item.id}-${item.stakedAt}`}
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3"
+                    key={`${position.tokenId}-${position.stakedAt}`}
+                    className="rounded-xl border border-white/10 bg-white/5 p-4"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="relative h-12 w-12 rounded-lg overflow-hidden border border-white/10">
-                        <Image
-                          src={item.image}
-                          alt={item.name}
-                          fill
-                          sizes="48px"
-                          className="object-cover"
-                          unoptimized
-                        />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">{item.name}</p>
-                        <p className="text-xs text-white/60">{item.lockDays} Days Lock</p>
-                        {typeof item.tierId === "number" && (
-                          <p className="text-xs text-white/70">
-                            Tier: {tierById(item.tierId)?.name ?? "Bluefin"} • Power: {powerById(item.tierId ?? 0)}
-                          </p>
-                        )}
-                        <p className={`text-xs ${unlocked ? "text-green-400" : "text-white/70"}`}>
-                          {unlocked ? "Unlocked" : formatRemaining(remainingMs)}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">
+                          {position.rarity || "Unknown"}
+                        </p>
+                        <p className="text-xs text-white/70 mt-1">
+                          Quantity Staked: {Number(position.quantity).toLocaleString()}
                         </p>
                       </div>
                     </div>
-                    <div>
-                      <button
-                        onClick={() =>
-                          unlocked &&
-                          setStaked((prev) => prev.filter((s) => !(s.id === item.id && s.stakedAt === item.stakedAt)))
-                        }
-                        disabled={!unlocked}
-                        className={`px-3 py-2 rounded-md text-sm font-semibold ${
-                          unlocked
-                            ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black"
-                            : "bg-white/10 text-white/60 cursor-not-allowed"
-                        }`}
-                      >
-                        Unstake
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedUnstakePosition(position);
+                        setIsUnstakeModalOpen(true);
+                      }}
+                      className="mt-2 w-full rounded-lg py-2 text-sm font-semibold transition bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+                    >
+                      Unstake
+                    </button>
                   </div>
                 );
               })}
             </div>
           )}
-          <p className="text-xs text-white/60 mt-2">Unstake is disabled until lock ends.</p>
         </section>
       </div>
+
+      {/* Modals */}
+      <StakeModal
+        isOpen={isStakeModalOpen}
+        onClose={() => setIsStakeModalOpen(false)}
+        onSuccess={handleStakeSuccess}
+      />
+      <UnstakeModal
+        isOpen={isUnstakeModalOpen}
+        onClose={() => {
+          setIsUnstakeModalOpen(false);
+          setSelectedUnstakePosition(null);
+        }}
+        onSuccess={handleUnstakeSuccess}
+        initialPosition={selectedUnstakePosition}
+      />
     </div>
   );
 }

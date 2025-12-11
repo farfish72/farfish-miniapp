@@ -1,246 +1,437 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
+import { base } from "viem/chains";
+import Link from "next/link";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
-import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { supabase } from "../lib/supabase";
+import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
+import claimControllerAbi from "../abi/claimController.json";
+import stakeAbi from "../abi/stake.json";
 
-const DAY_MS = 1000 * 60 * 60 * 24;
+const BASE_CHAIN_ID = 8453;
+const BASESCAN_URL = "https://basescan.org/tx";
 
 const infoCopy = {
-  bronze:
-    "Free Daily Reward! Come back every 24 hours to claim 1 FRH token. Consistency is key to climbing the leaderboard.",
-  silver:
-    "Exclusive Staker Reward! Only holders with staked NFTs can open this chest. Earn 3x more rewards than the Bronze chest daily.",
-  activity:
-    "Monthly Activity Bonus! Accumulate points by completing quests. This reward pool unlocks on the 1st of every month. Don't forget to claim your hard-earned tokens!",
-  staking:
-    "Yield from your Staked NFTs. Rewards are based on the rarity of your cards (Common to Legendary). Legendary NFTs earn the highest APY. Claims open monthly on the 1st.",
+  bronze: "Claim 3 FRH token every 24 hours.",
+  silver: "Stake at least 1 NFT to unlock. Active stakers can claim 6 FRH per day.",
+  activity: "Monthly Activity Bonus! Accumulate points by completing quests. This reward pool unlocks on the 1st of every month. Don't forget to claim your hard-earned tokens!",
+  staking: "Yield from your Staked NFTs. Rewards are based on the rarity of your cards (Common to Legendary). Legendary NFTs earn the highest APY. Claims open monthly on the 1st.",
 };
 
-const rarityMultipliers: Record<"common" | "rare" | "epic" | "legendary", number> =
-  {
-    common: 1,
-    rare: 1.5,
-    epic: 2,
-    legendary: 3,
-  };
+// Convert seconds to human-readable time string
+const formatTimeUntilClaim = (seconds: bigint | number): string => {
+  const secs = typeof seconds === "bigint" ? Number(seconds) : seconds;
+  if (secs <= 0) return "0m";
+  
+  const totalSeconds = Math.ceil(secs);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secsRemaining = totalSeconds % 60;
 
-const formatDuration = (ms: number) => {
-  if (ms <= 0) return "0m";
-  const totalMinutes = Math.ceil(ms / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours <= 0) return `${minutes}m`;
-  return `${hours}h ${minutes}m`;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${secsRemaining}s`;
+  } else {
+    return `${secsRemaining}s`;
+  }
+};
+
+const tokenName = {
+  0: "BlueFin",
+  1: "GoldRay",
+  2: "RedSpike",
+  3: "ShadowGill",
+} as Record<number, string>;
+
+// Reward amounts by tokenId and lockDays (from stake page table)
+const rewardAmounts: Record<number, Record<number, number>> = {
+  0: { 30: 120, 90: 240, 180: 480, 360: 960 },
+  1: { 30: 240, 90: 480, 180: 960, 360: 1920 },
+  2: { 30: 480, 90: 960, 180: 1920, 360: 3840 },
+  3: { 30: 960, 90: 1920, 180: 3840, 360: 7680 },
 };
 
 export default function ChestView() {
-  const { user } = useUser();
-  const stakedCount = user?.stats?.staked ?? 0;
-
-  const [dailyAvailable, setDailyAvailable] = useState(true);
-  const [dailyRemainingMs, setDailyRemainingMs] = useState(0);
-  const [dailyCount, setDailyCount] = useState(0);
-  const [monthlyTotal, setMonthlyTotal] = useState(0);
-  const [activityUnlocked, setActivityUnlocked] = useState(false);
-  const [stakingUnlockedFlag, setStakingUnlockedFlag] = useState(false);
-  const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
-
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const isBaseNetwork = chainId === BASE_CHAIN_ID;
   useFarcasterEnvironment("ChestView");
 
-  const now = new Date();
-  const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
-  const isFirstDay = now.getDate() === 1;
+  const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
+  const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+  const [claimingPosition, setClaimingPosition] = useState<{ tokenId: number; lockDays: number } | null>(null);
 
-  useEffect(() => {
-    const wallet = user?.walletAddress;
-    if (!wallet) {
-      setDailyAvailable(true);
-      setDailyRemainingMs(0);
-      return;
-    }
+  // Read daily chest claim status
+  const readDailyChest = useReadContract({
+    address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
+    abi: claimControllerAbi as any,
+    functionName: "canClaimDailyChest",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: Boolean(isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork),
+      refetchInterval: 30000, // Refetch every 30 seconds
+    },
+  } as any);
 
-    const updateDailyState = async () => {
-      try {
-        const { data } = await supabase
-          .from("profiles")
-          .select("last_daily_claim_at, daily_claim_count, monthly_claim_total")
-          .eq("wallet_address", wallet)
-          .limit(1)
-          .maybeSingle();
-        const lastClaim = Number((data as any)?.last_daily_claim_at ?? 0);
-        const dailyCountVal = Number((data as any)?.daily_claim_count ?? 0);
-        const monthlyTotalVal = Number((data as any)?.monthly_claim_total ?? 0);
-        
-        setDailyCount(dailyCountVal);
-        setMonthlyTotal(monthlyTotalVal);
+  // Read silver chest claim status
+  const readSilverChest = useReadContract({
+    address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
+    abi: claimControllerAbi as any,
+    functionName: "canClaimSilverChest",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: Boolean(isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork),
+      refetchInterval: 30000, // Refetch every 30 seconds
+    },
+  } as any);
 
-        if (!lastClaim) {
-          setDailyAvailable(true);
-          setDailyRemainingMs(0);
-          return;
-        }
-        const elapsed = Date.now() - lastClaim;
-        if (elapsed >= DAY_MS) {
-          setDailyAvailable(true);
-          setDailyRemainingMs(0);
-        } else {
-          setDailyAvailable(false);
-          setDailyRemainingMs(DAY_MS - elapsed);
-        }
-      } catch {
-        setDailyAvailable(true);
-        setDailyRemainingMs(0);
-      }
+  // Read staking positions for each token
+  const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
+  
+  const readToken0 = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+    abi: stakeAbi as any,
+    functionName: "getStakeInfoForToken",
+    args: address ? [0, address as `0x${string}`] : undefined,
+    query: { enabled: readEnabled, refetchInterval: 30000 },
+  } as any);
+
+  const readToken1 = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+    abi: stakeAbi as any,
+    functionName: "getStakeInfoForToken",
+    args: address ? [1, address as `0x${string}`] : undefined,
+    query: { enabled: readEnabled, refetchInterval: 30000 },
+  } as any);
+
+  const readToken2 = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+    abi: stakeAbi as any,
+    functionName: "getStakeInfoForToken",
+    args: address ? [2, address as `0x${string}`] : undefined,
+    query: { enabled: readEnabled, refetchInterval: 30000 },
+  } as any);
+
+  const readToken3 = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+    abi: stakeAbi as any,
+    functionName: "getStakeInfoForToken",
+    args: address ? [3, address as `0x${string}`] : undefined,
+    query: { enabled: readEnabled, refetchInterval: 30000 },
+  } as any);
+
+  // Write contract hooks
+  const { writeContract: writeDailyClaim, data: dailyTxHash, isPending: isWriteDailyPending, error: writeDailyError } = useWriteContract();
+  const { writeContract: writeSilverClaim, data: silverTxHash, isPending: isWriteSilverPending, error: writeSilverError } = useWriteContract();
+  const { writeContract: writeStakingClaim, data: stakingTxHash, isPending: isWriteStakingPending, error: writeStakingError } = useWriteContract();
+
+  // Wait for daily claim transaction
+  const { isLoading: isDailyTxConfirming, isSuccess: isDailyTxSuccess } = useWaitForTransactionReceipt({
+    hash: dailyTxHash,
+  });
+
+  // Wait for silver claim transaction
+  const { isLoading: isSilverTxConfirming, isSuccess: isSilverTxSuccess } = useWaitForTransactionReceipt({
+    hash: silverTxHash,
+  });
+
+  // Wait for staking claim transaction
+  const { isLoading: isStakingTxConfirming, isSuccess: isStakingTxSuccess } = useWaitForTransactionReceipt({
+    hash: stakingTxHash,
+  });
+
+  // Parse daily chest data
+  const dailyChestData = useMemo(() => {
+    if (!readDailyChest.data || !Array.isArray(readDailyChest.data)) return null;
+    const [canClaim, timeUntilClaim] = readDailyChest.data;
+    return {
+      canClaim: Boolean(canClaim),
+      timeUntilClaim: typeof timeUntilClaim === "bigint" ? timeUntilClaim : BigInt(timeUntilClaim || 0),
     };
+  }, [readDailyChest.data]);
 
-    updateDailyState();
-    const interval = window.setInterval(updateDailyState, 60_000);
-    return () => window.clearInterval(interval);
-  }, [user?.walletAddress]);
+  // Parse silver chest data
+  const silverChestData = useMemo(() => {
+    if (!readSilverChest.data || !Array.isArray(readSilverChest.data)) return null;
+    const [canClaim, timeUntilClaim, hasStaked] = readSilverChest.data;
+    return {
+      canClaim: Boolean(canClaim),
+      timeUntilClaim: typeof timeUntilClaim === "bigint" ? timeUntilClaim : BigInt(timeUntilClaim || 0),
+      hasStaked: Boolean(hasStaked),
+    };
+  }, [readSilverChest.data]);
+
+  // Parse staking positions
+  const stakingPositions = useMemo(() => {
+    const positions: Array<{ tokenId: number; name: string; lockDays: number; stakedAt: number; quantity: number; isVoided: boolean; canClaim: boolean; daysRemaining: number }> = [];
+    
+    const processToken = (tokenId: number, data: any) => {
+      if (!data) return;
+      const quantity = Number((data?.quantity ?? (Array.isArray(data) ? data[0] : 0)) ?? 0);
+      if (!Number.isFinite(quantity) || quantity <= 0) return;
+      
+      const stakedAt = Number((data?.stakedAt ?? (Array.isArray(data) ? data[1] : 0)) ?? 0);
+      const lockDays = Number((data?.lockDays ?? (Array.isArray(data) ? data[2] : 0)) ?? 0);
+      
+      if (!Number.isFinite(stakedAt) || !Number.isFinite(lockDays) || lockDays <= 0) return;
+      
+      // Check if position is voided (unstaked before lock period)
+      // We can't directly check this, but if stakedAt is 0 or invalid, consider it voided
+      const isVoided = stakedAt <= 0;
+      
+      // Calculate if lock period is met
+      const unlockTimestamp = stakedAt + (lockDays * 24 * 60 * 60 * 1000);
+      const now = Date.now();
+      const canClaim = !isVoided && now >= unlockTimestamp;
+      const daysRemaining = canClaim ? 0 : Math.ceil((unlockTimestamp - now) / (24 * 60 * 60 * 1000));
+      
+      positions.push({
+        tokenId,
+        name: tokenName[tokenId] || `Token ${tokenId}`,
+        lockDays,
+        stakedAt,
+        quantity,
+        isVoided,
+        canClaim,
+        daysRemaining: Math.max(0, daysRemaining),
+      });
+    };
+    
+    processToken(0, readToken0?.data);
+    processToken(1, readToken1?.data);
+    processToken(2, readToken2?.data);
+    processToken(3, readToken3?.data);
+    
+    return positions;
+  }, [readToken0?.data, readToken1?.data, readToken2?.data, readToken3?.data]);
+
+  // Handle daily claim transaction success
+  useEffect(() => {
+    if (isDailyTxSuccess && dailyTxHash) {
+      setToast({ type: "success", message: "3 FRH claimed" });
+      // Refetch claim status
+      (readDailyChest as any)?.refetch?.();
+      (readSilverChest as any)?.refetch?.();
+    }
+  }, [isDailyTxSuccess, dailyTxHash, readDailyChest, readSilverChest]);
+
+  // Handle silver claim transaction success
+  useEffect(() => {
+    if (isSilverTxSuccess && silverTxHash) {
+      setToast({ type: "success", message: "6 FRH claimed" });
+      // Refetch claim status
+      (readDailyChest as any)?.refetch?.();
+      (readSilverChest as any)?.refetch?.();
+    }
+  }, [isSilverTxSuccess, silverTxHash, readDailyChest, readSilverChest]);
+
+  // Handle staking claim transaction success
+  useEffect(() => {
+    if (isStakingTxSuccess && stakingTxHash && claimingPosition) {
+      const rewardAmount = rewardAmounts[claimingPosition.tokenId]?.[claimingPosition.lockDays] || 0;
+      setToast({ type: "success", message: `Staking reward claimed (${rewardAmount} FRH)` });
+      // Refetch staking positions
+      (readToken0 as any)?.refetch?.();
+      (readToken1 as any)?.refetch?.();
+      (readToken2 as any)?.refetch?.();
+      (readToken3 as any)?.refetch?.();
+      setClaimingPosition(null);
+    }
+  }, [isStakingTxSuccess, stakingTxHash, claimingPosition, readToken0, readToken1, readToken2, readToken3]);
+
+  // Handle write errors
+  useEffect(() => {
+    if (writeDailyError) {
+      const errorMsg = writeDailyError.message || String(writeDailyError);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+        console.error("Daily claim error:", writeDailyError);
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
+    }
+  }, [writeDailyError]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const activityClaimedMonth = window.localStorage.getItem("ff_activity_claimed_month");
-    const activityStoredUnlocked = window.localStorage.getItem("ff_activity_unlocked") === "1";
-
-    if (isFirstDay) {
-      window.localStorage.setItem("ff_activity_unlocked", "1");
-      window.localStorage.removeItem("ff_activity_claimed_month");
-      setActivityUnlocked(true);
-    } else if (activityStoredUnlocked && activityClaimedMonth !== monthKey) {
-      setActivityUnlocked(true);
-    } else {
-      setActivityUnlocked(false);
+    if (writeSilverError) {
+      const errorMsg = writeSilverError.message || String(writeSilverError);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+        console.error("Silver claim error:", writeSilverError);
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
     }
+  }, [writeSilverError]);
 
-    const stakingClaimedMonth = window.localStorage.getItem("ff_staking_claimed_month");
-    const stakingStoredUnlocked = window.localStorage.getItem("ff_staking_unlocked") === "1";
-
-    if (isFirstDay) {
-      window.localStorage.setItem("ff_staking_unlocked", "1");
-      window.localStorage.removeItem("ff_staking_claimed_month");
-      setStakingUnlockedFlag(true);
-    } else if (stakingStoredUnlocked && stakingClaimedMonth !== monthKey) {
-      setStakingUnlockedFlag(true);
-    } else {
-      setStakingUnlockedFlag(false);
+  useEffect(() => {
+    if (writeStakingError) {
+      const errorMsg = writeStakingError.message || String(writeStakingError);
+      console.error("Staking claim error:", writeStakingError);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
+      setClaimingPosition(null);
     }
-  }, [isFirstDay, monthKey]);
+  }, [writeStakingError]);
 
-  const dailyProgress = dailyAvailable
-    ? 100
-    : Math.max(0, 100 - Math.round((dailyRemainingMs / DAY_MS) * 100));
-
-  const chestDescriptions = {
-    daily: dailyAvailable
-      ? "Claim 1 FRH token every 24 hours."
-      : `Next claim available in ${formatDuration(dailyRemainingMs)}.`,
-    stake: stakedCount > 0 ? `You have ${stakedCount} NFT(s) staked.` : "Stake at least 1 NFT to unlock.",
-    activity: activityUnlocked
-      ? "Monthly activity pot is open. Claim before it locks again."
-      : "Unlocks on the 1st of every month.",
-  };
-
-  const rarityBreakdown = user?.stats?.rarityBreakdown ?? {
-    common: 0,
-    rare: 0,
-    epic: 0,
-    legendary: 0,
-  };
-
-  const stakingReward = useMemo(() => {
-    return (
-      Object.entries(rarityBreakdown).reduce((acc, [rarity, count]) => {
-        const multiplier = rarityMultipliers[rarity as keyof typeof rarityMultipliers] ?? 1;
-        return acc + multiplier * (count as number);
-      }, 0) * 2
-    );
-  }, [rarityBreakdown]);
-
-  const stakingUnlocked = stakingUnlockedFlag && stakedCount > 0 && stakingReward > 0;
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const openModal = (title: string, description: string) => {
     setInfoModal({ title, description });
   };
 
-  const handleDailyClaim = async () => {
-    if (!dailyAvailable) return;
-    const wallet = user?.walletAddress;
-    if (!wallet) return;
+  const handleDailyClaim = () => {
+    if (!isConnected || !address) {
+      setToast({ type: "error", message: "Please connect your wallet" });
+      return;
+    }
+
+    if (!isBaseNetwork) {
+      setToast({ type: "error", message: "Please switch to Base network" });
+      return;
+    }
+
+    if (!CLAIM_CONTROLLER_ADDRESS) {
+      setToast({ type: "error", message: "Claim controller not configured" });
+      return;
+    }
+
+    if (!dailyChestData?.canClaim) {
+      return;
+    }
+
     try {
-      const { data: current } = await supabase
-        .from("profiles")
-        .select("daily_claim_count, monthly_claim_total")
-        .eq("wallet_address", wallet)
-        .maybeSingle();
-      
-      const newDailyCount = (Number(current?.daily_claim_count ?? 0) + 1);
-      const newMonthlyTotal = (Number(current?.monthly_claim_total ?? 0) + 1);
-      
-      await supabase
-        .from("profiles")
-        .update({ 
-          last_daily_claim_at: Date.now(),
-          daily_claim_count: newDailyCount,
-          monthly_claim_total: newMonthlyTotal,
-        })
-        .eq("wallet_address", wallet);
-      setDailyAvailable(false);
-      setDailyRemainingMs(DAY_MS);
-      setDailyCount(newDailyCount);
-      setMonthlyTotal(newMonthlyTotal);
-    } catch (error) {
-      console.error("Failed to claim daily reward", error);
+      writeDailyClaim({
+        address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
+        abi: claimControllerAbi as any,
+        functionName: "claimDailyChest",
+        args: [],
+      } as any);
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+        console.error("Daily claim error:", error);
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
     }
   };
 
-  const handleStakeClaim = async () => {
-    if (stakedCount <= 0) return;
-    const wallet = user?.walletAddress;
-    if (!wallet) return;
+  const handleSilverClaim = () => {
+    if (!isConnected || !address) {
+      setToast({ type: "error", message: "Please connect your wallet" });
+      return;
+    }
+
+    if (!isBaseNetwork) {
+      setToast({ type: "error", message: "Please switch to Base network" });
+      return;
+    }
+
+    if (!CLAIM_CONTROLLER_ADDRESS) {
+      setToast({ type: "error", message: "Claim controller not configured" });
+      return;
+    }
+
+    if (!silverChestData?.canClaim || !silverChestData?.hasStaked) {
+      return;
+    }
+
     try {
-      const { data: current } = await supabase
-        .from("profiles")
-        .select("daily_claim_count, monthly_claim_total")
-        .eq("wallet_address", wallet)
-        .maybeSingle();
-      
-      const newDailyCount = (Number(current?.daily_claim_count ?? 0) + 1);
-      const newMonthlyTotal = (Number(current?.monthly_claim_total ?? 0) + 3);
-      
-      await supabase
-        .from("profiles")
-        .update({ 
-          last_daily_claim_at: Date.now(),
-          daily_claim_count: newDailyCount,
-          monthly_claim_total: newMonthlyTotal,
-        })
-        .eq("wallet_address", wallet);
-      setDailyCount(newDailyCount);
-      setMonthlyTotal(newMonthlyTotal);
-    } catch (error) {
-      console.error("Failed to claim stake reward", error);
+      writeSilverClaim({
+        address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
+        abi: claimControllerAbi as any,
+        functionName: "claimSilverChest",
+        args: [],
+      } as any);
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+        console.error("Silver claim error:", error);
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
     }
   };
 
-  const handleActivityClaim = () => {
-    if (!activityUnlocked || typeof window === "undefined") return;
-    setActivityUnlocked(false);
-    window.localStorage.setItem("ff_activity_unlocked", "0");
-    window.localStorage.setItem("ff_activity_claimed_month", monthKey);
+  const handleStakingClaim = (tokenId: number, lockDays: number) => {
+    // Preconditions check
+    if (!isConnected || !address) {
+      setToast({ type: "error", message: "Please connect your wallet" });
+      return;
+    }
+
+    if (!isBaseNetwork) {
+      setToast({ type: "error", message: "Please switch to Base network (chainId 8453)" });
+      return;
+    }
+
+    if (!STAKING_CONTRACT_ADDRESS) {
+      setToast({ type: "error", message: "Staking contract not configured" });
+      return;
+    }
+
+    const position = stakingPositions.find(p => p.tokenId === tokenId && p.lockDays === lockDays);
+    if (!position || !position.canClaim || position.isVoided) {
+      return;
+    }
+
+    // Disable button immediately
+    setClaimingPosition({ tokenId, lockDays });
+
+    try {
+      writeStakingClaim({
+        address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+        abi: stakeAbi as any,
+        functionName: "claimRewards",
+        args: [BigInt(tokenId)],
+      } as any);
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      console.error("Staking claim error:", error);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
+      setClaimingPosition(null);
+    }
   };
 
-  const handleStakingClaim = () => {
-    if (!stakingUnlocked || typeof window === "undefined") return;
-    setStakingUnlockedFlag(false);
-    window.localStorage.setItem("ff_staking_unlocked", "0");
-    window.localStorage.setItem("ff_staking_claimed_month", monthKey);
-  };
+  // Daily Bronze card state
+  const dailyCanClaim = dailyChestData?.canClaim ?? false;
+  const dailyTimeUntilClaim = dailyChestData?.timeUntilClaim ?? BigInt(0);
+  const dailyButtonDisabled = !isConnected || !isBaseNetwork || !dailyCanClaim || isWriteDailyPending || isDailyTxConfirming;
+  const dailyButtonLabel = dailyCanClaim
+    ? "Open now (3 FRH)"
+    : `Next claim in: ${formatTimeUntilClaim(dailyTimeUntilClaim)}`;
+  const dailyProgress = dailyCanClaim ? 100 : Math.max(0, 100 - Math.round((Number(dailyTimeUntilClaim) / 86400) * 100));
+
+  // Silver Chest card state
+  const silverCanClaim = silverChestData?.canClaim ?? false;
+  const silverHasStaked = silverChestData?.hasStaked ?? false;
+  const silverTimeUntilClaim = silverChestData?.timeUntilClaim ?? BigInt(0);
+  const silverButtonDisabled = !isConnected || !isBaseNetwork || !silverHasStaked || !silverCanClaim || isWriteSilverPending || isSilverTxConfirming;
+  const silverButtonLabel = !silverHasStaked
+    ? "Stake NFTs to unlock"
+    : silverCanClaim
+    ? "Open now (6 FRH)"
+    : `Next claim in: ${formatTimeUntilClaim(silverTimeUntilClaim)}`;
+  const silverProgress = silverHasStaked && silverCanClaim ? 100 : silverHasStaked ? Math.max(0, 100 - Math.round((Number(silverTimeUntilClaim) / 86400) * 100)) : 0;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -254,60 +445,268 @@ export default function ChestView() {
           </p>
         </section>
 
+        {/* Daily Bronze Chest */}
         <ChestCard
           title="Daily Bronze Chest"
-          description={`${chestDescriptions.daily} Today: ${dailyCount} / Month total: ${monthlyTotal}`}
-          badge={dailyAvailable ? "Ready" : "Cooling"}
+          description={infoCopy.bronze}
+          badge={dailyCanClaim ? "Ready" : "Cooling"}
           progress={dailyProgress}
           variant="bronze"
-          actionLabel={dailyAvailable ? "Open now (1 FRH)" : "Come back soon"}
-          actionDisabled={!dailyAvailable}
+          actionLabel={dailyButtonLabel}
+          actionDisabled={dailyButtonDisabled}
           onAction={handleDailyClaim}
           infoLabel="Info"
           onInfo={() => openModal("Daily Bronze Chest", infoCopy.bronze)}
         />
 
-        <ChestCard
-          title="Stake Chest (Silver)"
-          description={`${chestDescriptions.stake} Today: ${dailyCount} / Month total: ${monthlyTotal}`}
-          badge={stakedCount > 0 ? "Ready" : "Locked"}
-          progress={stakedCount > 0 ? 100 : 0}
-          variant="silver"
-          actionLabel={stakedCount > 0 ? "Open now (3 FRH)" : "Stake NFTs to unlock"}
-          actionDisabled={stakedCount <= 0}
-          onAction={handleStakeClaim}
-          onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
-        />
+        {/* Pending state and tx link for daily */}
+        {(isWriteDailyPending || isDailyTxConfirming) && (
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <p className="text-sm text-white/70">
+              {isDailyTxConfirming ? "Confirming transaction..." : "Transaction pending..."}
+            </p>
+            {dailyTxHash && (
+              <a
+                href={`${BASESCAN_URL}/${dailyTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-[#00d4c4] hover:underline mt-2 block"
+              >
+                View on BaseScan
+              </a>
+            )}
+          </div>
+        )}
 
+        {/* Stake Chest (Silver) */}
+        {!silverHasStaked && isConnected ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <h3 className="text-2xl font-semibold">Stake Chest (Silver)</h3>
+            <p className="text-sm text-white/70 mt-1">{infoCopy.silver}</p>
+            <div className="mt-4">
+              <Link
+                href="/stake"
+                className="w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-3 font-semibold text-black text-center block"
+              >
+                Stake NFTs to unlock
+              </Link>
+            </div>
+            <button
+              type="button"
+              className="w-full rounded-lg border border-white/10 bg-transparent py-3 text-sm text-white/70 hover:bg-white/5 transition mt-3"
+              onClick={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
+            >
+              Info
+            </button>
+          </div>
+        ) : (
+          <ChestCard
+            title="Stake Chest (Silver)"
+            description={infoCopy.silver}
+            badge={silverHasStaked ? (silverCanClaim ? "Ready" : "Cooling") : "Locked"}
+            progress={silverProgress}
+            variant="silver"
+            actionLabel={silverButtonLabel}
+            actionDisabled={silverButtonDisabled}
+            onAction={handleSilverClaim}
+            infoLabel="Info"
+            onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
+          />
+        )}
+
+        {/* Pending state and tx link for silver */}
+        {(isWriteSilverPending || isSilverTxConfirming) && (
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <p className="text-sm text-white/70">
+              {isSilverTxConfirming ? "Confirming transaction..." : "Transaction pending..."}
+            </p>
+            {silverTxHash && (
+              <a
+                href={`${BASESCAN_URL}/${silverTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-[#00d4c4] hover:underline mt-2 block"
+              >
+                View on BaseScan
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Activity Rewards — monthly airdrop (read-only if no claim function) */}
         <ChestCard
           title="Activity Rewards (Monthly)"
-          description={chestDescriptions.activity}
-          badge={activityUnlocked ? "Claim" : "Locked"}
-          progress={activityUnlocked ? 100 : 0}
-          variant="default"
-          actionLabel={activityUnlocked ? "Claim monthly bonus" : "Locked until 1st"}
-          actionDisabled={!activityUnlocked}
-          onAction={handleActivityClaim}
-          onInfo={() => openModal("Activity Rewards", infoCopy.activity)}
+          description={infoCopy.activity}
+          badge="Monthly"
+          progress={0}
+          actionLabel="Check eligibility on 1st"
+          actionDisabled={true}
+          infoLabel="Info"
+          onInfo={() => openModal("Activity Rewards (Monthly)", infoCopy.activity)}
         />
 
-        <ChestCard
-          title="NFT Staking Rewards"
-          description={
-            stakingUnlocked
-              ? `Ready to claim ${stakingReward.toFixed(1)} FRH based on rarity multipliers.`
-              : "Unlocks on the 1st and requires staked NFTs to accrue yield."
-          }
-          badge={stakingUnlocked ? "Claim" : "Locked"}
-          progress={stakingUnlocked ? 100 : 0}
-          variant="default"
-          actionLabel={
-            stakingUnlocked ? `Claim ${stakingReward.toFixed(1)} FRH` : "Requires staked NFTs + unlock"
-          }
-          actionDisabled={!stakingUnlocked}
-          onAction={handleStakingClaim}
-          onInfo={() => openModal("NFT Staking Rewards", infoCopy.staking)}
-        />
+        {/* NFT Staking Rewards — per-position claim list */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-2xl font-semibold">NFT Staking Rewards</h3>
+              <p className="text-sm text-white/70 mt-1">{infoCopy.staking}</p>
+            </div>
+            <div className="shrink-0">
+              <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/80">
+                {stakingPositions.length > 0 ? `${stakingPositions.length} Position${stakingPositions.length !== 1 ? 's' : ''}` : 'No Positions'}
+              </span>
+            </div>
+          </div>
+
+          {(readToken0?.isLoading || readToken1?.isLoading || readToken2?.isLoading || readToken3?.isLoading) && (
+            <p className="text-sm text-white/70">Loading staking positions...</p>
+          )}
+
+          {!readToken0?.isLoading && !readToken1?.isLoading && !readToken2?.isLoading && !readToken3?.isLoading && stakingPositions.length === 0 && (
+            <div className="mt-4">
+              <p className="text-sm text-white/70 mb-3">You have no staked NFTs. Visit the Stake page to begin earning rewards.</p>
+              <Link
+                href="/stake"
+                className="inline-block text-sm text-[#00d4c4] hover:underline"
+              >
+                Go to Stake page →
+              </Link>
+            </div>
+          )}
+
+          {stakingPositions.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {stakingPositions.map((position, idx) => {
+                const rewardAmount = rewardAmounts[position.tokenId]?.[position.lockDays] || 0;
+                const isClaiming = claimingPosition?.tokenId === position.tokenId && claimingPosition?.lockDays === position.lockDays;
+                const isPending = isWriteStakingPending || isStakingTxConfirming;
+                
+                // If voided, show no claim button
+                if (position.isVoided) {
+                  return (
+                    <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
+                          <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                          <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
+                          <p className="text-xs text-red-400 mt-1">Voided (unstaked)</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // If days remaining > 0, show disabled button
+                if (position.daysRemaining > 0) {
+                  return (
+                    <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
+                          <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                          <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
+                          <p className="text-xs text-white/70 mt-1">🔒 {position.daysRemaining} day{position.daysRemaining !== 1 ? 's' : ''} remaining</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={true}
+                        className="w-full rounded-lg py-2 text-sm font-semibold transition bg-white/10 text-white/40 cursor-not-allowed"
+                      >
+                        Requires {position.daysRemaining} day{position.daysRemaining !== 1 ? 's' : ''} to unlock
+                      </button>
+                    </div>
+                  );
+                }
+                
+                // If unlocked & not claimed, show enabled claim button
+                // Note: We don't have a way to track if already claimed, so we show claim button if canClaim is true
+                if (position.canClaim) {
+                  const claimDisabled = isPending || isClaiming;
+                  return (
+                    <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
+                          <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                          <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
+                          <p className="text-xs text-green-400 mt-1">✅ Ready to claim ({rewardAmount} FRH)</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={claimDisabled}
+                        onClick={() => !claimDisabled && handleStakingClaim(position.tokenId, position.lockDays)}
+                        className={`w-full rounded-lg py-2 text-sm font-semibold transition ${
+                          claimDisabled
+                            ? "bg-white/10 text-white/40 cursor-not-allowed"
+                            : "bg-emerald-400/80 text-black hover:bg-emerald-400"
+                        }`}
+                      >
+                        {isClaiming ? "Claiming..." : `Claim ${rewardAmount} FRH reward`}
+                      </button>
+                    </div>
+                  );
+                }
+                
+                // Fallback (shouldn't reach here, but just in case)
+                return (
+                  <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
+                        <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                        <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Pending state and tx link for staking claim */}
+          {(isWriteStakingPending || isStakingTxConfirming) && claimingPosition && (
+            <div className="mt-4 bg-white/5 border border-white/10 rounded-2xl p-4">
+              <p className="text-sm text-white/70">
+                {isStakingTxConfirming ? "Confirming transaction..." : "Transaction pending..."}
+              </p>
+              {stakingTxHash && (
+                <a
+                  href={`${BASESCAN_URL}/${stakingTxHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-[#00d4c4] hover:underline mt-2 block"
+                >
+                  View on BaseScan
+                </a>
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="w-full rounded-lg border border-white/10 bg-transparent py-3 text-sm text-white/70 hover:bg-white/5 transition mt-4"
+            onClick={() => openModal("NFT Staking Rewards", infoCopy.staking)}
+          >
+            Info
+          </button>
+        </div>
+
+        {/* Toast notification */}
+        {toast && (
+          <div
+            className={`fixed bottom-4 left-4 right-4 z-50 text-xs font-semibold rounded-lg border p-3 ${
+              toast.type === "success"
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-200"
+                : "bg-red-500/10 border-red-500/20 text-red-200"
+            }`}
+          >
+            {toast.message}
+          </div>
+        )}
       </div>
 
       {infoModal && (
