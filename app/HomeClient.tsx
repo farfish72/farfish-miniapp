@@ -2,7 +2,7 @@
  * DropERC1155 Mint Flow on Base (chainId 8453)
  * 
  * One-per-wallet rule enforced by checking balanceOf(address, id) for all tokenIds 0-15.
- * Mint price read from NEXT_PUBLIC_MINT_PRICE_WEI environment variable.
+ * Mint price and currency read directly from on-chain claim conditions.
  * Random tokenId selection weighted by remaining supply (maxTotalSupply - totalSupply).
  */
 "use client";
@@ -30,6 +30,25 @@ interface SupplyInfo {
   totalSupply: bigint;
   maxTotalSupply: bigint;
   remaining: bigint;
+}
+
+interface ClaimCondition {
+  startTimestamp: bigint;
+  maxClaimableSupply: bigint;
+  supplyClaimed: bigint;
+  quantityLimitPerWallet: bigint;
+  merkleRoot: `0x${string}`;
+  pricePerToken: bigint;
+  currency: `0x${string}`;
+  metadata: string;
+}
+
+interface TokenClaimInfo {
+  tokenId: number;
+  condition: ClaimCondition | null;
+  activeConditionId: bigint | null;
+  isLoading: boolean;
+  error: string | null;
 }
 
 /**
@@ -87,6 +106,8 @@ export default function HomeClient() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [mintedTokenUri, setMintedTokenUri] = useState<string | null>(null);
+  const [claimInfo, setClaimInfo] = useState<Map<number, TokenClaimInfo>>(new Map());
+  const [loadingClaimConditions, setLoadingClaimConditions] = useState(false);
 
   const {
     writeContract: writeMint,
@@ -103,17 +124,120 @@ export default function HomeClient() {
 
   const isFarcasterEnv = useFarcasterEnvironment("Home page");
 
-  // Get mint price from environment variable
-  const mintPriceWei = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const priceStr = process.env.NEXT_PUBLIC_MINT_PRICE_WEI;
-    if (!priceStr) return null;
+  // Fetch claim conditions for a specific tokenId
+  const fetchClaimCondition = useCallback(async (tokenId: number): Promise<TokenClaimInfo> => {
+    if (typeof window === "undefined" || !NFT_CONTRACT_ADDRESS) {
+      return {
+        tokenId,
+        condition: null,
+        activeConditionId: null,
+        isLoading: false,
+        error: "Contract not available",
+      };
+    }
+
     try {
-      return BigInt(priceStr);
-    } catch {
-      return null;
+      const publicClient = getPublicClient(wagmiConfig);
+      if (!publicClient) {
+        return {
+          tokenId,
+          condition: null,
+          activeConditionId: null,
+          isLoading: false,
+          error: "Public client not available",
+        };
+      }
+
+      // Get active claim condition ID
+      const activeConditionId = (await (publicClient.readContract as any)({
+        address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+        abi: nftDropAbi as any,
+        functionName: "getActiveClaimConditionId",
+        args: [BigInt(tokenId)],
+      })) as bigint;
+
+      // If no active condition (returns 0 or throws), return error
+      if (activeConditionId === BigInt(0)) {
+        console.warn(`No active claim condition for tokenId ${tokenId}`);
+        return {
+          tokenId,
+          condition: null,
+          activeConditionId: null,
+          isLoading: false,
+          error: "No active claim condition",
+        };
+      }
+
+      // Get claim condition details
+      const condition = (await (publicClient.readContract as any)({
+        address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+        abi: nftDropAbi as any,
+        functionName: "getClaimConditionById",
+        args: [BigInt(tokenId), activeConditionId],
+      })) as ClaimCondition;
+
+      // Log claim condition for debugging
+      if (condition) {
+        console.log(`Claim condition for tokenId ${tokenId}:`, {
+          pricePerToken: condition.pricePerToken.toString(),
+          currency: condition.currency,
+          startTimestamp: condition.startTimestamp.toString(),
+          maxClaimableSupply: condition.maxClaimableSupply.toString(),
+          supplyClaimed: condition.supplyClaimed.toString(),
+          quantityLimitPerWallet: condition.quantityLimitPerWallet.toString(),
+        });
+      }
+
+      return {
+        tokenId,
+        condition,
+        activeConditionId,
+        isLoading: false,
+        error: null,
+      };
+    } catch (error) {
+      console.error(`Failed to fetch claim condition for tokenId ${tokenId}:`, error);
+      // Check for specific error types
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      if (errorMessage.includes("DropNoActiveCondition") || errorMessage.includes("execution reverted")) {
+        return {
+          tokenId,
+          condition: null,
+          activeConditionId: null,
+          isLoading: false,
+          error: "No active claim condition on-chain",
+        };
+      }
+      return {
+        tokenId,
+        condition: null,
+        activeConditionId: null,
+        isLoading: false,
+        error: errorMessage,
+      };
     }
   }, []);
+
+  // Fetch claim conditions for all tokenIds
+  const fetchAllClaimConditions = useCallback(async () => {
+    if (typeof window === "undefined" || !NFT_CONTRACT_ADDRESS) return;
+
+    setLoadingClaimConditions(true);
+    try {
+      const claimPromises = TOKEN_IDS.map((id) => fetchClaimCondition(id));
+      const results = await Promise.all(claimPromises);
+      
+      const newMap = new Map<number, TokenClaimInfo>();
+      results.forEach((info) => {
+        newMap.set(info.tokenId, info);
+      });
+      setClaimInfo(newMap);
+    } catch (error) {
+      console.error("Failed to fetch claim conditions:", error);
+    } finally {
+      setLoadingClaimConditions(false);
+    }
+  }, [fetchClaimCondition]);
 
   // Fetch supply info for all tokenIds (0-15)
   const fetchSupplyInfo = useCallback(async () => {
@@ -216,12 +340,13 @@ export default function HomeClient() {
     }
   }, [address]);
 
-  // Fetch supply info on mount and when contract address changes
+  // Fetch supply info and claim conditions on mount and when contract address changes
   useEffect(() => {
     if (typeof window !== "undefined") {
       fetchSupplyInfo();
+      fetchAllClaimConditions();
     }
-  }, [fetchSupplyInfo]);
+  }, [fetchSupplyInfo, fetchAllClaimConditions]);
 
   // Check mint status when wallet connects or address changes
   useEffect(() => {
@@ -238,11 +363,12 @@ export default function HomeClient() {
   useEffect(() => {
     if (isMintConfirmed && mintTxHash) {
       fetchSupplyInfo();
+      fetchAllClaimConditions();
       checkHasMinted();
       setIsMinting(false);
       setToast({ type: "success", message: "Mint successful!" });
     }
-  }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, checkHasMinted]);
+  }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, checkHasMinted]);
 
   // Handle mint errors
   useEffect(() => {
@@ -264,7 +390,7 @@ export default function HomeClient() {
     connect({ connector });
   }, [connect, connectors]);
 
-  const handleMint = useCallback(() => {
+  const handleMint = useCallback(async () => {
     setToast(null);
     setErrorMessage(null);
 
@@ -283,38 +409,109 @@ export default function HomeClient() {
       return;
     }
 
-    if (!mintPriceWei) {
-      setToast({ type: "error", message: "Mint price not configured" });
-      return;
-    }
-
-    // Build candidates with remaining supply > 0
-    const candidates = supplyInfo.filter((info) => info.remaining > BigInt(0));
+    // Build candidates with remaining supply > 0 and valid claim conditions
+    const candidates = supplyInfo.filter((info) => {
+      if (info.remaining <= BigInt(0)) return false;
+      const claim = claimInfo.get(info.id);
+      if (!claim || !claim.condition) return false;
+      
+      // Check if mint has started
+      const now = BigInt(Math.floor(Date.now() / 1000));
+      if (claim.condition.startTimestamp > now) return false;
+      
+      // Check if there's remaining supply in claim condition
+      if (claim.condition.supplyClaimed >= claim.condition.maxClaimableSupply) return false;
+      
+      return true;
+    });
 
     if (candidates.length === 0) {
-      setToast({ type: "error", message: "All tokens are sold out" });
+      setToast({ type: "error", message: "All tokens are sold out or claim conditions not configured" });
       return;
     }
 
     try {
       // Select random tokenId weighted by remaining supply
       const tokenId = pickWeightedTokenId(candidates);
+      const claim = claimInfo.get(tokenId);
+
+      if (!claim || !claim.condition) {
+        setToast({ type: "error", message: "Claim conditions not available for selected token" });
+        return;
+      }
+
+      const { pricePerToken, currency, quantityLimitPerWallet } = claim.condition;
+      const quantity = BigInt(1);
+
+      // Verify mint has started
+      const now = BigInt(Math.floor(Date.now() / 1000));
+      if (claim.condition.startTimestamp > now) {
+        setToast({ type: "error", message: "Mint has not started yet" });
+        return;
+      }
+
+      // Verify claim condition has remaining supply
+      if (claim.condition.supplyClaimed >= claim.condition.maxClaimableSupply) {
+        setToast({ type: "error", message: "Claim condition supply exhausted" });
+        return;
+      }
+
+      // Calculate total value needed (pricePerToken * quantity)
+      const totalValue = pricePerToken * quantity;
+
+      // Check if currency is native ETH (zero address)
+      const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+      const isNativeCurrency = currency.toLowerCase() === NATIVE_CURRENCY.toLowerCase();
+
+      // Prepare allowlist proof (empty for public mint)
+      // IMPORTANT: pricePerToken and currency in allowlistProof must match the condition
+      const allowlistProof = {
+        proof: [] as `0x${string}`[],
+        quantityLimitPerWallet,
+        pricePerToken, // Must match claim.condition.pricePerToken
+        currency, // Must match claim.condition.currency
+      };
+
+      // Log claim parameters for debugging
+      console.log("Calling claim() with parameters:", {
+        receiver: address,
+        tokenId,
+        quantity: quantity.toString(),
+        currency,
+        pricePerToken: pricePerToken.toString(),
+        totalValue: totalValue.toString(),
+        isNativeCurrency,
+        msgValue: isNativeCurrency ? totalValue.toString() : "0",
+        allowlistProof,
+      });
 
       setIsMinting(true);
 
+      // Call claim function with all required parameters
+      // Contract will validate that _pricePerToken and _currency match the active claim condition
       writeMint({
         address: NFT_CONTRACT_ADDRESS as `0x${string}`,
         abi: nftDropAbi as any,
         functionName: "claim",
-        args: [address as `0x${string}`, BigInt(tokenId), BigInt(1)],
-        value: mintPriceWei,
+        args: [
+          address as `0x${string}`, // _receiver
+          BigInt(tokenId), // _tokenId
+          quantity, // _quantity
+          currency, // _currency (must match condition.currency)
+          pricePerToken, // _pricePerToken (must match condition.pricePerToken)
+          allowlistProof, // _allowlistProof (pricePerToken and currency must match condition)
+          "0x" as `0x${string}`, // _data (empty bytes)
+        ],
+        // Only send native ETH if currency is native
+        // msg.value must equal pricePerToken * quantity for native currency
+        value: isNativeCurrency ? totalValue : BigInt(0),
       } as any);
     } catch (error) {
       console.error("Mint transaction failed to start", error);
       setIsMinting(false);
       setToast({ type: "error", message: error instanceof Error ? error.message : "Unable to start mint transaction" });
     }
-  }, [address, isConnected, hasMinted, supplyInfo, mintPriceWei, writeMint, handleConnect]);
+  }, [address, isConnected, hasMinted, supplyInfo, claimInfo, writeMint, handleConnect]);
 
   const handleShare = useCallback(() => {
     const isInFarcaster = isFarcasterEnv || detectFarcasterEnvironment();
@@ -373,18 +570,51 @@ export default function HomeClient() {
     return Math.min(100, Math.max(0, (totalMinted / totalMaxSupply) * 100));
   }, [totalMinted, totalMaxSupply]);
 
+  // Get representative price from claim conditions (use first available token's price)
+  // Only returns price if:
+  // 1. Claim condition exists and is valid
+  // 2. Token has remaining supply
+  // 3. Mint has started (startTimestamp <= now)
+  // 4. Claim condition has remaining supply (supplyClaimed < maxClaimableSupply)
+  const representativePrice = useMemo(() => {
+    for (const info of supplyInfo) {
+      const claim = claimInfo.get(info.id);
+      if (claim?.condition && !claim.error) {
+        // Check if token has remaining supply
+        if (info.remaining <= BigInt(0)) continue;
+        
+        // Check if mint has started
+        const now = BigInt(Math.floor(Date.now() / 1000));
+        if (claim.condition.startTimestamp > now) continue;
+        
+        // Check if claim condition has remaining supply
+        if (claim.condition.supplyClaimed >= claim.condition.maxClaimableSupply) continue;
+        
+        // Return pricePerToken (even if 0 for free mint)
+        return claim.condition.pricePerToken;
+      }
+    }
+    return null;
+  }, [supplyInfo, claimInfo]);
+
   // Button states and labels
   const primaryButtonLabel = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) return "Mint disabled";
     if (!address || !isConnected) return "Connect Farcaster";
     if (hasMinted) return "Already minted";
     if (isMinting || isMintPending || isMintConfirming) return "Minting…";
-    if (mintPriceWei) {
-      const priceEth = Number(mintPriceWei) / 1e18;
+    if (loadingClaimConditions) return "Loading…";
+    if (representativePrice !== null) {
+      const priceEth = Number(representativePrice) / 1e18;
       return `Mint (${priceEth.toFixed(4)} ETH)`;
     }
+    // Check if any claim conditions are configured
+    const hasAnyClaimCondition = Array.from(claimInfo.values()).some((info) => info.condition !== null);
+    if (!hasAnyClaimCondition && !loadingClaimConditions) {
+      return "Mint price not configured";
+    }
     return "Mint";
-  }, [address, isConnected, hasMinted, isMinting, isMintPending, isMintConfirming, mintPriceWei]);
+  }, [address, isConnected, hasMinted, isMinting, isMintPending, isMintConfirming, representativePrice, claimInfo, loadingClaimConditions]);
 
   const primaryButtonClasses = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) {
@@ -406,7 +636,9 @@ export default function HomeClient() {
     isMintConfirming ||
     !NFT_CONTRACT_ADDRESS ||
     hasMinted ||
-    loadingSupplies;
+    loadingSupplies ||
+    loadingClaimConditions ||
+    representativePrice === null;
 
   // Auto-dismiss toast
   useEffect(() => {
