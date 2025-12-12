@@ -18,16 +18,7 @@ export const referralMultiplierByTokenId = (tokenId: number): number => {
   return REFERRAL_TOKEN_MULTIPLIERS[tokenId] ?? 1;
 };
 
-export const NFT_TIERS = [
-  { id: 0, name: "Bluefin", multiplier: 1.0, power: 10 },
-  { id: 1, name: "GoldRay", multiplier: 2.0, power: 20 },
-  { id: 2, name: "RedSpike", multiplier: 3.0, power: 30 },
-  { id: 3, name: "ShadowGill", multiplier: 5.0, power: 50 },
-];
-
 export const NFT_SUPPLY_TOTAL = 9999;
-export const tierById = (id: number) => NFT_TIERS.find((t) => t.id === id);
-export const powerById = (id: number) => (tierById(id)?.power ?? 10);
 
 // Staking token ranges and reward configuration
 export const STAKING_TOKEN_RANGES = {
@@ -36,6 +27,13 @@ export const STAKING_TOKEN_RANGES = {
   RedSpike: { min: 12, max: 14, representativeTokenId: 12 },
   ShadowGill: { min: 15, max: 15, representativeTokenId: 15 },
 } as const;
+
+export const RARITY_DISPLAY: Record<keyof typeof STAKING_TOKEN_RANGES, { name: string; rarityLabel: string }> = {
+  Bluefin: { name: "Bluefin", rarityLabel: "Common" },
+  GoldRay: { name: "GoldRay", rarityLabel: "Rare" },
+  RedSpike: { name: "RedSpike", rarityLabel: "Epic" },
+  ShadowGill: { name: "ShadowGill", rarityLabel: "Legendary" },
+};
 
 // Reward table: [rarity][lockDays] = FRH reward amount
 export const STAKING_REWARDS: Record<keyof typeof STAKING_TOKEN_RANGES, Record<30 | 90 | 180 | 360, number>> = {
@@ -54,7 +52,36 @@ export const getRarityFromTokenId = (tokenId: number): keyof typeof STAKING_TOKE
   return null;
 };
 
+export const getNameFromRarity = (rarity: keyof typeof STAKING_TOKEN_RANGES | null): string | null => {
+  if (!rarity) return null;
+  return RARITY_DISPLAY[rarity]?.name ?? null;
+};
+
+export const getRarityLabel = (rarity: keyof typeof STAKING_TOKEN_RANGES | null): string | null => {
+  if (!rarity) return null;
+  return RARITY_DISPLAY[rarity]?.rarityLabel ?? null;
+};
+
 // Helper function to get representative tokenId for a rarity
 export const getRepresentativeTokenId = (rarity: keyof typeof STAKING_TOKEN_RANGES): number => {
   return STAKING_TOKEN_RANGES[rarity].representativeTokenId;
+};
+
+// Helper function to get name directly from tokenId (0-15)
+export const getNameFromTokenId = (tokenId: number): string | null => {
+  const rarity = getRarityFromTokenId(tokenId);
+  return getNameFromRarity(rarity);
+};
+
+// Helper function to get rarity label directly from tokenId (0-15)
+export const getRarityLabelFromTokenId = (tokenId: number): string | null => {
+  const rarity = getRarityFromTokenId(tokenId);
+  return getRarityLabel(rarity);
+};
+
+// Get rewards for a tokenId
+export const getRewardsForTokenId = (tokenId: number): Record<30 | 90 | 180 | 360, number> | null => {
+  const rarity = getRarityFromTokenId(tokenId);
+  if (!rarity) return null;
+  return STAKING_REWARDS[rarity];
 };

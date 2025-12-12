@@ -43,16 +43,22 @@ export async function GET() {
 
     const withCounts = await Promise.all(
       referrers.map(async (wallet) => {
-        const refCountRaw = await getKey<number | string | null>(`refcount:${normalizeWallet(wallet)}`);
-        const referrals_count = Number(refCountRaw ?? 0);
+        // Use verified referral count instead of raw count
+        const verifiedCountRaw = await getKey<number | string | null>(`verified_refcount:${normalizeWallet(wallet)}`);
+        const verified_count = Number(verifiedCountRaw ?? 0);
+        
+        // Apply multiplier (default to 1 if not found)
+        // Multiplier logic: referrals × multiplier = referral score
+        const referralScore = verified_count * 1; // Can be adjusted based on requirements
+        
         return {
           wallet: normalizeWallet(wallet),
-          referrals_count: Number.isFinite(referrals_count) ? referrals_count : 0,
+          referrals_count: Number.isFinite(verified_count) ? verified_count : 0,
         };
       })
     );
 
-    const sortedByReferrals = withCounts.sort((a, b) => b.referrals_count - a.referrals_count).slice(0, 100);
+    const sortedByReferrals = withCounts.sort((a, b) => b.referrals_count - a.referrals_count);
 
     const withStakeScores: LeaderboardRow[] = await Promise.all(
       sortedByReferrals.map(async (row) => {
@@ -71,7 +77,10 @@ export async function GET() {
           console.error(`Failed to read stake info for ${row.wallet}:`, error);
         }
 
-        const score = row.referrals_count * 10 + stake_score;
+        // Referral score = verified referrals × multiplier (default 1, but can be 10 for display)
+        // Using 10 as multiplier to maintain compatibility with existing scoring
+        const referralScore = row.referrals_count * 10;
+        const score = referralScore + stake_score;
         return {
           ...row,
           stake_score,
@@ -80,7 +89,8 @@ export async function GET() {
       })
     );
 
-    const finalRows = withStakeScores.sort((a, b) => b.score - a.score).slice(0, 20);
+    // Get top 100
+    const finalRows = withStakeScores.sort((a, b) => b.score - a.score).slice(0, 100);
     const withRanks = finalRows.map((row, idx) => ({
       rank: idx + 1,
       ...row,

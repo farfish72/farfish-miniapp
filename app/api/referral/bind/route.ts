@@ -18,16 +18,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing or invalid caller wallet" }, { status: 400 });
   }
 
-  let body: { referrer?: string } = {};
+  let body: { referrer?: string; refCode?: string } = {};
   try {
-    body = (await req.json()) as { referrer?: string };
+    body = (await req.json()) as { referrer?: string; refCode?: string };
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const referrer = body.referrer?.trim();
-  if (!referrer || !walletRegex.test(referrer)) {
-    return NextResponse.json({ error: "Invalid referrer address" }, { status: 400 });
+  let referrer: string | null = null;
+
+  // Support both refCode and full wallet address
+  if (body.refCode) {
+    const refCode = body.refCode.trim().toLowerCase();
+    if (refCode.length !== 6) {
+      return NextResponse.json({ error: "Invalid refCode" }, { status: 400 });
+    }
+    // Lookup wallet from refCode
+    const walletFromCode = await getKey<string>(`refcode:${refCode}`);
+    if (!walletFromCode) {
+      return NextResponse.json({ error: "RefCode not found" }, { status: 404 });
+    }
+    referrer = walletFromCode;
+  } else if (body.referrer) {
+    referrer = body.referrer.trim();
+    if (!walletRegex.test(referrer)) {
+      return NextResponse.json({ error: "Invalid referrer address" }, { status: 400 });
+    }
+  } else {
+    return NextResponse.json({ error: "Missing referrer or refCode" }, { status: 400 });
+  }
+
+  referrer = referrer.toLowerCase();
+
+  // Block self-referral
+  if (callerWallet.toLowerCase() === referrer) {
+    return NextResponse.json({ error: "Cannot refer yourself" }, { status: 400 });
   }
 
   try {
@@ -37,13 +62,15 @@ export async function POST(req: NextRequest) {
     }
 
     const payload = {
-      referrer: referrer.toLowerCase(),
+      referrer: referrer,
       createdAt: new Date().toISOString(),
     };
 
     await setKey(`ref:${callerWallet.toLowerCase()}`, payload);
-    await incrKey(`refcount:${referrer.toLowerCase()}`);
-    await sadd("set:referrers", referrer.toLowerCase());
+    
+    // Note: We don't increment refcount here - only increment when tasks are verified
+    // This will be handled by the task verification API
+    await sadd("set:referrers", referrer);
 
     return NextResponse.json({ success: true, referrer: payload.referrer });
   } catch (error: any) {

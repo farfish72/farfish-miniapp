@@ -7,7 +7,7 @@ import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { FARCASTER_PROFILE_URL, X_PROFILE_URL } from "../constants";
+import { FARCASTER_PROFILE_URL } from "../constants";
 import useFarcasterGate from "../hooks/useFarcasterGate";
 import { REFERRAL_APP_URL } from "../config/referral";
 
@@ -29,7 +29,7 @@ const faqItems = [
   {
     question: "How do I earn rewards?",
     answer:
-      "Stake your FarFish NFTs in the 'Stake' tab. Higher tier NFTs (Rare, Epic, Legendary) earn significantly more daily token rewards.",
+      "Stake your FarFish NFTs in the 'Stake' tab. Different NFT types (Bluefin, GoldRay, RedSpike, ShadowGill) earn different reward amounts based on staking duration.",
   },
   {
     question: "What are Chests for?",
@@ -68,10 +68,8 @@ const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 export default function ProfilePage() {
   const { user } = useUser();
   const [openIdx, setOpenIdx] = useState<number | null>(0);
-  const [referrerInput, setReferrerInput] = useState("");
   const [referralState, setReferralState] = useState<ReferralState>({ bound: false, referralsCount: 0 });
   const [loadingReferral, setLoadingReferral] = useState(false);
-  const [binding, setBinding] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const { blocked, message } = useFarcasterGate();
 
@@ -105,7 +103,10 @@ export default function ProfilePage() {
     []
   );
 
-  const createReferralLink = useCallback((wallet: string) => `${REFERRAL_APP_URL}?ref=${wallet.toLowerCase()}`, []);
+  const createReferralLink = useCallback((wallet: string) => {
+    const refCode = wallet.slice(-6).toLowerCase();
+    return `${REFERRAL_APP_URL}?ref=${refCode}`;
+  }, []);
 
   const fetchReferralInfo = useCallback(
     async (wallet: string) => {
@@ -144,56 +145,6 @@ export default function ProfilePage() {
     [createReferralLink, showToast]
   );
 
-  const handleBindReferral = async () => {
-    if (!user?.walletAddress) {
-      showToast("error", "Connect your wallet first.");
-      return;
-    }
-
-    const referrer = referrerInput.trim();
-    if (!referrer) {
-      showToast("error", "Enter your friend's wallet address.");
-      return;
-    }
-    if (!walletRegex.test(referrer)) {
-      showToast("error", "Please enter a valid wallet (0x...)");
-      return;
-    }
-
-    setBinding(true);
-    try {
-      const res = await fetch("/api/referral/bind", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-wallet": user.walletAddress,
-        },
-        body: JSON.stringify({ referrer }),
-      });
-
-      if (res.status === 409) {
-        const data = await res.json();
-        showToast("error", data?.error || "Already bound");
-        await fetchReferralInfo(user.walletAddress);
-        return;
-      }
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to bind referral");
-      }
-
-      showToast("success", "Referral bound successfully");
-      setReferrerInput("");
-      await fetchReferralInfo(user.walletAddress);
-    } catch (error) {
-      console.error("Bind referral failed", error);
-      showToast("error", "Could not bind referral. Please try again.");
-    } finally {
-      setBinding(false);
-    }
-  };
-
   const handleCopyReferralLink = async () => {
     if (!referralState.link) {
       showToast("error", "No referral link yet.");
@@ -213,7 +164,6 @@ export default function ProfilePage() {
       fetchReferralInfo(user.walletAddress);
     } else {
       setReferralState({ bound: false, referrer: undefined, link: undefined, referralsCount: 0 });
-      setReferrerInput("");
     }
   }, [user?.walletAddress, fetchReferralInfo]);
 
@@ -242,7 +192,7 @@ export default function ProfilePage() {
           <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
             <Image
               src={user?.pfpUrl ?? "/farfish-logo.png"}
-              alt={user?.displayName ?? "FarFISH user"}
+              alt="FarFISH user"
               fill
               sizes="64px"
               className="object-cover"
@@ -251,10 +201,10 @@ export default function ProfilePage() {
           </div>
             <div>
               <p className="text-lg font-semibold">
-                {user?.displayName ?? "FarFISH Captain"}
+                FarFISH Captain
               </p>
               <p className="text-xs text-white/60">
-                FID: {user?.fid ?? "—"} • {shortenAddress(user?.walletAddress)}
+                {shortenAddress(user?.walletAddress)}
               </p>
             </div>
           </div>
@@ -277,57 +227,34 @@ export default function ProfilePage() {
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
           <p className="text-sm text-white/70">
-            Bind once to your friend's wallet, then share your link to earn referral rewards. Manual bind is permanent.
+            Complete tasks to verify referrals. Share your link to earn referral rewards.
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <a
-              href={X_PROFILE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center"
-            >
-              Follow on X
-            </a>
+          <div className="mt-3 space-y-2">
             <a
               href={FARCASTER_PROFILE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center"
+              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center block"
             >
               Follow on Farcaster
+            </a>
+            <a
+              href="https://farcaster.xyz/farf/0x2dc370c3"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center block"
+            >
+              Like & Recast
             </a>
           </div>
           <div className="mt-4 space-y-3">
             {!user?.walletAddress && (
               <div className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-sm text-yellow-100">
-                Connect your wallet to bind a referral.
-              </div>
-            )}
-            {user?.walletAddress && !referralState.bound && (
-              <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wide text-white/60 font-semibold">
-                  Friend’s wallet address (bind once)
-                </label>
-                <input
-                  value={referrerInput}
-                  onChange={(e) => setReferrerInput(e.target.value)}
-                  placeholder="0x1234..."
-                  disabled={binding || loadingReferral}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#00d4c4] disabled:opacity-60"
-                />
-                <button
-                  type="button"
-                  onClick={handleBindReferral}
-                  disabled={binding || loadingReferral}
-                  className="w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-2 text-sm font-semibold text-black disabled:opacity-60"
-                >
-                  {binding ? "Binding..." : "Bind Referral"}
-                </button>
-                <p className="text-xs text-white/60">You can only bind a referrer once. This action cannot be undone.</p>
+                Connect your wallet to get your referral link.
               </div>
             )}
 
-            {user?.walletAddress && referralState.bound && (
+            {user?.walletAddress && (
               <div className="space-y-3">
                 <div className="rounded-lg border border-white/10 bg-white/5 p-3">
                   <p className="text-xs text-white/70 break-all">
@@ -351,11 +278,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <p className="text-sm">Referrals completed: {referralState.referralsCount ?? 0}</p>
-                {referralState.referrer && (
-                  <p className="text-xs text-white/60">
-                    Bound to referrer: {shortenAddress(referralState.referrer)}
-                  </p>
-                )}
               </div>
             )}
           </div>

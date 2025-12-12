@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { STAKING_TOKEN_RANGES, STAKING_REWARDS } from "../constants";
+import { RARITY_DISPLAY, STAKING_REWARDS, STAKING_TOKEN_RANGES } from "../constants";
 
 export default function StakeTable() {
   const rarities = Object.keys(STAKING_TOKEN_RANGES) as Array<keyof typeof STAKING_TOKEN_RANGES>;
@@ -14,24 +14,23 @@ export default function StakeTable() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-white/70 border-b border-white/10">
+              <th className="text-left py-3 px-2">Name</th>
               <th className="text-left py-3 px-2">Rarity</th>
-              <th className="text-left py-3 px-2">Token ID Range</th>
-              <th className="text-left py-3 px-2">30 Days (FRH)</th>
-              <th className="text-left py-3 px-2">90 Days (FRH)</th>
-              <th className="text-left py-3 px-2">180 Days (FRH)</th>
-              <th className="text-left py-3 px-2">360 Days (FRH)</th>
+              <th className="text-left py-3 px-2">30d FRH</th>
+              <th className="text-left py-3 px-2">90d FRH</th>
+              <th className="text-left py-3 px-2">180d FRH</th>
+              <th className="text-left py-3 px-2">360d FRH</th>
             </tr>
           </thead>
           <tbody>
             {rarities.map((rarity) => {
-              const range = STAKING_TOKEN_RANGES[rarity];
-              const rangeStr = range.min === range.max ? `${range.min}` : `${range.min}–${range.max}`;
               const rewards = STAKING_REWARDS[rarity];
+              const display = RARITY_DISPLAY[rarity];
 
               return (
                 <tr key={rarity} className="border-b border-white/10 hover:bg-white/5 transition">
-                  <td className="py-3 px-2 font-medium">{rarity}</td>
-                  <td className="py-3 px-2 text-white/70">{rangeStr}</td>
+                  <td className="py-3 px-2 font-medium">{display.name}</td>
+                  <td className="py-3 px-2 text-white/70">{display.rarityLabel}</td>
                   {lockDurations.map((duration) => (
                     <td key={duration} className="py-3 px-2">
                       {rewards[duration].toLocaleString()}

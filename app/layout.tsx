@@ -5,6 +5,7 @@ import BottomNav from "./components/BottomNav";
 import Footer from "./components/Footer";
 import FarcasterMiniAppReady from "./components/FarcasterMiniAppReady";
 import FarcasterWalletProvider from "./providers/FarcasterWalletProvider";
+import AutoBindReferral from "./components/AutoBindReferral";
 
  
 
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen flex flex-col relative items-center overflow-x-hidden text-white">
         <FarcasterMiniAppReady />
         <FarcasterWalletProvider>
+          <AutoBindReferral />
             <main
               className="w-full max-w-md min-h-screen flex flex-col px-4"
               style={{

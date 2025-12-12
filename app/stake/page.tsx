@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react";
 import Header from "../components/Header";
 import { useAccount, useReadContract, useChainId } from "wagmi";
-import { STAKING_CONTRACT_ADDRESS, getRarityFromTokenId } from "../constants";
+import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
 import StakeModal from "../components/StakeModal";
 import UnstakeModal from "../components/UnstakeModal";
@@ -18,7 +18,6 @@ const getExpectedChainId = () => {
 
 interface StakedPosition {
   tokenId: number;
-  rarity: string | null;
   quantity: bigint;
   stakedAt: bigint;
   lockDays: bigint;
@@ -114,7 +113,6 @@ export default function StakingPage() {
       
       result.push({
         tokenId,
-        rarity: getRarityFromTokenId(tokenId),
         quantity,
         stakedAt,
         lockDays,
@@ -196,7 +194,7 @@ export default function StakingPage() {
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <p className="text-sm font-semibold">
-                          {position.rarity || "Unknown"}
+                          {getNameFromTokenId(position.tokenId) ?? "FarFISH"}
                         </p>
                         <p className="text-xs text-white/70 mt-1">
                           Quantity Staked: {Number(position.quantity).toLocaleString()}

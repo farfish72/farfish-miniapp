@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureReferralEnv, REFERRAL_APP_URL } from "../../../config/referral";
-import { getKey } from "../../../../lib/upstash";
+import { getKey, setKey } from "../../../../lib/upstash";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
@@ -22,25 +22,36 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Generate refCode from wallet (last 6 chars)
+    const refCode = wallet.slice(-6).toLowerCase();
+
+    // Store refCode -> wallet mapping for lookup
+    await setKey(`refcode:${refCode}`, wallet);
+
     const refRecordRaw = await getKey<string | null>(`ref:${wallet}`);
-    if (!refRecordRaw) {
-      return NextResponse.json({ bound: false });
-    }
-
+    
     let referrer = "";
-    try {
-      const parsed = JSON.parse(refRecordRaw as string);
-      referrer = parsed?.referrer || "";
-    } catch {
-      referrer = typeof refRecordRaw === "string" ? refRecordRaw : "";
+    let bound = false;
+
+    if (refRecordRaw) {
+      bound = true;
+      try {
+        const parsed = JSON.parse(refRecordRaw as string);
+        referrer = parsed?.referrer || "";
+      } catch {
+        referrer = typeof refRecordRaw === "string" ? refRecordRaw : "";
+      }
     }
 
-    const refCountRaw = await getKey<number | string | null>(`refcount:${wallet}`);
-    const referralsCount = Number(refCountRaw ?? 0);
-    const link = `${REFERRAL_APP_URL}?ref=${wallet}`;
+    // Get verified referral count (only counts verified referrals)
+    const verifiedCountRaw = await getKey<number | string | null>(`verified_refcount:${wallet}`);
+    const referralsCount = Number(verifiedCountRaw ?? 0);
+    
+    // Use refCode in link instead of full wallet
+    const link = `${REFERRAL_APP_URL}?ref=${refCode}`;
 
     return NextResponse.json({
-      bound: true,
+      bound,
       referrer,
       link,
       referralsCount: Number.isFinite(referralsCount) ? referralsCount : 0,

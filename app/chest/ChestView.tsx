@@ -7,7 +7,7 @@ import Link from "next/link";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
+import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import claimControllerAbi from "../abi/claimController.json";
 import stakeAbi from "../abi/stake.json";
 
@@ -167,7 +167,7 @@ export default function ChestView() {
 
   // Parse staking positions
   const stakingPositions = useMemo(() => {
-    const positions: Array<{ tokenId: number; name: string; lockDays: number; stakedAt: number; quantity: number; isVoided: boolean; canClaim: boolean; daysRemaining: number }> = [];
+    const positions: Array<{ tokenId: number; name: string; displayLabel: string; lockDays: number; stakedAt: number; quantity: number; isVoided: boolean; canClaim: boolean; daysRemaining: number }> = [];
     
     const processToken = (tokenId: number, data: any) => {
       if (!data) return;
@@ -189,9 +189,11 @@ export default function ChestView() {
       const canClaim = !isVoided && now >= unlockTimestamp;
       const daysRemaining = canClaim ? 0 : Math.ceil((unlockTimestamp - now) / (24 * 60 * 60 * 1000));
       
+      const name = getNameFromTokenId(tokenId) ?? tokenName[tokenId] ?? "FarFISH";
       positions.push({
         tokenId,
-        name: tokenName[tokenId] || `Token ${tokenId}`,
+        name,
+        displayLabel: name,
         lockDays,
         stakedAt,
         quantity,
@@ -588,8 +590,8 @@ export default function ChestView() {
                     <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1">
-                          <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
-                          <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                          <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
+                          <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
                           <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
                           <p className="text-xs text-red-400 mt-1">Voided (unstaked)</p>
                         </div>
@@ -604,8 +606,8 @@ export default function ChestView() {
                     <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1">
-                          <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
-                          <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                          <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
+                          <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
                           <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
                           <p className="text-xs text-white/70 mt-1">🔒 {position.daysRemaining} day{position.daysRemaining !== 1 ? 's' : ''} remaining</p>
                         </div>
@@ -629,8 +631,8 @@ export default function ChestView() {
                     <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1">
-                          <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
-                          <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                          <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
+                          <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
                           <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
                           <p className="text-xs text-green-400 mt-1">✅ Ready to claim ({rewardAmount} FRH)</p>
                         </div>
@@ -656,8 +658,8 @@ export default function ChestView() {
                   <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex-1">
-                        <p className="text-sm font-semibold">{position.name} ({position.lockDays} Days)</p>
-                        <p className="text-xs text-white/70">Token ID {position.tokenId} • Quantity: {position.quantity}</p>
+                        <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
+                        <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
                         <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
                       </div>
                     </div>

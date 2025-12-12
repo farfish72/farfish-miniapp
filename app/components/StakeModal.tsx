@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
-import { STAKING_CONTRACT_ADDRESS, STAKING_TOKEN_RANGES, getRepresentativeTokenId } from "../constants";
+import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
 
 interface StakeModalProps {
@@ -13,7 +13,11 @@ interface StakeModalProps {
 
 const LOCK_DURATIONS = [30, 90, 180, 360] as const;
 type LockDuration = typeof LOCK_DURATIONS[number];
-type Rarity = keyof typeof STAKING_TOKEN_RANGES;
+
+// Only show 4 names: Bluefin, GoldRay, RedSpike, ShadowGill
+// Token IDs: Bluefin (0-6), GoldRay (7-11), RedSpike (12-14), ShadowGill (15)
+// We use representative token IDs for each rarity
+const TOKEN_IDS = [0, 7, 12, 15]; // Representative tokenIds for each rarity
 
 const BASESCAN_URL = "https://basescan.org/tx";
 const BASE_CHAIN_ID = 8453;
@@ -21,7 +25,7 @@ const BASE_CHAIN_ID = 8453;
 export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalProps) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [selectedRarity, setSelectedRarity] = useState<Rarity | null>(null);
+  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<LockDuration>(30);
   const [amount, setAmount] = useState<string>("1");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
@@ -33,13 +37,13 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
 
   const expectedChainId = process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
   const isBaseNetwork = chainId === expectedChainId;
-  const canStake = isConnected && isBaseNetwork && selectedRarity && selectedDuration && amount && Number(amount) > 0;
+  const canStake = isConnected && isBaseNetwork && selectedTokenId !== null && selectedDuration && amount && Number(amount) > 0;
   const isPending = isWritePending || isTxConfirming;
 
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setSelectedRarity(null);
+      setSelectedTokenId(null);
       setSelectedDuration(30);
       setAmount("1");
       setToast(null);
@@ -85,7 +89,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   }, [toast]);
 
   const handleStake = () => {
-    if (!canStake || !address || !STAKING_CONTRACT_ADDRESS || !selectedRarity || !selectedDuration) return;
+    if (!canStake || !address || !STAKING_CONTRACT_ADDRESS || selectedTokenId === null || !selectedDuration) return;
 
     // Precondition checks
     if (!isConnected) {
@@ -98,7 +102,6 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
       return;
     }
 
-    const tokenId = getRepresentativeTokenId(selectedRarity);
     const amountNum = Number(amount);
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
       setToast({ type: "error", message: "Please enter a valid amount" });
@@ -110,7 +113,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
         address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
         abi: stakeAbi as any,
         functionName: "stake",
-        args: [BigInt(tokenId), BigInt(amountNum)],
+        args: [BigInt(selectedTokenId), BigInt(amountNum)],
       } as any);
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
@@ -130,7 +133,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#050e18] p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#050e18] p-6 shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Stake NFT</h2>
           <button
@@ -154,27 +157,26 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
           </div>
         )}
 
-        {/* Rarity Selection */}
+        {/* Token Selection - Show only 4 names: Bluefin, GoldRay, RedSpike, ShadowGill */}
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Select NFT Rarity</label>
+          <label className="block text-sm font-medium mb-2">Select NFT</label>
           <div className="grid grid-cols-2 gap-2">
-            {(Object.keys(STAKING_TOKEN_RANGES) as Rarity[]).map((rarity) => {
-              const range = STAKING_TOKEN_RANGES[rarity];
-              const rangeStr = range.min === range.max ? `${range.min}` : `${range.min}–${range.max}`;
+            {TOKEN_IDS.map((tokenId) => {
+              const name = getNameFromTokenId(tokenId);
+              if (!name) return null;
               return (
                 <button
-                  key={rarity}
+                  key={tokenId}
                   type="button"
-                  onClick={() => setSelectedRarity(rarity)}
+                  onClick={() => setSelectedTokenId(tokenId)}
                   disabled={isPending}
                   className={`rounded-xl p-3 border text-left transition ${
-                    selectedRarity === rarity
+                    selectedTokenId === tokenId
                       ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
                       : "border-white/10 bg-white/5 hover:bg-white/10"
                   } ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  <span className="text-sm font-semibold block">{rarity}</span>
-                  <span className="text-xs text-white/70">Token IDs: {rangeStr}</span>
+                  <span className="text-sm font-semibold block">{name}</span>
                 </button>
               );
             })}
@@ -250,7 +252,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-2">
+        <div className="mt-auto flex gap-2 pt-2">
           <button
             onClick={onClose}
             disabled={isPending}

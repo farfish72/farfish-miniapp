@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
 import Header from "../components/Header";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 
@@ -20,7 +21,9 @@ const shortenAddress = (address: string): string => {
 };
 
 export default function LeaderboardPage() {
+  const { address } = useAccount();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [userEntry, setUserEntry] = useState<LeaderboardEntry | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
 
@@ -66,7 +69,7 @@ export default function LeaderboardPage() {
                 Hybrid Leaderboard
               </h2>
               <p className="text-sm text-white/70 mt-1">
-                Sorted by referrals (x10) plus staking rewards. Top 20 wallets shown.
+                Sorted by verified referrals (×10) plus staking rewards. Top 100 wallets shown.
               </p>
             </div>
             <button
@@ -118,12 +121,32 @@ export default function LeaderboardPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Show user's own rank if outside top 100 */}
+          {userEntry && !entries.find((e) => e.wallet.toLowerCase() === address?.toLowerCase()) && (
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <h3 className="text-sm font-semibold mb-2 text-white/80">Your Rank</h3>
+              <div className="rounded-lg border border-[#00d4c4]/30 bg-[#00d4c4]/5 p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">#{userEntry.rank}</p>
+                    <p className="text-xs text-white/70">{shortenAddress(userEntry.wallet)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-white/60">Referrals: {userEntry.referrals_count}</p>
+                    <p className="text-xs text-white/60">Stake: {userEntry.stake_score}</p>
+                    <p className="text-sm font-bold text-[#00d4c4]">Total: {userEntry.score}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="font-semibold text-lg mb-2">How scoring works</h3>
           <ul className="space-y-1.5 text-sm text-white/70">
-            <li>• Referral score = total referrals × 10</li>
+            <li>• Referral score = verified referrals × 10 (multiplier)</li>
             <li>• Stake score = on-chain staking rewards from the contract</li>
             <li>• Total score = referral score + stake score</li>
             <li>• List refreshes via the button above</li>

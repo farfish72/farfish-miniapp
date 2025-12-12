@@ -20,9 +20,10 @@ import {
 } from "wagmi";
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "./lib/wagmi";
-import { NFT_CONTRACT_ADDRESS } from "./constants";
+import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { detectFarcasterEnvironment } from "./utils/farcaster";
+import { REFERRAL_APP_URL } from "./config/referral";
 
 interface SupplyInfo {
   id: number;
@@ -320,7 +321,14 @@ export default function HomeClient() {
 
     if (typeof window === "undefined") return;
 
-    const castText = "I just mint FarFISH limited edition NFT. Join the wave...\n`https://farfish-miniapp5.vercel.app`";
+    // Generate referral link with refCode
+    let shareUrl = REFERRAL_APP_URL;
+    if (address) {
+      const refCode = address.slice(-6).toLowerCase();
+      shareUrl = `${REFERRAL_APP_URL}?ref=${refCode}`;
+    }
+
+    const castText = `I just mint FarFISH limited edition NFT. Join the wave...\n${shareUrl}`;
 
     if (isInFarcaster) {
       try {
@@ -345,7 +353,7 @@ export default function HomeClient() {
     const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
     window.open(warpcastUrl, "_blank", "noopener,noreferrer");
     setToast({ type: "success", message: "Composer opened" });
-  }, [isFarcasterEnv]);
+  }, [isFarcasterEnv, address]);
 
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {
@@ -412,6 +420,12 @@ export default function HomeClient() {
     [],
   );
 
+  const lastMintedDisplay = useMemo(() => {
+    if (lastMintedTokenId === null) return null;
+    const name = getNameFromTokenId(lastMintedTokenId);
+    return name ?? "Minted FarFISH";
+  }, [lastMintedTokenId]);
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <Header title="Home" />
@@ -423,7 +437,7 @@ export default function HomeClient() {
             <div>
               <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
               <p className="text-xs text-white/60">
-                Total supply: {totalMaxSupply || "—"} • Token IDs: 0-15
+                Total supply: {totalMaxSupply || "—"} • Species: Bluefin, GoldRay, RedSpike, ShadowGill
               </p>
             </div>
           </div>
@@ -478,9 +492,9 @@ export default function HomeClient() {
               >
                 {primaryButtonLabel}
               </button>
-              {lastMintedTokenId !== null && (
+              {lastMintedDisplay && (
                 <p className="mt-2 text-xs text-green-400">
-                  Minted token ID: {lastMintedTokenId}
+                  Minted: {lastMintedDisplay}
                   {mintedTokenUri && (
                     <a
                       href={mintedTokenUri}
@@ -530,7 +544,7 @@ export default function HomeClient() {
           <h3 className="font-bold mb-2">Why mint a FarFISH?</h3>
           <ul className="text-sm text-white/70 space-y-1 pl-4">
             <li>• Staking rewards (30/90/180/360 days)</li>
-            <li>• Tier system &amp; exclusive drops</li>
+            <li>• Multiple NFT types (Bluefin, GoldRay, RedSpike, ShadowGill)</li>
             <li>• Limited editions</li>
             <li>• Powering growth in the Base ecosystem</li>
           </ul>

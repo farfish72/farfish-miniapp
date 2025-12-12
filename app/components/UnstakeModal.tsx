@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
-import { STAKING_CONTRACT_ADDRESS, getRarityFromTokenId } from "../constants";
+import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
 
 interface UnstakeModalProps {
@@ -14,7 +14,6 @@ interface UnstakeModalProps {
 
 interface StakedPosition {
   tokenId: number;
-  rarity: string | null;
   quantity: bigint;
   stakedAt: bigint;
   lockDays: bigint;
@@ -108,7 +107,6 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
       
       result.push({
         tokenId,
-        rarity: getRarityFromTokenId(tokenId),
         quantity,
         stakedAt,
         lockDays,
@@ -232,7 +230,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#050e18] p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#050e18] p-6 shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Unstake NFT</h2>
           <button
@@ -272,6 +270,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {positions.map((position) => {
                   const isSelected = selectedPosition?.tokenId === position.tokenId;
+                  const name = getNameFromTokenId(position.tokenId) ?? "FarFISH";
                   return (
                     <button
                       key={position.tokenId}
@@ -290,7 +289,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="text-sm font-semibold block">
-                            {position.rarity || `Token ${position.tokenId}`}
+                            {name}
                           </span>
                           <span className="text-xs text-white/70">
                             Quantity: {Number(position.quantity)} • Lock: {Number(position.lockDays)} days
@@ -363,7 +362,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-2">
+        <div className="mt-auto flex gap-2 pt-2">
           <button
             onClick={onClose}
             disabled={isPending}
