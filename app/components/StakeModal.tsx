@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
-import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
+import React, { useState, useEffect, useCallback } from "react";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId, useReadContract } from "wagmi";
+import { STAKING_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
+import nftDropAbi from "../abi/nftDrop.json";
 
 interface StakeModalProps {
   isOpen: boolean;
@@ -29,16 +30,47 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   const [selectedDuration, setSelectedDuration] = useState<LockDuration>(30);
   const [amount, setAmount] = useState<string>("1");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
-
-  const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
-  const { isLoading: isTxConfirming, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const [needsApproval, setNeedsApproval] = useState<boolean | null>(null);
+  const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | null>(null);
+  const [stakeTxHash, setStakeTxHash] = useState<`0x${string}` | null>(null);
 
   const expectedChainId = process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
   const isBaseNetwork = chainId === expectedChainId;
+  const readEnabled = Boolean(isConnected && address && NFT_CONTRACT_ADDRESS && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
+
+  // Check if user has approved the staking contract
+  const { data: isApproved, refetch: refetchApproval } = useReadContract({
+    address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+    abi: nftDropAbi as any,
+    functionName: "isApprovedForAll",
+    args: address && STAKING_CONTRACT_ADDRESS ? [address as `0x${string}`, STAKING_CONTRACT_ADDRESS as `0x${string}`] : undefined,
+    query: { enabled: readEnabled },
+  } as any);
+
+  const { writeContract: writeApproval, data: approvalTx, isPending: isApprovalPending, error: approvalError } = useWriteContract();
+  const { writeContract: writeStake, data: stakeTx, isPending: isStakePending, error: stakeError } = useWriteContract();
+
+  // Wait for approval transaction
+  const { isLoading: isApprovalConfirming, isSuccess: isApprovalSuccess } = useWaitForTransactionReceipt({
+    hash: approvalTx,
+  });
+
+  // Wait for stake transaction
+  const { isLoading: isStakeConfirming, isSuccess: isStakeSuccess } = useWaitForTransactionReceipt({
+    hash: stakeTx,
+  });
+
+  const isPending = isApprovalPending || isApprovalConfirming || isStakePending || isStakeConfirming;
+  const currentTxHash = approvalTx || stakeTx;
+
   const canStake = isConnected && isBaseNetwork && selectedTokenId !== null && selectedDuration && amount && Number(amount) > 0;
-  const isPending = isWritePending || isTxConfirming;
+
+  // Update needsApproval when approval status changes
+  useEffect(() => {
+    if (isApproved !== undefined) {
+      setNeedsApproval(!isApproved);
+    }
+  }, [isApproved]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -47,39 +79,92 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
       setSelectedDuration(30);
       setAmount("1");
       setToast(null);
+      setNeedsApproval(null);
+      setApprovalTxHash(null);
+      setStakeTxHash(null);
     }
   }, [isOpen]);
 
-  // Handle transaction success
+  // Refetch approval status when modal opens
   useEffect(() => {
-    if (isTxSuccess && txHash) {
-      setToast({ type: "success", message: "NFT staked successfully!" });
-      setTimeout(() => {
-        onSuccess?.();
-        onClose();
-      }, 2000);
+    if (isOpen && readEnabled) {
+      refetchApproval();
     }
-  }, [isTxSuccess, txHash, onSuccess, onClose]);
+  }, [isOpen, readEnabled, refetchApproval]);
 
-  // Refetch stake info after successful transaction
-  useEffect(() => {
-    if (isTxSuccess) {
-      // onSuccess callback will trigger refetch in parent
+  const proceedWithStake = useCallback(() => {
+    if (!address || !STAKING_CONTRACT_ADDRESS || selectedTokenId === null || !selectedDuration) return;
+
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      setToast({ type: "error", message: "Please enter a valid amount" });
+      return;
     }
-  }, [isTxSuccess, onSuccess]);
 
-  // Handle write errors
-  useEffect(() => {
-    if (writeError) {
-      const errorMsg = writeError.message || String(writeError);
-      console.error("Stake error:", writeError);
+    try {
+      writeStake({
+        address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+        abi: stakeAbi as any,
+        functionName: "stake",
+        args: [BigInt(selectedTokenId), BigInt(amountNum)],
+      } as any);
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      console.error("Stake error:", error);
       if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
         setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
     }
-  }, [writeError]);
+  }, [address, STAKING_CONTRACT_ADDRESS, selectedTokenId, selectedDuration, amount, writeStake]);
+
+  // Handle approval transaction success
+  useEffect(() => {
+    if (isApprovalSuccess && approvalTx) {
+      setApprovalTxHash(approvalTx);
+      setToast({ type: "success", message: "Approval confirmed! Proceeding to stake..." });
+      refetchApproval();
+      // After approval, automatically proceed to stake
+      setTimeout(() => {
+        proceedWithStake();
+      }, 1000);
+    }
+  }, [isApprovalSuccess, approvalTx, refetchApproval, proceedWithStake]);
+
+  // Handle stake transaction success
+  useEffect(() => {
+    if (isStakeSuccess && stakeTx) {
+      setStakeTxHash(stakeTx);
+      setToast({ type: "success", message: "NFT staked successfully!" });
+      setTimeout(() => {
+        onSuccess?.();
+        onClose();
+      }, 2000);
+    }
+  }, [isStakeSuccess, stakeTx, onSuccess, onClose]);
+
+  // Handle approval errors
+  useEffect(() => {
+    if (approvalError) {
+      const errorMsg = approvalError.message || String(approvalError);
+      console.error("Approval error:", approvalError);
+      setToast({ type: "error", message: `Approval failed: ${errorMsg}` });
+    }
+  }, [approvalError]);
+
+  // Handle stake errors
+  useEffect(() => {
+    if (stakeError) {
+      const errorMsg = stakeError.message || String(stakeError);
+      console.error("Stake error:", stakeError);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
+    }
+  }, [stakeError]);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -89,7 +174,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   }, [toast]);
 
   const handleStake = () => {
-    if (!canStake || !address || !STAKING_CONTRACT_ADDRESS || selectedTokenId === null || !selectedDuration) return;
+    if (!canStake || !address || !STAKING_CONTRACT_ADDRESS || !NFT_CONTRACT_ADDRESS || selectedTokenId === null || !selectedDuration) return;
 
     // Precondition checks
     if (!isConnected) {
@@ -108,21 +193,35 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
       return;
     }
 
-    try {
-      writeContract({
-        address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-        abi: stakeAbi as any,
-        functionName: "stake",
-        args: [BigInt(selectedTokenId), BigInt(amountNum)],
-      } as any);
-    } catch (error: any) {
-      const errorMsg = error?.message || String(error);
-      console.error("Stake error:", error);
-      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
-        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
-      } else {
-        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+    // Check if approval is needed
+    if (needsApproval === true) {
+      // Request approval from user wallet
+      try {
+        writeApproval({
+          address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+          abi: nftDropAbi as any,
+          functionName: "setApprovalForAll",
+          args: [STAKING_CONTRACT_ADDRESS as `0x${string}`, true],
+        } as any);
+        setToast({ type: "success", message: "Please approve the transaction in your wallet..." });
+      } catch (error: any) {
+        const errorMsg = error?.message || String(error);
+        console.error("Approval error:", error);
+        setToast({ type: "error", message: `Approval failed: ${errorMsg}` });
       }
+    } else if (needsApproval === false) {
+      // Already approved, proceed with staking
+      proceedWithStake();
+    } else {
+      // Approval status not yet loaded, wait a moment and retry
+      setTimeout(() => {
+        refetchApproval();
+        if (isApproved) {
+          proceedWithStake();
+        } else {
+          setToast({ type: "error", message: "Please wait for approval status to load..." });
+        }
+      }, 500);
     }
   };
 
@@ -219,15 +318,30 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
           />
         </div>
 
+        {/* Approval Status */}
+        {needsApproval === true && !isApprovalSuccess && (
+          <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <p className="text-sm text-yellow-200">
+              Approval required: Please approve the staking contract to transfer your NFTs.
+            </p>
+          </div>
+        )}
+
         {/* Transaction Status */}
         {isPending && (
           <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
             <p className="text-sm text-blue-200">
-              {isTxConfirming ? "Confirming transaction..." : "Transaction pending..."}
+              {isApprovalPending || isApprovalConfirming
+                ? isApprovalConfirming
+                  ? "Confirming approval..."
+                  : "Approval transaction pending..."
+                : isStakeConfirming
+                ? "Confirming stake..."
+                : "Stake transaction pending..."}
             </p>
-            {txHash && (
+            {currentTxHash && (
               <a
-                href={`${BASESCAN_URL}/${txHash}`}
+                href={`${BASESCAN_URL}/${currentTxHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-[#00d4c4] hover:underline mt-2 block"
@@ -262,14 +376,22 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
           </button>
           <button
             onClick={handleStake}
-            disabled={!canStake || isPending}
+            disabled={!canStake || isPending || needsApproval === null}
             className={`flex-1 rounded-lg py-3 text-sm font-semibold transition ${
-              canStake && !isPending
+              canStake && !isPending && needsApproval !== null
                 ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
                 : "bg-white/10 text-white/40 cursor-not-allowed"
             }`}
           >
-            {isPending ? "Processing..." : "Stake"}
+            {isPending
+              ? isApprovalPending || isApprovalConfirming
+                ? "Approving..."
+                : "Staking..."
+              : needsApproval === true
+              ? "Approve & Stake"
+              : needsApproval === null
+              ? "Loading..."
+              : "Stake"}
           </button>
         </div>
       </div>

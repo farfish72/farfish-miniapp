@@ -24,6 +24,7 @@ import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { detectFarcasterEnvironment } from "./utils/farcaster";
 import { REFERRAL_APP_URL } from "./config/referral";
+import { base } from "viem/chains";
 
 interface SupplyInfo {
   id: number;
@@ -137,7 +138,8 @@ export default function HomeClient() {
     }
 
     try {
-      const publicClient = getPublicClient(wagmiConfig);
+      // Explicitly get public client for Base chain (chainId 8453)
+      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
       if (!publicClient) {
         return {
           tokenId,
@@ -148,6 +150,21 @@ export default function HomeClient() {
         };
       }
 
+      // DIAGNOSTIC LOGGING: Log contract address, chainId, and tokenId
+      const chainId = publicClient.chain?.id;
+      console.log("🔍 [DIAGNOSTIC] getActiveClaimConditionId call:", {
+        tokenId,
+        contractAddress: NFT_CONTRACT_ADDRESS,
+        chainId: chainId,
+        expectedChainId: 8453,
+        chainName: publicClient.chain?.name,
+        isBaseChain: chainId === 8453,
+        baseChainId: base.id,
+        contractFromEnv: NFT_CONTRACT_ADDRESS,
+        contractFromError: "0xA10C5a76910D3B9f22CAE78a4c718bE98715339b",
+        contractMatches: NFT_CONTRACT_ADDRESS.toLowerCase() === "0xA10C5a76910D3B9f22CAE78a4c718bE98715339b".toLowerCase(),
+      });
+
       // Get active claim condition ID
       const activeConditionId = (await (publicClient.readContract as any)({
         address: NFT_CONTRACT_ADDRESS as `0x${string}`,
@@ -156,9 +173,27 @@ export default function HomeClient() {
         args: [BigInt(tokenId)],
       })) as bigint;
 
+      // DIAGNOSTIC LOGGING: Log the result
+      console.log("🔍 [DIAGNOSTIC] getActiveClaimConditionId result:", {
+        tokenId,
+        activeConditionId: activeConditionId.toString(),
+        activeConditionIdNumber: Number(activeConditionId),
+        contractAddress: NFT_CONTRACT_ADDRESS,
+        chainId: chainId,
+        isZero: activeConditionId === BigInt(0),
+      });
+
       // If no active condition (returns 0 or throws), return error
       if (activeConditionId === BigInt(0)) {
-        console.warn(`No active claim condition for tokenId ${tokenId}`);
+        console.warn(`⚠️ [DIAGNOSTIC] No active claim condition for tokenId ${tokenId}`, {
+          tokenId,
+          activeConditionId: activeConditionId.toString(),
+          contractAddress: NFT_CONTRACT_ADDRESS,
+          chainId: chainId,
+          expectedChainId: 8453,
+          chainMismatch: chainId !== 8453,
+          contractMismatch: NFT_CONTRACT_ADDRESS !== "0xA10C5a76910D3B9f22CAE78a4c718bE98715339b",
+        });
         return {
           tokenId,
           condition: null,
@@ -169,6 +204,13 @@ export default function HomeClient() {
       }
 
       // Get claim condition details
+      console.log("🔍 [DIAGNOSTIC] Calling getClaimConditionById:", {
+        tokenId,
+        activeConditionId: activeConditionId.toString(),
+        contractAddress: NFT_CONTRACT_ADDRESS,
+        chainId: chainId,
+      });
+
       const condition = (await (publicClient.readContract as any)({
         address: NFT_CONTRACT_ADDRESS as `0x${string}`,
         abi: nftDropAbi as any,
@@ -178,13 +220,16 @@ export default function HomeClient() {
 
       // Log claim condition for debugging
       if (condition) {
-        console.log(`Claim condition for tokenId ${tokenId}:`, {
+        console.log(`✅ [DIAGNOSTIC] Claim condition for tokenId ${tokenId}:`, {
+          activeConditionId: activeConditionId.toString(),
           pricePerToken: condition.pricePerToken.toString(),
           currency: condition.currency,
           startTimestamp: condition.startTimestamp.toString(),
           maxClaimableSupply: condition.maxClaimableSupply.toString(),
           supplyClaimed: condition.supplyClaimed.toString(),
           quantityLimitPerWallet: condition.quantityLimitPerWallet.toString(),
+          contractAddress: NFT_CONTRACT_ADDRESS,
+          chainId: chainId,
         });
       }
 
@@ -196,7 +241,18 @@ export default function HomeClient() {
         error: null,
       };
     } catch (error) {
-      console.error(`Failed to fetch claim condition for tokenId ${tokenId}:`, error);
+      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+      const chainId = publicClient?.chain?.id;
+      console.error(`❌ [DIAGNOSTIC] Failed to fetch claim condition for tokenId ${tokenId}:`, {
+        error,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        errorStack: error instanceof Error ? error.stack : undefined,
+        tokenId,
+        contractAddress: NFT_CONTRACT_ADDRESS,
+        chainId: chainId,
+        expectedChainId: 8453,
+        chainMismatch: chainId !== 8453,
+      });
       // Check for specific error types
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       if (errorMessage.includes("DropNoActiveCondition") || errorMessage.includes("execution reverted")) {
@@ -247,7 +303,7 @@ export default function HomeClient() {
     setErrorMessage(null);
 
     try {
-      const publicClient = getPublicClient(wagmiConfig);
+      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
       if (!publicClient) {
         setErrorMessage("Public client not available");
         return;
@@ -297,7 +353,7 @@ export default function HomeClient() {
     }
 
     try {
-      const publicClient = getPublicClient(wagmiConfig);
+      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
       if (!publicClient) {
         return;
       }
