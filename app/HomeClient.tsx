@@ -799,9 +799,7 @@ export default function HomeClient() {
                   Minted: {lastMintedDisplay}
                   {mintedTokenUri && (
                     <a
-                      href={mintedTokenUri}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href="/profile?viewNft=true"
                       className="ml-2 underline"
                     >
                       View NFT

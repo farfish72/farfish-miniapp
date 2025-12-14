@@ -47,10 +47,6 @@ export async function GET() {
         const verifiedCountRaw = await getKey<number | string | null>(`verified_refcount:${normalizeWallet(wallet)}`);
         const verified_count = Number(verifiedCountRaw ?? 0);
         
-        // Apply multiplier (default to 1 if not found)
-        // Multiplier logic: referrals × multiplier = referral score
-        const referralScore = verified_count * 1; // Can be adjusted based on requirements
-        
         return {
           wallet: normalizeWallet(wallet),
           referrals_count: Number.isFinite(verified_count) ? verified_count : 0,
@@ -58,10 +54,8 @@ export async function GET() {
       })
     );
 
-    const sortedByReferrals = withCounts.sort((a, b) => b.referrals_count - a.referrals_count);
-
     const withStakeScores: LeaderboardRow[] = await Promise.all(
-      sortedByReferrals.map(async (row) => {
+      withCounts.map(async (row) => {
         let stake_score = 0;
         try {
           const stakeInfo = await client.readContract({
@@ -77,20 +71,18 @@ export async function GET() {
           console.error(`Failed to read stake info for ${row.wallet}:`, error);
         }
 
-        // Referral score = verified referrals × multiplier (default 1, but can be 10 for display)
-        // Using 10 as multiplier to maintain compatibility with existing scoring
-        const referralScore = row.referrals_count * 10;
-        const score = referralScore + stake_score;
+        // No multiplier logic - rewards = direct FRH amount (stake_score)
+        // Rank by stake_score only (direct FRH rewards)
         return {
           ...row,
           stake_score,
-          score,
+          score: stake_score, // Use stake_score for ranking (direct FRH)
         };
       })
     );
 
-    // Get top 100
-    const finalRows = withStakeScores.sort((a, b) => b.score - a.score).slice(0, 100);
+    // Get top 100, ranked by stake_score (direct FRH)
+    const finalRows = withStakeScores.sort((a, b) => b.stake_score - a.stake_score).slice(0, 100);
     const withRanks = finalRows.map((row, idx) => ({
       rank: idx + 1,
       ...row,

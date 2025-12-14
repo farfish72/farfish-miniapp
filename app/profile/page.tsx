@@ -2,14 +2,21 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, Suspense } from "react";
+import { useAccount, useReadContract, useChainId } from "wagmi";
+import { useSearchParams, useRouter } from "next/navigation";
+import { base } from "viem/chains";
+import { getPublicClient } from "@wagmi/core";
+import { wagmiConfig } from "../lib/wagmi";
 import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { FARCASTER_PROFILE_URL } from "../constants";
+import { FARCASTER_PROFILE_URL, NFT_CONTRACT_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
 import useFarcasterGate from "../hooks/useFarcasterGate";
 import { REFERRAL_APP_URL } from "../config/referral";
+import nftDropAbi from "../abi/nftDrop.json";
+import stakeAbi from "../abi/stake.json";
 
 type ToastState = { type: "error" | "success"; message: string } | null;
 
@@ -18,6 +25,18 @@ type ReferralState = {
   referrer?: string;
   link?: string;
   referralsCount: number;
+};
+
+type TaskState = {
+  followComplete: boolean;
+  recastComplete: boolean;
+};
+
+type LiveStats = {
+  nftsOwned: number;
+  stakedCount: number;
+  chestStreak: number;
+  rank: number | null;
 };
 
 const faqItems = [
@@ -65,47 +84,265 @@ const shortenAddress = (address?: string) => {
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
-export default function ProfilePage() {
+const TOKEN_IDS = Array.from({ length: 16 }, (_, i) => i); // 0-15
+
+function ProfilePageContent() {
   const { user } = useUser();
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [openIdx, setOpenIdx] = useState<number | null>(0);
   const [referralState, setReferralState] = useState<ReferralState>({ bound: false, referralsCount: 0 });
   const [loadingReferral, setLoadingReferral] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [taskState, setTaskState] = useState<TaskState>({ followComplete: false, recastComplete: false });
+  const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
+  const [nftInfo, setNftInfo] = useState<{ tokenId: number; uri: string } | null>(null);
   const { blocked, message } = useFarcasterGate();
+
+  const isBaseNetwork = chainId === base.id;
+  const readEnabled = Boolean(isConnected && address && isBaseNetwork);
 
   // Farcaster detection
   useFarcasterEnvironment("Profile page");
 
-  const stats = useMemo(
-    () => [
-      {
-        label: "NFTs owned",
-        value: formatStatValue(user?.stats?.nftsOwned),
-      },
-      {
-        label: "Staked",
-        value: formatStatValue(user?.stats?.staked),
-      },
-      {
-        label: "Chest streak",
-        value: formatStatValue(user?.stats?.streakDays, " days"),
-      },
-      {
-        label: "Rank",
-        value: user?.stats?.rankLabel ?? "Unranked",
-      },
-    ],
-    [user?.stats]
-  );
+  // Check if redirected from Home with View NFT
+  useEffect(() => {
+    const viewNft = searchParams.get("viewNft");
+    if (viewNft === "true" && address) {
+      // Fetch NFT info
+      fetchNFTInfo();
+    }
+  }, [searchParams, address]);
+
+  // Fetch NFT info when viewing NFT
+  const fetchNFTInfo = useCallback(async () => {
+    if (!address || !NFT_CONTRACT_ADDRESS) return;
+    try {
+      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+      if (!publicClient) return;
+
+      // Find which tokenId user owns
+      for (const id of TOKEN_IDS) {
+        const balance = await (publicClient.readContract as any)({
+          address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+          abi: nftDropAbi as any,
+          functionName: "balanceOf",
+          args: [address as `0x${string}`, BigInt(id)],
+        }) as bigint;
+
+        if (balance > BigInt(0)) {
+          try {
+            const uri = await (publicClient.readContract as any)({
+              address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+              abi: nftDropAbi as any,
+              functionName: "uri",
+              args: [BigInt(id)],
+            }) as string;
+            setNftInfo({ tokenId: id, uri });
+            break;
+          } catch {
+            // Continue if URI fetch fails
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch NFT info:", error);
+    }
+  }, [address]);
+
+  // Read staked count from staking contract
+  const { data: stakeInfo } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+    abi: stakeAbi as any,
+    functionName: "getStakeInfo",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: { enabled: readEnabled && Boolean(STAKING_CONTRACT_ADDRESS), refetchInterval: 30000 },
+  } as any);
+
+  // Fetch live stats
+  const fetchLiveStats = useCallback(async () => {
+    if (!address) {
+      setLiveStats({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
+      return;
+    }
+
+    setLoadingStats(true);
+    try {
+      // Fetch NFT owned count
+      let nftsOwned = 0;
+      if (NFT_CONTRACT_ADDRESS) {
+        try {
+          const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+          if (publicClient) {
+            const balancePromises = TOKEN_IDS.map((id) =>
+              (publicClient.readContract as any)({
+                address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+                abi: nftDropAbi as any,
+                functionName: "balanceOf",
+                args: [address as `0x${string}`, BigInt(id)],
+              }) as Promise<bigint>
+            );
+            const balances = await Promise.all(balancePromises);
+            nftsOwned = balances.reduce((sum, balance) => sum + Number(balance), 0);
+          }
+        } catch (error) {
+          console.error("Failed to fetch NFT owned count:", error);
+        }
+      }
+
+      // Get staked count from stakeInfo
+      let stakedCount = 0;
+      if (stakeInfo && Array.isArray(stakeInfo) && stakeInfo.length >= 1) {
+        const tokensStaked = stakeInfo[0] as bigint[];
+        if (tokensStaked) {
+          stakedCount = tokensStaked.length;
+        }
+      }
+
+      // Fetch chest streak from KV (via API)
+      let chestStreak = 0;
+      try {
+        const streakRes = await fetch(`/api/profile/streak?wallet=${address}`, {
+          headers: { "x-user-wallet": address },
+          cache: "no-store",
+        });
+        if (streakRes.ok) {
+          const streakData = await streakRes.json();
+          chestStreak = Number(streakData?.streakDays ?? 0);
+        }
+      } catch (error) {
+        console.error("Failed to fetch chest streak:", error);
+      }
+
+      // Fetch rank from leaderboard API
+      let rank: number | null = null;
+      try {
+        const rankRes = await fetch(`/api/leaderboard/user?wallet=${address}`, {
+          cache: "no-store",
+        });
+        if (rankRes.ok) {
+          const rankData = await rankRes.json();
+          rank = Number(rankData?.rank ?? 0) || null;
+        }
+      } catch (error) {
+        console.error("Failed to fetch rank:", error);
+      }
+
+      setLiveStats({ nftsOwned, stakedCount, chestStreak, rank });
+    } catch (error) {
+      console.error("Failed to fetch live stats:", error);
+    } finally {
+      setLoadingStats(false);
+    }
+  }, [address, stakeInfo]);
+
+  // Fetch live stats when address or stakeInfo changes
+  useEffect(() => {
+    fetchLiveStats();
+  }, [fetchLiveStats]);
+
+  // Fetch task completion status
+  const fetchTaskStatus = useCallback(async () => {
+    if (!address) {
+      setTaskState({ followComplete: false, recastComplete: false });
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/profile/tasks?wallet=${address}`, {
+        headers: { "x-user-wallet": address },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTaskState({
+          followComplete: Boolean(data?.followComplete),
+          recastComplete: Boolean(data?.recastComplete),
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch task status:", error);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    fetchTaskStatus();
+  }, [fetchTaskStatus]);
 
   const showToast = useCallback(
     (type: "error" | "success", msg: string) => setToast({ type, message: msg }),
     []
   );
 
+  // Verify task
+  const handleVerifyTask = useCallback(async (taskType: "follow" | "recast") => {
+    if (!address) {
+      showToast("error", "Please connect your wallet");
+      return;
+    }
+
+    setVerifyingTask(taskType);
+    try {
+      const res = await fetch("/api/referral/verify-tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-wallet": address,
+        },
+        body: JSON.stringify({
+          followComplete: taskType === "follow" ? true : taskState.followComplete,
+          recastComplete: taskType === "recast" ? true : taskState.recastComplete,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Verification failed");
+      }
+
+      const data = await res.json();
+      setTaskState({
+        followComplete: Boolean(data?.followComplete ?? (taskType === "follow" ? true : taskState.followComplete)),
+        recastComplete: Boolean(data?.recastComplete ?? (taskType === "recast" ? true : taskState.recastComplete)),
+      });
+      showToast("success", "Task verified successfully");
+      fetchTaskStatus();
+    } catch (error) {
+      console.error("Failed to verify task:", error);
+      showToast("error", "Failed to verify task. Please try again.");
+    } finally {
+      setVerifyingTask(null);
+    }
+  }, [address, taskState, showToast, fetchTaskStatus]);
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "NFT Owned",
+        value: loadingStats ? "—" : formatStatValue(liveStats.nftsOwned),
+      },
+      {
+        label: "Staked NFT",
+        value: loadingStats ? "—" : formatStatValue(liveStats.stakedCount),
+      },
+      {
+        label: "Chest Streak",
+        value: loadingStats ? "—" : formatStatValue(liveStats.chestStreak, " days"),
+      },
+      {
+        label: "Rank",
+        value: loadingStats ? "—" : (liveStats.rank ? `#${liveStats.rank}` : "Unranked"),
+      },
+    ],
+    [liveStats, loadingStats]
+  );
+
   const createReferralLink = useCallback((wallet: string) => {
-    const refCode = wallet.slice(-6).toLowerCase();
-    return `${REFERRAL_APP_URL}?ref=${refCode}`;
+    const refCode = wallet.slice(-8).toLowerCase();
+    return `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${refCode}`;
   }, []);
 
   const fetchReferralInfo = useCallback(
@@ -178,6 +415,26 @@ export default function ProfilePage() {
       <Header title="Profile" />
 
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
+        {/* NFT Info Section - shown when viewing NFT */}
+        {nftInfo && (
+          <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <h3 className="text-lg font-semibold mb-2">Your NFT</h3>
+            <div className="space-y-2">
+              <p className="text-sm text-white/70">Token ID: {nftInfo.tokenId}</p>
+              {nftInfo.uri && (
+                <a
+                  href={nftInfo.uri}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-[#00d4c4] hover:underline"
+                >
+                  View on IPFS
+                </a>
+              )}
+            </div>
+          </section>
+        )}
+
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
           <div className="flex justify-end">
             {blocked ? (
@@ -230,22 +487,42 @@ export default function ProfilePage() {
             Complete tasks to verify referrals. Share your link to earn referral rewards.
           </p>
           <div className="mt-3 space-y-2">
-            <a
-              href={FARCASTER_PROFILE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center block"
-            >
-              Follow on Farcaster
-            </a>
-            <a
-              href="https://farcaster.xyz/farf/0x2dc370c3"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 text-center block"
-            >
-              Like & Recast
-            </a>
+            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3">
+              <span className="text-sm font-semibold text-white/80">Follow on Farcaster</span>
+              {taskState.followComplete ? (
+                <span className="text-green-400 text-lg">✔</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open(FARCASTER_PROFILE_URL, "_blank");
+                    setTimeout(() => handleVerifyTask("follow"), 1000);
+                  }}
+                  disabled={verifyingTask === "follow"}
+                  className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
+                >
+                  {verifyingTask === "follow" ? "Verifying..." : "Verify"}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3">
+              <span className="text-sm font-semibold text-white/80">Like & Recast</span>
+              {taskState.recastComplete ? (
+                <span className="text-green-400 text-lg">✔</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank");
+                    setTimeout(() => handleVerifyTask("recast"), 1000);
+                  }}
+                  disabled={verifyingTask === "recast"}
+                  className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
+                >
+                  {verifyingTask === "recast" ? "Verifying..." : "Verify"}
+                </button>
+              )}
+            </div>
           </div>
           <div className="mt-4 space-y-3">
             {!user?.walletAddress && (
@@ -257,27 +534,31 @@ export default function ProfilePage() {
             {user?.walletAddress && (
               <div className="space-y-3">
                 <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                  <p className="text-xs text-white/70 break-all">
-                    Your referral link: {referralState.link ?? createReferralLink(user.walletAddress)}
+                  <p className="text-xs text-white/70 mb-2">
+                    Your referral link:
                   </p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-xs text-white/90 font-mono">
+                      {user.walletAddress.slice(-8).toLowerCase()}
+                    </p>
                     <button
                       type="button"
                       onClick={handleCopyReferralLink}
-                      className="rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 hover:bg-white/20 transition"
+                      className="rounded-lg bg-white/10 border border-white/10 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/20 transition"
                     >
                       Copy
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => fetchReferralInfo(user.walletAddress!)}
-                      className="rounded-lg bg-white/10 border border-white/10 py-2 text-sm font-semibold text-white/80 hover:bg-white/20 transition"
-                    >
-                      Refresh
-                    </button>
                   </div>
+                  <p className="text-xs text-white/60 font-mono break-all">
+                    {referralState.link || createReferralLink(user.walletAddress)}
+                  </p>
                 </div>
-                <p className="text-sm">Referrals completed: {referralState.referralsCount ?? 0}</p>
+                <p className="text-sm text-white/80">
+                  Referrals Completed: {referralState.referralsCount ?? 0}
+                </p>
+                <p className="text-sm text-white/70">
+                  Every referral earns you 20 FRH. Rewards will be distributed on listing day.
+                </p>
               </div>
             )}
           </div>
@@ -328,5 +609,13 @@ export default function ProfilePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading...</div>}>
+      <ProfilePageContent />
+    </Suspense>
   );
 }

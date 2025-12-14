@@ -9,15 +9,14 @@ type LeaderboardEntry = {
   rank: number;
   wallet: string;
   referrals_count: number;
-  stake_score: number;
-  score: number;
+  rewards: number; // Direct FRH amount (stake_score)
 };
 
 type ToastState = { type: "error" | "success"; message: string } | null;
 
-const shortenAddress = (address: string): string => {
-  if (!address) return "0x0000...0000";
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+const getUsername = (address: string): string => {
+  if (!address) return "0x0000";
+  return address.slice(-8).toLowerCase();
 };
 
 export default function LeaderboardPage() {
@@ -37,8 +36,36 @@ export default function LeaderboardPage() {
         const text = await res.text();
         throw new Error(text || "Failed to load leaderboard");
       }
-      const data = (await res.json()) as LeaderboardEntry[];
-      setEntries(Array.isArray(data) ? data : []);
+      const data = (await res.json()) as any[];
+      
+      // Transform data: remove multiplier logic, use stake_score as rewards
+      const transformed: LeaderboardEntry[] = data.map((entry) => ({
+        rank: entry.rank || 0,
+        wallet: entry.wallet || "",
+        referrals_count: entry.referrals_count || 0,
+        rewards: entry.stake_score || 0, // Direct FRH amount, no multiplier
+      }));
+      
+      setEntries(transformed);
+
+      // Fetch user's own rank if connected
+      if (address) {
+        try {
+          const userRes = await fetch(`/api/leaderboard/user?wallet=${address}`, { cache: "no-store" });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            const userEntry: LeaderboardEntry = {
+              rank: userData.rank || 0,
+              wallet: userData.wallet || address,
+              referrals_count: userData.referrals_count || 0,
+              rewards: userData.stake_score || 0, // Direct FRH amount
+            };
+            setUserEntry(userEntry);
+          }
+        } catch (error) {
+          console.error("Failed to fetch user rank:", error);
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch leaderboard", error);
       setToast({ type: "error", message: "Could not load leaderboard. Please try again." });
@@ -49,7 +76,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     fetchLeaderboard();
-  }, []);
+  }, [address]);
 
   useEffect(() => {
     if (!toast) return;
@@ -63,14 +90,11 @@ export default function LeaderboardPage() {
 
       <div className="mt-4 flex-1 flex flex-col space-y-4">
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 mb-4">
             <div>
               <h2 className="text-xl font-bold bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] bg-clip-text text-transparent">
-                Hybrid Leaderboard
+                Leaderboard
               </h2>
-              <p className="text-sm text-white/70 mt-1">
-                Sorted by verified referrals (×10) plus staking rewards. Top 100 wallets shown.
-              </p>
             </div>
             <button
               type="button"
@@ -82,42 +106,50 @@ export default function LeaderboardPage() {
             </button>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
+          <p className="text-sm text-white/70 mb-4">
+            NFT rarity may boost your final rewards at distribution.
+          </p>
+
+          <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-white/60">
                   <th className="py-2 pr-3">Rank</th>
-                  <th className="py-2 pr-3">Wallet</th>
+                  <th className="py-2 pr-3">Username</th>
                   <th className="py-2 pr-3">Referrals</th>
-                  <th className="py-2 pr-3">Stake Score</th>
-                  <th className="py-2">Total Score</th>
+                  <th className="py-2">Rewards (FRH)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {loading && (
                   <tr>
-                    <td colSpan={5} className="py-4 text-center text-white/60">
+                    <td colSpan={4} className="py-4 text-center text-white/60">
                       Loading leaderboard...
                     </td>
                   </tr>
                 )}
                 {!loading && entries.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-4 text-center text-white/60">
+                    <td colSpan={4} className="py-4 text-center text-white/60">
                       No leaderboard data yet.
                     </td>
                   </tr>
                 )}
                 {!loading &&
-                  entries.map((entry) => (
-                    <tr key={entry.rank} className="hover:bg-white/5 transition">
-                      <td className="py-2 pr-3 font-semibold">{entry.rank}</td>
-                      <td className="py-2 pr-3">{shortenAddress(entry.wallet)}</td>
-                      <td className="py-2 pr-3">{entry.referrals_count}</td>
-                      <td className="py-2 pr-3">{entry.stake_score}</td>
-                      <td className="py-2 font-bold text-[#00d4c4]">{entry.score}</td>
-                    </tr>
-                  ))}
+                  entries.map((entry) => {
+                    const isUser = address && entry.wallet.toLowerCase() === address.toLowerCase();
+                    return (
+                      <tr 
+                        key={entry.rank} 
+                        className={`hover:bg-white/5 transition ${isUser ? "bg-[#00d4c4]/10" : ""}`}
+                      >
+                        <td className="py-2 pr-3 font-semibold">{entry.rank}</td>
+                        <td className="py-2 pr-3 font-mono">{getUsername(entry.wallet)}</td>
+                        <td className="py-2 pr-3">{entry.referrals_count}</td>
+                        <td className="py-2">{entry.rewards}</td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -125,32 +157,29 @@ export default function LeaderboardPage() {
           {/* Show user's own rank if outside top 100 */}
           {userEntry && !entries.find((e) => e.wallet.toLowerCase() === address?.toLowerCase()) && (
             <div className="mt-4 pt-4 border-t border-white/10">
-              <h3 className="text-sm font-semibold mb-2 text-white/80">Your Rank</h3>
+              <h3 className="text-sm font-semibold mb-2 text-white/80">You</h3>
               <div className="rounded-lg border border-[#00d4c4]/30 bg-[#00d4c4]/5 p-3">
-                <div className="flex items-center justify-between">
+                <div className="grid grid-cols-4 gap-2 text-sm">
                   <div>
-                    <p className="text-sm font-semibold">#{userEntry.rank}</p>
-                    <p className="text-xs text-white/70">{shortenAddress(userEntry.wallet)}</p>
+                    <p className="text-xs text-white/60 mb-1">Rank</p>
+                    <p className="font-semibold">#{userEntry.rank}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-white/60">Referrals: {userEntry.referrals_count}</p>
-                    <p className="text-xs text-white/60">Stake: {userEntry.stake_score}</p>
-                    <p className="text-sm font-bold text-[#00d4c4]">Total: {userEntry.score}</p>
+                  <div>
+                    <p className="text-xs text-white/60 mb-1">Username</p>
+                    <p className="font-mono">{getUsername(userEntry.wallet)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/60 mb-1">Referrals</p>
+                    <p>{userEntry.referrals_count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/60 mb-1">Rewards (FRH)</p>
+                    <p>{userEntry.rewards}</p>
                   </div>
                 </div>
               </div>
             </div>
           )}
-        </section>
-
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h3 className="font-semibold text-lg mb-2">How scoring works</h3>
-          <ul className="space-y-1.5 text-sm text-white/70">
-            <li>• Referral score = verified referrals × 10 (multiplier)</li>
-            <li>• Stake score = on-chain staking rewards from the contract</li>
-            <li>• Total score = referral score + stake score</li>
-            <li>• List refreshes via the button above</li>
-          </ul>
         </section>
       </div>
 

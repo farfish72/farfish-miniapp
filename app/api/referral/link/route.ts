@@ -22,10 +22,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Generate refCode from wallet (last 6 chars)
-    const refCode = wallet.slice(-6).toLowerCase();
+    // Generate refCode from wallet (last 8 chars) - this is the username
+    const refCode = wallet.slice(-8).toLowerCase();
 
-    // Store refCode -> wallet mapping for lookup
+    // Store refCode -> wallet mapping for lookup (KV stores full wallet)
     await setKey(`refcode:${refCode}`, wallet);
 
     const refRecordRaw = await getKey<string | null>(`ref:${wallet}`);
@@ -47,8 +47,9 @@ export async function GET(req: NextRequest) {
     const verifiedCountRaw = await getKey<number | string | null>(`verified_refcount:${wallet}`);
     const referralsCount = Number(verifiedCountRaw ?? 0);
     
-    // Use refCode in link instead of full wallet
-    const link = `${REFERRAL_APP_URL}?ref=${refCode}`;
+    // Use correct referral link format: https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=XXXXXXXX
+    // Where XXXXXXXXX = last 8 characters of wallet (username)
+    const link = `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${refCode}`;
 
     return NextResponse.json({
       bound,

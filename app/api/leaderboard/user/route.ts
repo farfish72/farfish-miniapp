@@ -62,18 +62,15 @@ export async function GET(req: NextRequest) {
       console.error(`Failed to read stake info for ${wallet}:`, error);
     }
 
-    // Calculate score
-    const referralScore = referrals_count * 10;
-    const score = referralScore + stake_score;
+    // No multiplier logic - rewards = direct FRH amount (stake_score)
+    // Rank by stake_score only (direct FRH rewards)
 
     // Calculate rank by comparing with all referrers
     const referrers = await smembers("set:referrers");
     let rank = 0;
     if (referrers.length > 0) {
-      const allScores = await Promise.all(
+      const allStakeScores = await Promise.all(
         referrers.map(async (r) => {
-          const vCountRaw = await getKey<number | string | null>(`verified_refcount:${normalizeWallet(r)}`);
-          const vCount = Number(vCountRaw ?? 0);
           let stScore = 0;
           try {
             const sInfo = await client.readContract({
@@ -87,11 +84,11 @@ export async function GET(req: NextRequest) {
           } catch {
             // Ignore errors
           }
-          return vCount * 10 + stScore;
+          return stScore; // Use stake_score only for ranking
         })
       );
-      const userScore = score;
-      const betterScores = allScores.filter((s) => s > userScore).length;
+      const userStakeScore = stake_score;
+      const betterScores = allStakeScores.filter((s) => s > userStakeScore).length;
       rank = betterScores + 1;
     }
 
@@ -100,7 +97,7 @@ export async function GET(req: NextRequest) {
       wallet: normalizeWallet(wallet),
       referrals_count,
       stake_score,
-      score,
+      score: stake_score, // No multiplier - score = stake_score (direct FRH)
     } as LeaderboardRow);
   } catch (error: any) {
     console.error("User leaderboard lookup failed:", error);
