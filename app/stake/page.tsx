@@ -4,6 +4,9 @@
 import { useMemo, useState, useEffect } from "react";
 import Header from "../components/Header";
 import { useAccount, useReadContract, useChainId } from "wagmi";
+import { getPublicClient } from "@wagmi/core";
+import { wagmiConfig } from "../lib/wagmi";
+import { base } from "viem/chains";
 import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
 import StakeModal from "../components/StakeModal";
@@ -22,6 +25,9 @@ interface StakedPosition {
   stakedAt: bigint;
   lockDays: bigint;
   isUnlocked: boolean;
+  remainingLockDays?: number;
+  lockEndTimestamp?: bigint;
+  rewards?: bigint;
 }
 
 export default function StakingPage() {
@@ -89,9 +95,44 @@ export default function StakingPage() {
     { tokenId: 12, query: query12 }, { tokenId: 13, query: query13 }, { tokenId: 14, query: query14 }, { tokenId: 15, query: query15 },
   ];
 
+  // Get current block timestamp
+  const [currentBlockTimestamp, setCurrentBlockTimestamp] = useState<bigint | null>(null);
+
+  useEffect(() => {
+    if (!readEnabled) {
+      setCurrentBlockTimestamp(null);
+      return;
+    }
+
+    const fetchBlockTimestamp = async () => {
+      try {
+        const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+        if (!publicClient) return;
+        
+        const block = await publicClient.getBlock({ blockTag: "latest" });
+        if (block?.timestamp) {
+          setCurrentBlockTimestamp(block.timestamp);
+        }
+      } catch (error) {
+        console.error("Failed to fetch block timestamp:", error);
+        // Fallback to current time in seconds
+        setCurrentBlockTimestamp(BigInt(Math.floor(Date.now() / 1000)));
+      }
+    };
+
+    fetchBlockTimestamp();
+    const interval = setInterval(fetchBlockTimestamp, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [readEnabled]);
+
   // Combine positions with detailed info - only include tokens that are actually staked
   const stakedPositions: StakedPosition[] = useMemo(() => {
     const result: StakedPosition[] = [];
+    
+    if (!currentBlockTimestamp) {
+      // Return empty if we don't have block timestamp yet
+      return result;
+    }
     
     allQueries.forEach(({ tokenId, query }) => {
       // Only process tokens that are in the staked list
@@ -99,17 +140,34 @@ export default function StakingPage() {
       if (!query.data) return;
       
       const data = query.data;
+      // getStakeInfoForToken returns: [_tokensStaked, _rewards]
+      // But code expects: [quantity, stakedAt, lockDays] - assuming contract returns more or wrapper exists
       const quantity = typeof data === "object" && "quantity" in data ? data.quantity : (Array.isArray(data) ? data[0] : BigInt(0));
       const stakedAt = typeof data === "object" && "stakedAt" in data ? data.stakedAt : (Array.isArray(data) ? data[1] : BigInt(0));
       const lockDays = typeof data === "object" && "lockDays" in data ? data.lockDays : (Array.isArray(data) ? data[2] : BigInt(0));
+      // Try to get rewards - might be in a different index or property
+      const rewards = typeof data === "object" && "rewards" in data ? data.rewards : (Array.isArray(data) && data.length > 3 ? data[3] : BigInt(0));
       
-      if (quantity <= 0) return;
+      if (quantity <= BigInt(0)) return;
       
-      // Assuming stakedAt is in seconds (Unix timestamp)
-      const stakedAtMs = Number(stakedAt) * 1000;
-      const lockDaysNum = Number(lockDays);
-      const unlockMs = stakedAtMs + (lockDaysNum * 24 * 60 * 60 * 1000);
-      const isUnlocked = Date.now() >= unlockMs;
+      // Calculate lock end timestamp (stakedAt + lockDays in seconds)
+      const lockEndTimestamp = stakedAt + (lockDays * BigInt(86400));
+      
+      // Calculate remaining lock days: (lockEndTimestamp - currentBlockTimestamp) / 86400
+      let remainingLockDays: number;
+      if (lockEndTimestamp <= currentBlockTimestamp) {
+        // Expired - unlocked
+        remainingLockDays = 0;
+      } else {
+        const remainingSeconds = lockEndTimestamp - currentBlockTimestamp;
+        remainingLockDays = Number(remainingSeconds) / 86400;
+        // Handle edge cases
+        if (!Number.isFinite(remainingLockDays) || remainingLockDays < 0) {
+          remainingLockDays = 0;
+        }
+      }
+      
+      const isUnlocked = lockEndTimestamp <= currentBlockTimestamp;
       
       result.push({
         tokenId,
@@ -117,11 +175,14 @@ export default function StakingPage() {
         stakedAt,
         lockDays,
         isUnlocked,
+        remainingLockDays,
+        lockEndTimestamp,
+        rewards,
       });
     });
     
     return result;
-  }, [allQueries, stakedTokenIds]);
+  }, [allQueries, stakedTokenIds, currentBlockTimestamp]);
 
   const isLoading = isLoadingStakeInfo || allQueries.some(({ query }) => query.isLoading);
 
@@ -170,7 +231,9 @@ export default function StakingPage() {
             <h3 className="font-semibold text-lg">My Staked NFTs</h3>
             {readEnabled && !isLoading && totalRewards > 0 && (
               <div className="text-sm text-white/70">
-                Total Rewards: <span className="font-semibold text-[#00d4c4]">{Number(totalRewards).toLocaleString()}</span>
+                Total Rewards: <span className="font-semibold text-[#00d4c4]">
+                  {(Number(totalRewards) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 2 })} FRH
+                </span>
               </div>
             )}
           </div>
@@ -200,8 +263,20 @@ export default function StakingPage() {
                           Quantity Staked: {Number(position.quantity).toLocaleString()}
                         </p>
                         <p className="text-xs text-white/70 mt-1">
-                          Lock Duration: {Number(position.lockDays) > 0 ? `${Number(position.lockDays)} days` : "—"}
+                          Lock Duration: {(() => {
+                            if (position.remainingLockDays === undefined) return "—";
+                            if (position.isUnlocked) return "Unlocked";
+                            if (!Number.isFinite(position.remainingLockDays) || position.remainingLockDays <= 0) return "—";
+                            return `${Math.ceil(position.remainingLockDays)} days`;
+                          })()}
                         </p>
+                        {position.rewards !== undefined && position.rewards > BigInt(0) && (
+                          <p className="text-xs text-white/70 mt-1">
+                            Rewards: <span className="font-semibold text-[#00d4c4]">
+                              {(Number(position.rewards) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 2 })} FRH
+                            </span>
+                          </p>
+                        )}
                       </div>
                     </div>
                     <button

@@ -25,6 +25,7 @@ import nftDropAbi from "./abi/nftDrop.json";
 import { detectFarcasterEnvironment } from "./utils/farcaster";
 import { REFERRAL_APP_URL } from "./config/referral";
 import { base } from "viem/chains";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 interface SupplyInfo {
   id: number;
@@ -594,41 +595,41 @@ export default function HomeClient() {
     return `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${refCode}`;
   }, [address]);
 
-  const handleShare = useCallback(() => {
+  const handleShare = useCallback(async () => {
+    if (!isConnected || !address) {
+      return;
+    }
+
     const isInFarcaster = isFarcasterEnv || detectFarcasterEnvironment();
 
     if (typeof window === "undefined") return;
 
     // Generate referral link with refCode (last 8 chars)
     const shareUrl = referralLink || REFERRAL_APP_URL;
+    if (!shareUrl) return;
 
-    // Exact share text as specified
-    const castText = `Hey, I just minted a FarFISH limited edition NFT 🐟 Join the wave on Base 👇\n${shareUrl}`;
+    // Exact share text as specified - NO newline, NO trailing space, URL must be last character
+    const castText = `Hey, I just minted FarFISH limited edition NFT 🐟 Join the wave on Base 👇 ${shareUrl}`;
 
     if (isInFarcaster) {
       try {
-        // Use Farcaster compose API to prefill post
-        window.parent?.postMessage(
-          {
-            type: "createCast",
-            data: {
-              cast: {
-                text: castText,
-              },
-            },
-          },
-          "*",
-        );
+        // Use official Farcaster Mini App compose method
+        await sdk.actions.composeCast({
+          text: castText,
+        });
         return;
       } catch (error) {
         console.error("Failed to open native composer", error);
+        // Fallback to Warpcast compose URL
+        const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
+        window.open(warpcastUrl, "_blank", "noopener,noreferrer");
       }
+    } else {
+      // Fallback to Warpcast compose URL
+      const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
+      window.open(warpcastUrl, "_blank", "noopener,noreferrer");
     }
-
-    // Fallback to Warpcast compose URL
-    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
-    window.open(warpcastUrl, "_blank", "noopener,noreferrer");
-  }, [isFarcasterEnv, referralLink]);
+  }, [isFarcasterEnv, referralLink, isConnected, address]);
 
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {
@@ -819,7 +820,8 @@ export default function HomeClient() {
             <button
               type="button"
               onClick={handleShare}
-              className="w-full bg-white/10 text-white py-3 rounded-lg text-sm transition hover:bg-white/20"
+              disabled={!isConnected || !address}
+              className="w-full bg-white/10 text-white py-3 rounded-lg text-sm transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Share
             </button>

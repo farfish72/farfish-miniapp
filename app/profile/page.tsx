@@ -489,41 +489,70 @@ function ProfilePageContent() {
             Complete tasks to verify referrals. Share your link to earn referral rewards.
           </p>
           <div className="mt-3 space-y-2">
-            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3">
-              <span className="text-sm font-semibold text-white/80">Follow on Farcaster</span>
-              {taskState.followComplete ? (
-                <span className="text-green-400 text-lg">✔</span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    // UX-based verification: mark as verified when user clicks Verify
-                    handleVerifyTask("follow");
-                  }}
-                  disabled={verifyingTask === "follow"}
-                  className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
-                >
-                  {verifyingTask === "follow" ? "Verifying..." : "Verify"}
-                </button>
-              )}
+            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
+              <span className="text-sm font-semibold text-white/80 flex-1">Follow on Farcaster</span>
+              <div className="flex items-center gap-2">
+                {!taskState.followComplete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Open Farcaster profile to follow
+                      window.open(FARCASTER_PROFILE_URL, "_blank", "noopener,noreferrer");
+                    }}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                  >
+                    Go
+                  </button>
+                )}
+                {taskState.followComplete ? (
+                  <span className="text-green-400 text-lg">✔</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // UX-based verification: mark as verified when user clicks Verify
+                      handleVerifyTask("follow");
+                    }}
+                    disabled={verifyingTask === "follow"}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
+                  >
+                    {verifyingTask === "follow" ? "Verifying..." : "Verify"}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3">
-              <span className="text-sm font-semibold text-white/80">Like & Recast</span>
-              {taskState.recastComplete ? (
-                <span className="text-green-400 text-lg">✔</span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    // UX-based verification: mark as verified when user clicks Verify
-                    handleVerifyTask("recast");
-                  }}
-                  disabled={verifyingTask === "recast"}
-                  className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
-                >
-                  {verifyingTask === "recast" ? "Verifying..." : "Verify"}
-                </button>
-              )}
+            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
+              <span className="text-sm font-semibold text-white/80 flex-1">Like & Recast</span>
+              <div className="flex items-center gap-2">
+                {!taskState.recastComplete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Open Farcaster post to like & recast
+                      // Using a generic Farcaster URL - adjust if you have a specific cast URL
+                      window.open("https://warpcast.com/~/channel/farcaster", "_blank", "noopener,noreferrer");
+                    }}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                  >
+                    Go
+                  </button>
+                )}
+                {taskState.recastComplete ? (
+                  <span className="text-green-400 text-lg">✔</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // UX-based verification: mark as verified when user clicks Verify
+                      handleVerifyTask("recast");
+                    }}
+                    disabled={verifyingTask === "recast"}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
+                  >
+                    {verifyingTask === "recast" ? "Verifying..." : "Verify"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           <div className="mt-4 space-y-3">
