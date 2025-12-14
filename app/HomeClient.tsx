@@ -513,19 +513,32 @@ export default function HomeClient() {
       }
 
       // Calculate total value needed (pricePerToken * quantity)
+      // pricePerToken is already in wei (bigint) from on-chain claim condition
       const totalValue = pricePerToken * quantity;
 
-      // Check if currency is native ETH (zero address)
-      const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000" as `0x${string}`;
-      const isNativeCurrency = currency.toLowerCase() === NATIVE_CURRENCY.toLowerCase();
+      // Native ETH currency address (Thirdweb-style - required for this contract)
+      const NATIVE_CURRENCY = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as `0x${string}`;
+      const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+      
+      // Check if currency is native ETH (either EEE address or zero address)
+      // Contract expects EEE address for native ETH
+      const isNativeCurrency = 
+        currency.toLowerCase() === NATIVE_CURRENCY.toLowerCase() ||
+        currency.toLowerCase() === ZERO_ADDRESS.toLowerCase();
+
+      // Use EEE address for native ETH (as required by contract)
+      // If condition has zero address, we normalize to EEE address
+      // The contract's claim condition should be configured with EEE address on-chain
+      const normalizedCurrency = isNativeCurrency ? NATIVE_CURRENCY : currency;
 
       // Prepare allowlist proof (empty for public mint)
-      // IMPORTANT: pricePerToken and currency in allowlistProof must match the condition
+      // IMPORTANT: pricePerToken and currency in allowlistProof must match what we send to the contract
+      // We use normalized currency (EEE address) to match the contract's expectation
       const allowlistProof = {
         proof: [] as `0x${string}`[],
         quantityLimitPerWallet,
         pricePerToken, // Must match claim.condition.pricePerToken
-        currency, // Must match claim.condition.currency
+        currency: normalizedCurrency, // Use EEE address for native ETH (matches contract expectation)
       };
 
       // Log claim parameters for debugging
@@ -533,7 +546,7 @@ export default function HomeClient() {
         receiver: address,
         tokenId,
         quantity: quantity.toString(),
-        currency,
+        currency: normalizedCurrency,
         pricePerToken: pricePerToken.toString(),
         totalValue: totalValue.toString(),
         isNativeCurrency,
@@ -545,6 +558,7 @@ export default function HomeClient() {
 
       // Call claim function with all required parameters
       // Contract will validate that _pricePerToken and _currency match the active claim condition
+      // For native ETH, msg.value must equal pricePerToken * quantity
       writeMint({
         address: NFT_CONTRACT_ADDRESS as `0x${string}`,
         abi: nftDropAbi as any,
@@ -553,13 +567,13 @@ export default function HomeClient() {
           address as `0x${string}`, // _receiver
           BigInt(tokenId), // _tokenId
           quantity, // _quantity
-          currency, // _currency (must match condition.currency)
+          normalizedCurrency, // _currency (must match condition.currency)
           pricePerToken, // _pricePerToken (must match condition.pricePerToken)
           allowlistProof, // _allowlistProof (pricePerToken and currency must match condition)
           "0x" as `0x${string}`, // _data (empty bytes)
         ],
-        // Only send native ETH if currency is native
-        // msg.value must equal pricePerToken * quantity for native currency
+        // Send native ETH via msg.value when currency is native
+        // value field in wagmi/viem sends ETH in the transaction
         value: isNativeCurrency ? totalValue : BigInt(0),
       } as any);
     } catch (error) {
