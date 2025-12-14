@@ -199,6 +199,9 @@ export default function StakingPage() {
                         <p className="text-xs text-white/70 mt-1">
                           Quantity Staked: {Number(position.quantity).toLocaleString()}
                         </p>
+                        <p className="text-xs text-white/70 mt-1">
+                          Lock Duration: {Number(position.lockDays) > 0 ? `${Number(position.lockDays)} days` : "—"}
+                        </p>
                       </div>
                     </div>
                     <button

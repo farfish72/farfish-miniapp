@@ -9,7 +9,7 @@ type LeaderboardEntry = {
   rank: number;
   wallet: string;
   referrals_count: number;
-  rewards: number; // Direct FRH amount (stake_score)
+  rewards: number; // Referrals × 20 FRH
 };
 
 type ToastState = { type: "error" | "success"; message: string } | null;
@@ -38,12 +38,12 @@ export default function LeaderboardPage() {
       }
       const data = (await res.json()) as any[];
       
-      // Transform data: remove multiplier logic, use stake_score as rewards
+      // Transform data: rewards = referrals × 20 FRH (referral-based only)
       const transformed: LeaderboardEntry[] = data.map((entry) => ({
         rank: entry.rank || 0,
         wallet: entry.wallet || "",
         referrals_count: entry.referrals_count || 0,
-        rewards: entry.stake_score || 0, // Direct FRH amount, no multiplier
+        rewards: (entry.referrals_count || 0) * 20, // Referrals × 20 FRH
       }));
       
       setEntries(transformed);
@@ -58,7 +58,7 @@ export default function LeaderboardPage() {
               rank: userData.rank || 0,
               wallet: userData.wallet || address,
               referrals_count: userData.referrals_count || 0,
-              rewards: userData.stake_score || 0, // Direct FRH amount
+              rewards: (userData.referrals_count || 0) * 20, // Referrals × 20 FRH
             };
             setUserEntry(userEntry);
           }
@@ -180,6 +180,16 @@ export default function LeaderboardPage() {
               </div>
             </div>
           )}
+
+          {/* Static Rules Section */}
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <div className="text-xs text-white/50 space-y-1">
+              <p>Cheating, fake referrals, or self-referrals will result in an immediate ban.</p>
+              <p>Suspicious activity may lead to permanent removal from the leaderboard.</p>
+              <p>Referral data is strictly monitored. No appeals will be accepted.</p>
+              <p>Final rewards will be reviewed and distributed only to eligible users on listing day.</p>
+            </div>
+          </div>
         </section>
       </div>
 

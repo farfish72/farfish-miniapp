@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { base } from "viem/chains";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
@@ -58,6 +59,7 @@ const rewardAmounts: Record<number, Record<number, number>> = {
 export default function ChestView() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const router = useRouter();
   const isBaseNetwork = chainId === BASE_CHAIN_ID;
   useFarcasterEnvironment("ChestView");
 
@@ -74,6 +76,9 @@ export default function ChestView() {
     query: {
       enabled: Boolean(isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork),
       refetchInterval: 30000, // Refetch every 30 seconds
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
     },
   } as any);
 
@@ -86,6 +91,9 @@ export default function ChestView() {
     query: {
       enabled: Boolean(isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork),
       refetchInterval: 30000, // Refetch every 30 seconds
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
     },
   } as any);
 
@@ -97,7 +105,7 @@ export default function ChestView() {
     abi: stakeAbi as any,
     functionName: "getStakeInfoForToken",
     args: address ? [0, address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000 },
+    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
   } as any);
 
   const readToken1 = useReadContract({
@@ -105,7 +113,7 @@ export default function ChestView() {
     abi: stakeAbi as any,
     functionName: "getStakeInfoForToken",
     args: address ? [1, address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000 },
+    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
   } as any);
 
   const readToken2 = useReadContract({
@@ -113,7 +121,7 @@ export default function ChestView() {
     abi: stakeAbi as any,
     functionName: "getStakeInfoForToken",
     args: address ? [2, address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000 },
+    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
   } as any);
 
   const readToken3 = useReadContract({
@@ -121,7 +129,7 @@ export default function ChestView() {
     abi: stakeAbi as any,
     functionName: "getStakeInfoForToken",
     args: address ? [3, address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000 },
+    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
   } as any);
 
   // Write contract hooks
@@ -211,41 +219,63 @@ export default function ChestView() {
     return positions;
   }, [readToken0?.data, readToken1?.data, readToken2?.data, readToken3?.data]);
 
+  // Refetch all chest data
+  const refetchAllChestData = useCallback(() => {
+    (readDailyChest as any)?.refetch?.();
+    (readSilverChest as any)?.refetch?.();
+    (readToken0 as any)?.refetch?.();
+    (readToken1 as any)?.refetch?.();
+    (readToken2 as any)?.refetch?.();
+    (readToken3 as any)?.refetch?.();
+  }, [readDailyChest, readSilverChest, readToken0, readToken1, readToken2, readToken3]);
+
+  // Refetch on mount and when address changes (navigation back)
+  useEffect(() => {
+    if (isConnected && address && isBaseNetwork) {
+      refetchAllChestData();
+    }
+  }, [isConnected, address, isBaseNetwork, refetchAllChestData]);
+
   // Handle daily claim transaction success
   useEffect(() => {
     if (isDailyTxSuccess && dailyTxHash) {
       setToast({ type: "success", message: "3 FRH claimed" });
-      // Refetch claim status
-      (readDailyChest as any)?.refetch?.();
-      (readSilverChest as any)?.refetch?.();
+      // Immediate refetch for instant UI update
+      setTimeout(() => {
+        refetchAllChestData();
+        router.refresh();
+      }, 100);
     }
-  }, [isDailyTxSuccess, dailyTxHash, readDailyChest, readSilverChest]);
+  }, [isDailyTxSuccess, dailyTxHash, refetchAllChestData, router]);
 
   // Handle silver claim transaction success
   useEffect(() => {
     if (isSilverTxSuccess && silverTxHash) {
       setToast({ type: "success", message: "6 FRH claimed" });
-      // Refetch claim status
-      (readDailyChest as any)?.refetch?.();
-      (readSilverChest as any)?.refetch?.();
+      // Immediate refetch for instant UI update
+      setTimeout(() => {
+        refetchAllChestData();
+        router.refresh();
+      }, 100);
     }
-  }, [isSilverTxSuccess, silverTxHash, readDailyChest, readSilverChest]);
+  }, [isSilverTxSuccess, silverTxHash, refetchAllChestData, router]);
 
   // Handle staking claim transaction success
   useEffect(() => {
     if (isStakingTxSuccess && stakingTxHash && claimingPosition) {
       const rewardAmount = rewardAmounts[claimingPosition.tokenId]?.[claimingPosition.lockDays] || 0;
       setToast({ type: "success", message: `Staking reward claimed (${rewardAmount} FRH)` });
-      // Refetch staking positions
-      (readToken0 as any)?.refetch?.();
-      (readToken1 as any)?.refetch?.();
-      (readToken2 as any)?.refetch?.();
-      (readToken3 as any)?.refetch?.();
+      // Clear claiming position immediately
       setClaimingPosition(null);
+      // Immediate refetch for instant UI update
+      setTimeout(() => {
+        refetchAllChestData();
+        router.refresh();
+      }, 100);
     }
-  }, [isStakingTxSuccess, stakingTxHash, claimingPosition, readToken0, readToken1, readToken2, readToken3]);
+  }, [isStakingTxSuccess, stakingTxHash, claimingPosition, refetchAllChestData, router]);
 
-  // Handle write errors
+  // Handle write errors - clear states on error
   useEffect(() => {
     if (writeDailyError) {
       const errorMsg = writeDailyError.message || String(writeDailyError);
@@ -255,8 +285,10 @@ export default function ChestView() {
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
+      // Refetch to ensure state is correct after error
+      setTimeout(() => refetchAllChestData(), 500);
     }
-  }, [writeDailyError]);
+  }, [writeDailyError, refetchAllChestData]);
 
   useEffect(() => {
     if (writeSilverError) {
@@ -267,8 +299,10 @@ export default function ChestView() {
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
+      // Refetch to ensure state is correct after error
+      setTimeout(() => refetchAllChestData(), 500);
     }
-  }, [writeSilverError]);
+  }, [writeSilverError, refetchAllChestData]);
 
   useEffect(() => {
     if (writeStakingError) {
@@ -279,9 +313,19 @@ export default function ChestView() {
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
+      // Clear claiming position and refetch
       setClaimingPosition(null);
+      setTimeout(() => refetchAllChestData(), 500);
     }
-  }, [writeStakingError]);
+  }, [writeStakingError, refetchAllChestData]);
+
+  // Clear states on unmount
+  useEffect(() => {
+    return () => {
+      setClaimingPosition(null);
+      setToast(null);
+    };
+  }, []);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -294,7 +338,12 @@ export default function ChestView() {
     setInfoModal({ title, description });
   };
 
-  const handleDailyClaim = () => {
+  const handleDailyClaim = useCallback(() => {
+    // Prevent double-claim: check if already pending
+    if (isWriteDailyPending || isDailyTxConfirming) {
+      return;
+    }
+
     if (!isConnected || !address) {
       setToast({ type: "error", message: "Please connect your wallet" });
       return;
@@ -330,9 +379,14 @@ export default function ChestView() {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
     }
-  };
+  }, [isConnected, address, isBaseNetwork, dailyChestData, isWriteDailyPending, isDailyTxConfirming, writeDailyClaim]);
 
-  const handleSilverClaim = () => {
+  const handleSilverClaim = useCallback(() => {
+    // Prevent double-claim: check if already pending
+    if (isWriteSilverPending || isSilverTxConfirming) {
+      return;
+    }
+
     if (!isConnected || !address) {
       setToast({ type: "error", message: "Please connect your wallet" });
       return;
@@ -368,9 +422,14 @@ export default function ChestView() {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
     }
-  };
+  }, [isConnected, address, isBaseNetwork, silverChestData, isWriteSilverPending, isSilverTxConfirming, writeSilverClaim]);
 
-  const handleStakingClaim = (tokenId: number, lockDays: number) => {
+  const handleStakingClaim = useCallback((tokenId: number, lockDays: number) => {
+    // Prevent double-claim: check if already pending or claiming
+    if (isWriteStakingPending || isStakingTxConfirming || claimingPosition) {
+      return;
+    }
+
     // Preconditions check
     if (!isConnected || !address) {
       setToast({ type: "error", message: "Please connect your wallet" });
@@ -392,7 +451,7 @@ export default function ChestView() {
       return;
     }
 
-    // Disable button immediately
+    // Disable button immediately to prevent double-claim
     setClaimingPosition({ tokenId, lockDays });
 
     try {
@@ -410,25 +469,30 @@ export default function ChestView() {
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
+      // Clear claiming position on error
       setClaimingPosition(null);
     }
-  };
+  }, [isConnected, address, isBaseNetwork, stakingPositions, isWriteStakingPending, isStakingTxConfirming, claimingPosition, writeStakingClaim]);
 
-  // Daily Bronze card state
+  // Daily Bronze card state - fully lock button during any pending state
   const dailyCanClaim = dailyChestData?.canClaim ?? false;
   const dailyTimeUntilClaim = dailyChestData?.timeUntilClaim ?? BigInt(0);
   const dailyButtonDisabled = !isConnected || !isBaseNetwork || !dailyCanClaim || isWriteDailyPending || isDailyTxConfirming;
-  const dailyButtonLabel = dailyCanClaim
+  const dailyButtonLabel = isWriteDailyPending || isDailyTxConfirming
+    ? "Claiming..."
+    : dailyCanClaim
     ? "Open now (3 FRH)"
     : `Next claim in: ${formatTimeUntilClaim(dailyTimeUntilClaim)}`;
   const dailyProgress = dailyCanClaim ? 100 : Math.max(0, 100 - Math.round((Number(dailyTimeUntilClaim) / 86400) * 100));
 
-  // Silver Chest card state
+  // Silver Chest card state - fully lock button during any pending state
   const silverCanClaim = silverChestData?.canClaim ?? false;
   const silverHasStaked = silverChestData?.hasStaked ?? false;
   const silverTimeUntilClaim = silverChestData?.timeUntilClaim ?? BigInt(0);
   const silverButtonDisabled = !isConnected || !isBaseNetwork || !silverHasStaked || !silverCanClaim || isWriteSilverPending || isSilverTxConfirming;
-  const silverButtonLabel = !silverHasStaked
+  const silverButtonLabel = isWriteSilverPending || isSilverTxConfirming
+    ? "Claiming..."
+    : !silverHasStaked
     ? "Stake NFTs to unlock"
     : silverCanClaim
     ? "Open now (6 FRH)"
@@ -626,6 +690,7 @@ export default function ChestView() {
                 // If unlocked & not claimed, show enabled claim button
                 // Note: We don't have a way to track if already claimed, so we show claim button if canClaim is true
                 if (position.canClaim) {
+                  // Fully lock button during any pending state or if this position is being claimed
                   const claimDisabled = isPending || isClaiming;
                   return (
                     <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
@@ -640,7 +705,12 @@ export default function ChestView() {
                       <button
                         type="button"
                         disabled={claimDisabled}
-                        onClick={() => !claimDisabled && handleStakingClaim(position.tokenId, position.lockDays)}
+                        onClick={() => {
+                          // Double-check to prevent any race condition
+                          if (!claimDisabled && !isPending && !isClaiming) {
+                            handleStakingClaim(position.tokenId, position.lockDays);
+                          }
+                        }}
                         className={`w-full rounded-lg py-2 text-sm font-semibold transition ${
                           claimDisabled
                             ? "bg-white/10 text-white/40 cursor-not-allowed"

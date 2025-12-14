@@ -109,6 +109,7 @@ export default function HomeClient() {
   const [mintedTokenUri, setMintedTokenUri] = useState<string | null>(null);
   const [claimInfo, setClaimInfo] = useState<Map<number, TokenClaimInfo>>(new Map());
   const [loadingClaimConditions, setLoadingClaimConditions] = useState(false);
+  const [justMinted, setJustMinted] = useState(false);
 
   const {
     writeContract: writeMint,
@@ -408,10 +409,12 @@ export default function HomeClient() {
   useEffect(() => {
     if (typeof window !== "undefined" && isConnected && address) {
       checkHasMinted();
+      setJustMinted(false); // Reset justMinted when wallet changes
     } else {
       setHasMinted(false);
       setLastMintedTokenId(null);
       setMintedTokenUri(null);
+      setJustMinted(false);
     }
   }, [isConnected, address, checkHasMinted]);
 
@@ -422,6 +425,7 @@ export default function HomeClient() {
       fetchAllClaimConditions();
       checkHasMinted();
       setIsMinting(false);
+      setJustMinted(true);
       setToast({ type: "success", message: "Mint successful!" });
     }
   }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, checkHasMinted]);
@@ -583,22 +587,27 @@ export default function HomeClient() {
     }
   }, [address, isConnected, hasMinted, supplyInfo, claimInfo, writeMint, handleConnect]);
 
+  // Generate referral link using last 8 characters of wallet address
+  const referralLink = useMemo(() => {
+    if (!address) return null;
+    const refCode = address.slice(-8).toLowerCase();
+    return `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${refCode}`;
+  }, [address]);
+
   const handleShare = useCallback(() => {
     const isInFarcaster = isFarcasterEnv || detectFarcasterEnvironment();
 
     if (typeof window === "undefined") return;
 
-    // Generate referral link with refCode
-    let shareUrl = REFERRAL_APP_URL;
-    if (address) {
-      const refCode = address.slice(-6).toLowerCase();
-      shareUrl = `${REFERRAL_APP_URL}?ref=${refCode}`;
-    }
+    // Generate referral link with refCode (last 8 chars)
+    const shareUrl = referralLink || REFERRAL_APP_URL;
 
-    const castText = `I just mint FarFISH limited edition NFT. Join the wave...\n${shareUrl}`;
+    // Exact share text as specified
+    const castText = `Hey, I just minted a FarFISH limited edition NFT 🐟 Join the wave on Base 👇\n${shareUrl}`;
 
     if (isInFarcaster) {
       try {
+        // Use Farcaster compose API to prefill post
         window.parent?.postMessage(
           {
             type: "createCast",
@@ -610,17 +619,16 @@ export default function HomeClient() {
           },
           "*",
         );
-        setToast({ type: "success", message: "Composer opened" });
         return;
       } catch (error) {
         console.error("Failed to open native composer", error);
       }
     }
 
+    // Fallback to Warpcast compose URL
     const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
     window.open(warpcastUrl, "_blank", "noopener,noreferrer");
-    setToast({ type: "success", message: "Composer opened" });
-  }, [isFarcasterEnv, address]);
+  }, [isFarcasterEnv, referralLink]);
 
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {
@@ -667,24 +675,15 @@ export default function HomeClient() {
     return null;
   }, [supplyInfo, claimInfo]);
 
-  // Button states and labels
+  // Button states and labels - only: Mint, Minted, Already Minted
   const primaryButtonLabel = useMemo(() => {
-    if (!NFT_CONTRACT_ADDRESS) return "Mint disabled";
-    if (!address || !isConnected) return "Connect Farcaster";
-    if (hasMinted) return "Already minted";
-    if (isMinting || isMintPending || isMintConfirming) return "Minting…";
-    if (loadingClaimConditions) return "Loading…";
-    if (representativePrice !== null) {
-      const priceEth = Number(representativePrice) / 1e18;
-      return `Mint (${priceEth.toFixed(4)} ETH)`;
-    }
-    // Check if any claim conditions are configured
-    const hasAnyClaimCondition = Array.from(claimInfo.values()).some((info) => info.condition !== null);
-    if (!hasAnyClaimCondition && !loadingClaimConditions) {
-      return "Mint price not configured";
+    if (hasMinted) {
+      // Show "Minted" if just confirmed, otherwise "Already Minted"
+      if (justMinted || isMintConfirmed) return "Minted";
+      return "Already Minted";
     }
     return "Mint";
-  }, [address, isConnected, hasMinted, isMinting, isMintPending, isMintConfirming, representativePrice, claimInfo, loadingClaimConditions]);
+  }, [hasMinted, isMintConfirmed, justMinted]);
 
   const primaryButtonClasses = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) {
@@ -799,7 +798,7 @@ export default function HomeClient() {
                   Minted: {lastMintedDisplay}
                   {mintedTokenUri && (
                     <a
-                      href="/profile?viewNft=true"
+                      href="/profile"
                       className="ml-2 underline"
                     >
                       View NFT
@@ -824,6 +823,10 @@ export default function HomeClient() {
             >
               Share
             </button>
+            {/* PRICE TEXT */}
+            <p className="text-xs text-white/70 text-center mt-2">
+              You have to pay 0.003 ETH + gas
+            </p>
           </div>
 
           {toast && (
@@ -843,10 +846,10 @@ export default function HomeClient() {
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
           <h3 className="font-bold mb-2">Why mint a FarFISH?</h3>
           <ul className="text-sm text-white/70 space-y-1 pl-4">
-            <li>• Staking rewards (30/90/180/360 days)</li>
-            <li>• Multiple NFT types (Bluefin, GoldRay, RedSpike, ShadowGill)</li>
-            <li>• Limited editions</li>
-            <li>• Powering growth in the Base ecosystem</li>
+            <li>• Multiple NFT tiers with different utility</li>
+            <li>• Limited supply and long-term scarcity</li>
+            <li>• Designed to support growth on the Base ecosystem</li>
+            <li>• Earn staking rewards over time (30 / 90 / 180 / 360 days)</li>
           </ul>
         </div>
 

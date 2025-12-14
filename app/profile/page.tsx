@@ -278,7 +278,7 @@ function ProfilePageContent() {
     []
   );
 
-  // Verify task
+  // Verify task (UX-based, no hard verification)
   const handleVerifyTask = useCallback(async (taskType: "follow" | "recast") => {
     if (!address) {
       showToast("error", "Please connect your wallet");
@@ -287,6 +287,7 @@ function ProfilePageContent() {
 
     setVerifyingTask(taskType);
     try {
+      // UX-based verification: mark as verified when user clicks Verify
       const res = await fetch("/api/referral/verify-tasks", {
         method: "POST",
         headers: {
@@ -304,6 +305,7 @@ function ProfilePageContent() {
       }
 
       const data = await res.json();
+      // Mark task as verified immediately (UX-based)
       setTaskState({
         followComplete: Boolean(data?.followComplete ?? (taskType === "follow" ? true : taskState.followComplete)),
         recastComplete: Boolean(data?.recastComplete ?? (taskType === "recast" ? true : taskState.recastComplete)),
@@ -495,8 +497,8 @@ function ProfilePageContent() {
                 <button
                   type="button"
                   onClick={() => {
-                    window.open(FARCASTER_PROFILE_URL, "_blank");
-                    setTimeout(() => handleVerifyTask("follow"), 1000);
+                    // UX-based verification: mark as verified when user clicks Verify
+                    handleVerifyTask("follow");
                   }}
                   disabled={verifyingTask === "follow"}
                   className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
@@ -513,8 +515,8 @@ function ProfilePageContent() {
                 <button
                   type="button"
                   onClick={() => {
-                    window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank");
-                    setTimeout(() => handleVerifyTask("recast"), 1000);
+                    // UX-based verification: mark as verified when user clicks Verify
+                    handleVerifyTask("recast");
                   }}
                   disabled={verifyingTask === "recast"}
                   className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
@@ -537,21 +539,18 @@ function ProfilePageContent() {
                   <p className="text-xs text-white/70 mb-2">
                     Your referral link:
                   </p>
-                  <div className="flex items-center gap-2 mb-2">
-                    <p className="text-xs text-white/90 font-mono">
-                      {user.walletAddress.slice(-8).toLowerCase()}
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-white/90 font-mono break-all flex-1">
+                      {referralState.link || createReferralLink(user.walletAddress)}
                     </p>
                     <button
                       type="button"
                       onClick={handleCopyReferralLink}
-                      className="rounded-lg bg-white/10 border border-white/10 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/20 transition"
+                      className="rounded-lg bg-white/10 border border-white/10 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/20 transition flex-shrink-0"
                     >
                       Copy
                     </button>
                   </div>
-                  <p className="text-xs text-white/60 font-mono break-all">
-                    {referralState.link || createReferralLink(user.walletAddress)}
-                  </p>
                 </div>
                 <p className="text-sm text-white/80">
                   Referrals Completed: {referralState.referralsCount ?? 0}

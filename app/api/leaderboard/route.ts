@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
-import { base, Chain } from "viem/chains";
-import stakeAbi from "../../abi/stake.json";
-import { STAKING_CONTRACT_ADDRESS } from "../../constants";
-import { ensureReferralEnv, getPublicReferralEnv } from "../../config/referral";
+import { ensureReferralEnv } from "../../config/referral";
 import { getKey, smembers } from "../../../lib/upstash";
 
 type LeaderboardRow = {
   wallet: string;
   referrals_count: number;
-  stake_score: number;
-  score: number;
+  rewards: number; // Referrals × 20 FRH
 };
 
 export const dynamic = "force-dynamic";
@@ -24,18 +19,7 @@ export async function GET() {
     return NextResponse.json({ error: error?.message || "Missing required environment variables" }, { status: 500 });
   }
 
-  if (!STAKING_CONTRACT_ADDRESS) {
-    return NextResponse.json({ error: "Missing staking contract address" }, { status: 500 });
-  }
-
   try {
-    const { chainId } = getPublicReferralEnv();
-    const chain: Chain = chainId === base.id ? base : { ...base, id: chainId };
-    const client = createPublicClient({
-      chain,
-      transport: http(),
-    });
-
     const referrers = await smembers("set:referrers");
     if (!referrers.length) {
       return NextResponse.json([]);
@@ -54,35 +38,14 @@ export async function GET() {
       })
     );
 
-    const withStakeScores: LeaderboardRow[] = await Promise.all(
-      withCounts.map(async (row) => {
-        let stake_score = 0;
-        try {
-          const stakeInfo = await client.readContract({
-            address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-            abi: stakeAbi as any,
-            functionName: "getStakeInfo",
-            args: [row.wallet as `0x${string}`],
-          } as any);
+    // Calculate rewards: referrals × 20 FRH (referral-based only, no staking)
+    const withRewards: LeaderboardRow[] = withCounts.map((row) => ({
+      ...row,
+      rewards: row.referrals_count * 20, // Referrals × 20 FRH
+    }));
 
-          const totalRewards = Array.isArray(stakeInfo) && stakeInfo.length >= 3 ? (stakeInfo[2] as bigint) : BigInt(0);
-          stake_score = Number(totalRewards ?? 0);
-        } catch (error) {
-          console.error(`Failed to read stake info for ${row.wallet}:`, error);
-        }
-
-        // No multiplier logic - rewards = direct FRH amount (stake_score)
-        // Rank by stake_score only (direct FRH rewards)
-        return {
-          ...row,
-          stake_score,
-          score: stake_score, // Use stake_score for ranking (direct FRH)
-        };
-      })
-    );
-
-    // Get top 100, ranked by stake_score (direct FRH)
-    const finalRows = withStakeScores.sort((a, b) => b.stake_score - a.stake_score).slice(0, 100);
+    // Get top 100, ranked by referral count (descending)
+    const finalRows = withRewards.sort((a, b) => b.referrals_count - a.referrals_count).slice(0, 100);
     const withRanks = finalRows.map((row, idx) => ({
       rank: idx + 1,
       ...row,
