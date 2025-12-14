@@ -7,6 +7,7 @@ import { useAccount, useReadContract, useChainId } from "wagmi";
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "../lib/wagmi";
 import { base } from "viem/chains";
+import { formatUnits } from "viem";
 import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
 import StakeModal from "../components/StakeModal";
@@ -25,7 +26,8 @@ interface StakedPosition {
   stakedAt: bigint;
   lockDays: bigint;
   isUnlocked: boolean;
-  remainingLockDays?: number;
+  lockDaysDisplay: string; // Pre-calculated display string
+  rewardsDisplay: string; // Pre-formatted rewards string
   lockEndTimestamp?: bigint;
   rewards?: bigint;
 }
@@ -125,12 +127,52 @@ export default function StakingPage() {
     return () => clearInterval(interval);
   }, [readEnabled]);
 
+  // Calculate lock days display string (function with guards)
+  const calculateLockDaysDisplay = (lockEnd: bigint | undefined, currentBlock: bigint | null): string => {
+    // Guard: if no lockEnd or currentBlock, return "—"
+    if (!lockEnd || !currentBlock) return "—";
+    
+    // Guard: if lockEnd <= currentBlock, return "Unlocked"
+    if (lockEnd <= currentBlock) return "Unlocked";
+    
+    // Calculate: (lockEnd - currentBlock) / 86400
+    try {
+      const remainingSeconds = lockEnd - currentBlock;
+      const days = Number(remainingSeconds) / 86400;
+      
+      // Guard: check for NaN or invalid
+      if (!Number.isFinite(days) || days <= 0) return "—";
+      
+      return `${Math.ceil(days)} days`;
+    } catch (error) {
+      console.error("Error calculating lock days:", error);
+      return "—";
+    }
+  };
+
+  // Format rewards using formatUnits (function with guards)
+  const formatRewards = (rewards: bigint | undefined): string => {
+    if (!rewards || rewards === BigInt(0)) return "0";
+    
+    try {
+      // Use formatUnits with 18 decimals
+      const formatted = formatUnits(rewards, 18);
+      // Convert to number for toLocaleString, then back to string
+      const num = parseFloat(formatted);
+      if (!Number.isFinite(num)) return "0";
+      return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    } catch (error) {
+      console.error("Error formatting rewards:", error);
+      return "0";
+    }
+  };
+
   // Combine positions with detailed info - only include tokens that are actually staked
   const stakedPositions: StakedPosition[] = useMemo(() => {
     const result: StakedPosition[] = [];
     
+    // Guard: return empty if no block timestamp
     if (!currentBlockTimestamp) {
-      // Return empty if we don't have block timestamp yet
       return result;
     }
     
@@ -148,26 +190,31 @@ export default function StakingPage() {
       // Try to get rewards - might be in a different index or property
       const rewards = typeof data === "object" && "rewards" in data ? data.rewards : (Array.isArray(data) && data.length > 3 ? data[3] : BigInt(0));
       
-      if (quantity <= BigInt(0)) return;
+      // Guard: skip if quantity is zero or invalid
+      if (!quantity || quantity <= BigInt(0)) return;
+      
+      // Guard: validate stakedAt and lockDays
+      if (!stakedAt || !lockDays) return;
       
       // Calculate lock end timestamp (stakedAt + lockDays in seconds)
-      const lockEndTimestamp = stakedAt + (lockDays * BigInt(86400));
-      
-      // Calculate remaining lock days: (lockEndTimestamp - currentBlockTimestamp) / 86400
-      let remainingLockDays: number;
-      if (lockEndTimestamp <= currentBlockTimestamp) {
-        // Expired - unlocked
-        remainingLockDays = 0;
-      } else {
-        const remainingSeconds = lockEndTimestamp - currentBlockTimestamp;
-        remainingLockDays = Number(remainingSeconds) / 86400;
-        // Handle edge cases
-        if (!Number.isFinite(remainingLockDays) || remainingLockDays < 0) {
-          remainingLockDays = 0;
-        }
+      let lockEndTimestamp: bigint;
+      try {
+        lockEndTimestamp = stakedAt + (lockDays * BigInt(86400));
+      } catch (error) {
+        console.error("Error calculating lockEndTimestamp:", error);
+        return;
       }
       
+      // Guard: validate lockEndTimestamp
+      if (!lockEndTimestamp) return;
+      
       const isUnlocked = lockEndTimestamp <= currentBlockTimestamp;
+      
+      // Calculate lock days display (with guards)
+      const lockDaysDisplay = calculateLockDaysDisplay(lockEndTimestamp, currentBlockTimestamp);
+      
+      // Format rewards (with guards)
+      const rewardsDisplay = formatRewards(rewards);
       
       result.push({
         tokenId,
@@ -175,7 +222,8 @@ export default function StakingPage() {
         stakedAt,
         lockDays,
         isUnlocked,
-        remainingLockDays,
+        lockDaysDisplay,
+        rewardsDisplay,
         lockEndTimestamp,
         rewards,
       });
@@ -229,10 +277,10 @@ export default function StakingPage() {
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-lg">My Staked NFTs</h3>
-            {readEnabled && !isLoading && totalRewards > 0 && (
+            {readEnabled && !isLoading && totalRewards > BigInt(0) && (
               <div className="text-sm text-white/70">
                 Total Rewards: <span className="font-semibold text-[#00d4c4]">
-                  {(Number(totalRewards) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 2 })} FRH
+                  {formatRewards(totalRewards)} FRH
                 </span>
               </div>
             )}
@@ -246,54 +294,69 @@ export default function StakingPage() {
           {readEnabled && !isLoading && stakedPositions.length === 0 && (
             <p className="text-sm text-white/70">You have no staked NFTs yet. Use the Stake NFT button above to get started.</p>
           )}
-          {readEnabled && !isLoading && stakedPositions.length > 0 && (
-            <div className="space-y-3">
-              {stakedPositions.map((position) => {
-                return (
-                  <div
-                    key={`${position.tokenId}-${position.stakedAt}`}
-                    className="rounded-xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold">
-                          {getNameFromTokenId(position.tokenId) ?? "FarFISH"}
-                        </p>
-                        <p className="text-xs text-white/70 mt-1">
-                          Quantity Staked: {Number(position.quantity).toLocaleString()}
-                        </p>
-                        <p className="text-xs text-white/70 mt-1">
-                          Lock Duration: {(() => {
-                            if (position.remainingLockDays === undefined) return "—";
-                            if (position.isUnlocked) return "Unlocked";
-                            if (!Number.isFinite(position.remainingLockDays) || position.remainingLockDays <= 0) return "—";
-                            return `${Math.ceil(position.remainingLockDays)} days`;
-                          })()}
-                        </p>
-                        {position.rewards !== undefined && position.rewards > BigInt(0) && (
-                          <p className="text-xs text-white/70 mt-1">
-                            Rewards: <span className="font-semibold text-[#00d4c4]">
-                              {(Number(position.rewards) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 2 })} FRH
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedUnstakePosition(position);
-                        setIsUnstakeModalOpen(true);
-                      }}
-                      className="mt-2 w-full rounded-lg py-2 text-sm font-semibold transition bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+          {readEnabled && !isLoading && (() => {
+            // Render guard: check if positions is valid array
+            if (!stakedPositions || !Array.isArray(stakedPositions) || stakedPositions.length === 0) {
+              return null;
+            }
+            
+            return (
+              <div className="space-y-3">
+                {stakedPositions.map((position) => {
+                  // Guard: validate position data
+                  if (!position || position.tokenId === undefined) return null;
+                  
+                  // Guard: validate lockEndTimestamp
+                  const lockEnd = position.lockEndTimestamp;
+                  const rewardAmount = position.rewards;
+                  
+                  return (
+                    <div
+                      key={`${position.tokenId}-${position.stakedAt}`}
+                      className="rounded-xl border border-white/10 bg-white/5 p-4"
                     >
-                      Unstake
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">
+                            {getNameFromTokenId(position.tokenId) ?? "FarFISH"}
+                          </p>
+                          <p className="text-xs text-white/70 mt-1">
+                            Quantity Staked: {(() => {
+                              try {
+                                return Number(position.quantity).toLocaleString();
+                              } catch {
+                                return "0";
+                              }
+                            })()}
+                          </p>
+                          <p className="text-xs text-white/70 mt-1">
+                            Lock Duration: {position.lockDaysDisplay || "—"}
+                          </p>
+                          {rewardAmount !== undefined && rewardAmount > BigInt(0) && (
+                            <p className="text-xs text-white/70 mt-1">
+                              Rewards: <span className="font-semibold text-[#00d4c4]">
+                                {position.rewardsDisplay || "0"} FRH
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUnstakePosition(position);
+                          setIsUnstakeModalOpen(true);
+                        }}
+                        className="mt-2 w-full rounded-lg py-2 text-sm font-semibold transition bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+                      >
+                        Unstake
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </section>
       </div>
 
