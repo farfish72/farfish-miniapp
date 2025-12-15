@@ -30,7 +30,7 @@ type ReferralState = {
 type TaskState = {
   followComplete: boolean;
   recastComplete: boolean;
-};
+} | null;
 
 type LiveStats = {
   nftsOwned: number;
@@ -98,9 +98,8 @@ function ProfilePageContent() {
   const [toast, setToast] = useState<ToastState>(null);
   const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
   const [loadingStats, setLoadingStats] = useState(false);
-  // Initialize task state as empty - will be loaded from KV only
-  const [taskState, setTaskState] = useState<TaskState>({ followComplete: false, recastComplete: false });
-  const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
+  // Task state is loaded from KV; start null to avoid false flashes
+  const [taskState, setTaskState] = useState<TaskState>(null);
   const [nftInfo, setNftInfo] = useState<{ tokenId: number; uri: string } | null>(null);
   const { blocked, message } = useFarcasterGate();
 
@@ -295,7 +294,11 @@ function ProfilePageContent() {
     []
   );
 
-  // Handle Go button - opens link and marks task as complete after API confirms
+  const followComplete = taskState?.followComplete === true;
+  const recastComplete = taskState?.recastComplete === true;
+  const tasksLoading = taskState === null;
+
+  // Handle Go button - opens link and persists completion via KV, then refetches
   const handleGoTask = useCallback(async (taskType: "follow" | "recast") => {
     if (!address) {
       showToast("error", "Please connect your wallet");
@@ -309,10 +312,10 @@ function ProfilePageContent() {
       window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
     }
 
-    // Prepare new state
+    const current = taskState ?? { followComplete: false, recastComplete: false };
     const newState = {
-      followComplete: taskType === "follow" ? true : taskState.followComplete,
-      recastComplete: taskType === "recast" ? true : taskState.recastComplete,
+      followComplete: taskType === "follow" ? true : current.followComplete,
+      recastComplete: taskType === "recast" ? true : current.recastComplete,
     };
 
     // Persist to KV first, then update state from API response
@@ -335,46 +338,6 @@ function ProfilePageContent() {
     } catch (error) {
       console.error("Failed to save task status:", error);
       // Do NOT update state on error - keep existing state
-    }
-  }, [address, taskState, showToast, fetchTaskStatus]);
-
-  // Verify task (UX-based, no hard verification)
-  const handleVerifyTask = useCallback(async (taskType: "follow" | "recast") => {
-    if (!address) {
-      showToast("error", "Please connect your wallet");
-      return;
-    }
-
-    setVerifyingTask(taskType);
-    try {
-      // Prepare new state
-      const newState = {
-        followComplete: taskType === "follow" ? true : taskState.followComplete,
-        recastComplete: taskType === "recast" ? true : taskState.recastComplete,
-      };
-
-      const res = await fetch("/api/referral/verify-tasks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-wallet": address,
-        },
-        body: JSON.stringify(newState),
-      });
-
-      if (!res.ok) {
-        throw new Error("Verification failed");
-      }
-
-      // Re-fetch task state from API - do NOT optimistically update
-      await fetchTaskStatus();
-      showToast("success", "Task verified successfully");
-    } catch (error) {
-      console.error("Failed to verify task:", error);
-      showToast("error", "Failed to verify task. Please try again.");
-      // Do NOT update state on error - keep existing state
-    } finally {
-      setVerifyingTask(null);
     }
   }, [address, taskState, showToast, fetchTaskStatus]);
 
@@ -558,30 +521,23 @@ function ProfilePageContent() {
           <p className="text-sm text-white/70">
             Complete tasks to verify referrals. Share your link to earn referral rewards.
           </p>
+          {tasksLoading && (
+            <p className="text-xs text-white/60 mt-2">Loading task status...</p>
+          )}
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
               <span className="text-sm font-semibold text-white/80 flex-1">Follow on Farcaster</span>
               <div className="flex items-center gap-2">
-                {!taskState.followComplete && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleGoTask("follow")}
-                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
-                    >
-                      Go
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleVerifyTask("follow")}
-                      disabled={verifyingTask === "follow"}
-                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
-                    >
-                      {verifyingTask === "follow" ? "Verifying..." : "Verify"}
-                    </button>
-                  </>
+                {!followComplete && !tasksLoading && (
+                  <button
+                    type="button"
+                    onClick={() => handleGoTask("follow")}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                  >
+                    Go
+                  </button>
                 )}
-                {taskState.followComplete && (
+                {followComplete && (
                   <span className="text-green-400 text-lg">✔</span>
                 )}
               </div>
@@ -589,26 +545,16 @@ function ProfilePageContent() {
             <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
               <span className="text-sm font-semibold text-white/80 flex-1">Like & Recast</span>
               <div className="flex items-center gap-2">
-                {!taskState.recastComplete && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleGoTask("recast")}
-                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
-                    >
-                      Go
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleVerifyTask("recast")}
-                      disabled={verifyingTask === "recast"}
-                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
-                    >
-                      {verifyingTask === "recast" ? "Verifying..." : "Verify"}
-                    </button>
-                  </>
+                {!recastComplete && !tasksLoading && (
+                  <button
+                    type="button"
+                    onClick={() => handleGoTask("recast")}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                  >
+                    Go
+                  </button>
                 )}
-                {taskState.recastComplete && (
+                {recastComplete && (
                   <span className="text-green-400 text-lg">✔</span>
                 )}
               </div>
