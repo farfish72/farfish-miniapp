@@ -1,53 +1,70 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureReferralEnv } from "../../../config/referral";
-import { getKey, setKey, incrKey } from "../../../../lib/upstash";
+import { getKey, setKey } from "../../../../lib/upstash";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
 export const dynamic = "force-dynamic";
 
+type VerifyTasksBody = {
+  wallet: string;
+  task: "follow" | "recast";
+};
+
 /**
- * Verify that a user has completed both tasks:
- * 1. Follow FarFISH on Farcaster
- * 2. Like & Recast the provided post
- * 
- * Only when both are verified, count as a verified referral for the referrer
+ * Persist referral task completion in KV.
+ *
+ * Expects JSON body: { wallet: string, task: "follow" | "recast" }
+ * - Uses wallet from the BODY only (no headers)
+ * - Uses `tasks:{wallet}` as the sole KV key
+ * - Never resets completed tasks back to false once written
  */
 export async function POST(req: NextRequest) {
   try {
     ensureReferralEnv();
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Missing required environment variables" }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Missing required environment variables" },
+      { status: 500 },
+    );
   }
 
-  const callerWallet = req.headers.get("x-user-wallet")?.trim();
-  if (!callerWallet || !walletRegex.test(callerWallet)) {
-    return NextResponse.json({ error: "Missing or invalid caller wallet" }, { status: 400 });
-  }
-
-  let body: { followComplete?: boolean; recastComplete?: boolean } = {};
+  let body: VerifyTasksBody;
   try {
-    body = (await req.json()) as { followComplete?: boolean; recastComplete?: boolean };
+    body = (await req.json()) as VerifyTasksBody;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const followComplete = Boolean(body.followComplete);
-  const recastComplete = Boolean(body.recastComplete);
+  const rawWallet = body.wallet?.trim();
+  const task = body.task;
+
+  if (!rawWallet || !walletRegex.test(rawWallet)) {
+    return NextResponse.json({ error: "Missing or invalid wallet" }, { status: 400 });
+  }
+
+  if (task !== "follow" && task !== "recast") {
+    return NextResponse.json({ error: "Invalid task" }, { status: 400 });
+  }
+
+  const wallet = rawWallet.toLowerCase();
 
   try {
-    const wallet = callerWallet.toLowerCase();
+    // Read existing task status from KV (if any)
+    const existing =
+      (await getKey<{ followComplete?: boolean; recastComplete?: boolean } | null>(
+        `tasks:${wallet}`,
+      )) ?? {};
 
-    // Store task completion status
+    // Never reset a completed task once it's true
+    const followComplete = existing.followComplete === true || task === "follow";
+    const recastComplete = existing.recastComplete === true || task === "recast";
+
     await setKey(`tasks:${wallet}`, {
       followComplete,
       recastComplete,
       updatedAt: new Date().toISOString(),
     });
-
-    // Note: Referral counting now happens immediately on app open via /api/referral/record
-    // Tasks are UX-based only (soft verification) and don't affect referral counting
-    // This endpoint just stores task completion status for display purposes
 
     return NextResponse.json({
       success: true,
@@ -56,6 +73,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Task verification failed:", error);
-    return NextResponse.json({ error: error?.message || "Failed to verify tasks" }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Failed to verify tasks" },
+      { status: 500 },
+    );
   }
 }

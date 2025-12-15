@@ -312,21 +312,17 @@ function ProfilePageContent() {
       window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
     }
 
-    const current = taskState ?? { followComplete: false, recastComplete: false };
-    const newState = {
-      followComplete: taskType === "follow" ? true : current.followComplete,
-      recastComplete: taskType === "recast" ? true : current.recastComplete,
-    };
-
-    // Persist to KV first, then update state from API response
+    // Persist to KV using wallet + task, then update state from API response
     try {
       const res = await fetch("/api/referral/verify-tasks", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-user-wallet": address,
         },
-        body: JSON.stringify(newState),
+        body: JSON.stringify({
+          wallet: address,
+          task: taskType,
+        }),
       });
 
       if (res.ok) {
