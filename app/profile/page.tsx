@@ -98,7 +98,7 @@ function ProfilePageContent() {
   const [toast, setToast] = useState<ToastState>(null);
   const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
   const [loadingStats, setLoadingStats] = useState(false);
-  // Task state is loaded from KV; start null to avoid false flashes
+  // Task state is loaded from KV; start null to avoid flashes
   const [taskState, setTaskState] = useState<TaskState>(null);
   const [nftInfo, setNftInfo] = useState<{ tokenId: number; uri: string } | null>(null);
   const { blocked, message } = useFarcasterGate();
@@ -245,97 +245,50 @@ function ProfilePageContent() {
     fetchLiveStats();
   }, [fetchLiveStats]);
 
-  // Fetch task completion status - ONLY from KV, never reset to false
+  // Fetch task completion status from KV (tasks:{wallet})
   const fetchTaskStatus = useCallback(async () => {
     if (!address) {
-      // Do NOT reset state when address is unavailable - just return early
+      // Do not reset local state when address is unavailable
       return;
     }
 
     try {
       const res = await fetch(`/api/profile/tasks?wallet=${address}`, {
-        headers: { "x-user-wallet": address },
         cache: "no-store",
       });
       if (res.ok) {
         const data = await res.json();
-        // Only update state from API response - never reset to false
-        setTaskState({
-          followComplete: Boolean(data?.followComplete),
-          recastComplete: Boolean(data?.recastComplete),
-        });
+        // Only set values from KV; never flip a true back to false locally
+        setTaskState((prev) => ({
+          followComplete: prev?.followComplete === true || Boolean(data?.followComplete),
+          recastComplete: prev?.recastComplete === true || Boolean(data?.recastComplete),
+        }));
       }
     } catch (error) {
       console.error("Failed to fetch task status:", error);
-      // Do NOT reset state on error - keep existing state
+      // Keep any existing state on error
     }
   }, [address]);
 
-  // Track last fetched address to prevent unnecessary re-fetches
+  // Track last fetched address to avoid redundant fetches
   const lastFetchedAddressRef = useRef<string | null>(null);
 
-  // Fetch task status when address is available and hasn't been fetched yet
   useEffect(() => {
     if (address && address !== lastFetchedAddressRef.current) {
       lastFetchedAddressRef.current = address;
       fetchTaskStatus();
     }
-    // If address becomes undefined, clear the ref but don't reset task state
+
     if (!address) {
       lastFetchedAddressRef.current = null;
-      // Do NOT reset taskState - keep it as is
+      // Do not clear taskState to avoid losing persisted completion indicators
     }
-    // Only run when address changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address]);
+  }, [address, fetchTaskStatus]);
 
   const showToast = useCallback(
     (type: "error" | "success", msg: string) => setToast({ type, message: msg }),
     []
   );
-
-  const followComplete = taskState?.followComplete === true;
-  const recastComplete = taskState?.recastComplete === true;
-  const tasksLoading = taskState === null;
-
-  // Handle Go button - opens link and persists completion via KV, then refetches
-  const handleGoTask = useCallback(async (taskType: "follow" | "recast") => {
-    if (!address) {
-      showToast("error", "Please connect your wallet");
-      return;
-    }
-
-    // Open the appropriate link
-    if (taskType === "follow") {
-      window.open(FARCASTER_PROFILE_URL, "_blank", "noopener,noreferrer");
-    } else {
-      window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
-    }
-
-    // Persist to KV using wallet + task, then update state from API response
-    try {
-      const res = await fetch("/api/referral/verify-tasks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          wallet: address,
-          task: taskType,
-        }),
-      });
-
-      if (res.ok) {
-        // Re-fetch task state from API to ensure consistency
-        await fetchTaskStatus();
-      } else {
-        console.error("Failed to save task status");
-      }
-    } catch (error) {
-      console.error("Failed to save task status:", error);
-      // Do NOT update state on error - keep existing state
-    }
-  }, [address, taskState, showToast, fetchTaskStatus]);
 
   const stats = useMemo(
     () => [
@@ -357,6 +310,50 @@ function ProfilePageContent() {
       },
     ],
     [liveStats, loadingStats]
+  );
+
+  const followComplete = taskState?.followComplete === true;
+  const recastComplete = taskState?.recastComplete === true;
+  const tasksLoading = taskState === null;
+
+  // Bypass-style auto completion: click -> mark complete in KV (tasks:{wallet})
+  const handleGoTask = useCallback(
+    async (taskType: "follow" | "recast") => {
+      if (!address) {
+        showToast("error", "Please connect your wallet");
+        return;
+      }
+
+      // Optionally open related Farcaster destinations (no verification)
+      if (taskType === "follow") {
+        window.open(FARCASTER_PROFILE_URL, "_blank", "noopener,noreferrer");
+      } else {
+        window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
+      }
+
+      try {
+        const res = await fetch("/api/referral/verify-tasks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            wallet: address,
+            task: taskType,
+          }),
+        });
+
+        if (res.ok) {
+          // Always refresh from KV so UI state is solely KV-driven
+          await fetchTaskStatus();
+        } else {
+          console.error("Failed to save task status");
+        }
+      } catch (error) {
+        console.error("Failed to save task status:", error);
+      }
+    },
+    [address, fetchTaskStatus, showToast],
   );
 
   const createReferralLink = useCallback((wallet: string) => {
@@ -515,7 +512,7 @@ function ProfilePageContent() {
         <section id="refer-earn" className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
           <p className="text-sm text-white/70">
-            Complete tasks to verify referrals. Share your link to earn referral rewards.
+            Share your referral link to invite friends and grow the FarFISH community.
           </p>
           {tasksLoading && (
             <p className="text-xs text-white/60 mt-2">Loading task status...</p>
@@ -533,9 +530,7 @@ function ProfilePageContent() {
                     Go
                   </button>
                 )}
-                {followComplete && (
-                  <span className="text-green-400 text-lg">✔</span>
-                )}
+                {followComplete && <span className="text-green-400 text-lg">✔</span>}
               </div>
             </div>
             <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
@@ -550,9 +545,7 @@ function ProfilePageContent() {
                     Go
                   </button>
                 )}
-                {recastComplete && (
-                  <span className="text-green-400 text-lg">✔</span>
-                )}
+                {recastComplete && <span className="text-green-400 text-lg">✔</span>}
               </div>
             </div>
           </div>

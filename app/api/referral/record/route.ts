@@ -1,49 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureReferralEnv } from "../../../config/referral";
-import { getKey, setKey, incrKey, sadd } from "../../../../lib/upstash";
+import { getKey, setKey } from "../../../../lib/upstash";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
 export const dynamic = "force-dynamic";
 
+type RecordReferralBody = {
+  wallet: string;
+  refCode: string;
+};
+
 /**
- * Record referral when app opens with ?ref=XXXXXXXX param
- * This is the SINGLE SOURCE OF TRUTH for referral counting
- * - Registers referral binding
- * - Updates referral count immediately
- * - Updates leaderboard automatically (via refcount)
+ * Minimal referral capture endpoint.
+ *
+ * Flow:
+ * - User opens app via referral link (?ref=XXXXXXXX)
+ * - App detects connected wallet and POSTs { wallet, refCode }
+ * - This endpoint stores ONE record per referred wallet:
+ *   key:   referral:{wallet}
+ *   value: { referrer: string, createdAt: string }
+ *
+ * Rules:
+ * - Do NOT overwrite an existing referral entry
+ * - Do NOT verify tasks or track task completion
  */
 export async function POST(req: NextRequest) {
   try {
     ensureReferralEnv();
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Missing required environment variables" }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Missing required environment variables" },
+      { status: 500 },
+    );
   }
 
-  const callerWallet = req.headers.get("x-user-wallet")?.trim();
-  if (!callerWallet || !walletRegex.test(callerWallet)) {
-    return NextResponse.json({ error: "Missing or invalid caller wallet" }, { status: 400 });
-  }
-
-  let body: { refCode?: string } = {};
+  let body: RecordReferralBody;
   try {
-    body = (await req.json()) as { refCode?: string };
+    body = (await req.json()) as RecordReferralBody;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  const rawWallet = body.wallet?.trim();
+  const wallet = rawWallet?.toLowerCase();
   const refCode = body.refCode?.trim().toLowerCase();
+
+  if (!wallet || !walletRegex.test(wallet)) {
+    return NextResponse.json({ error: "Missing or invalid wallet" }, { status: 400 });
+  }
+
   if (!refCode || refCode.length !== 8) {
     return NextResponse.json({ error: "Invalid refCode (must be 8 characters)" }, { status: 400 });
   }
 
   try {
-    const wallet = callerWallet.toLowerCase();
-
-    // Block self-referral
-    const walletLast8 = wallet.slice(-8).toLowerCase();
-    if (walletLast8 === refCode) {
-      return NextResponse.json({ error: "Cannot refer yourself" }, { status: 400 });
+    // If this wallet already has a referral record, do nothing
+    const existing = await getKey<string | Record<string, unknown> | null>(`referral:${wallet}`);
+    if (existing) {
+      return NextResponse.json({ success: true, alreadyRecorded: true });
     }
 
     // Lookup referrer wallet from refCode
@@ -54,32 +69,25 @@ export async function POST(req: NextRequest) {
 
     const referrer = referrerWallet.toLowerCase();
 
-    // Block self-referral (double check)
-    if (wallet === referrer) {
+    // Block self-referral based purely on wallet + refCode pattern
+    const walletLast8 = wallet.slice(-8).toLowerCase();
+    if (walletLast8 === refCode || wallet === referrer) {
       return NextResponse.json({ error: "Cannot refer yourself" }, { status: 400 });
     }
 
-    // Check if already bound
-    const existing = await getKey<string>(`ref:${wallet}`);
-    if (existing) {
-      // Already bound - return success but don't increment again
-      return NextResponse.json({ success: true, referrer, alreadyBound: true });
-    }
-
-    // Store referral binding
     const payload = {
-      referrer: referrer,
+      referrer,
       createdAt: new Date().toISOString(),
     };
-    await setKey(`ref:${wallet}`, payload);
-    await sadd("set:referrers", referrer);
 
-    // IMMEDIATELY increment referral count for referrer (this updates leaderboard)
-    await incrKey(`verified_refcount:${referrer}`);
+    await setKey(`referral:${wallet}`, payload);
 
     return NextResponse.json({ success: true, referrer });
   } catch (error: any) {
     console.error("Referral recording failed:", error);
-    return NextResponse.json({ error: error?.message || "Failed to record referral" }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Failed to record referral" },
+      { status: 500 },
+    );
   }
 }
