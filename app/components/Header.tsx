@@ -1,8 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { detectFarcasterEnvironment } from "../utils/farcaster";
 
 export default function Header({ title }: { title: string }) {
+  const [isFarcaster, setIsFarcaster] = useState(true);
+
+  useEffect(() => {
+    try {
+      setIsFarcaster(detectFarcasterEnvironment());
+    } catch {
+      setIsFarcaster(false);
+    }
+  }, []);
+
   return (
     <div className="w-full max-w-md px-4 pt-3 pb-1 text-white">
       {/* উপরে FarFISH + Follow us */}
@@ -20,6 +32,11 @@ export default function Header({ title }: { title: string }) {
 
       {/* নিচে পেজের নাম (Home / Chest / Stake / Rank / Profile) */}
       <p className="text-sm text-white/60 mt-1">{title}</p>
+      {!isFarcaster && (
+        <p className="text-[11px] text-yellow-200/80 mt-1">
+          Core actions like minting, referrals, and wallet stats work only when FarFISH is opened inside a Farcaster client.
+        </p>
+      )}
     </div>
   );
 }

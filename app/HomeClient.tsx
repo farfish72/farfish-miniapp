@@ -23,6 +23,7 @@ import { wagmiConfig } from "./lib/wagmi";
 import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { base } from "viem/chains";
+import { formatEther } from "viem";
 
 interface SupplyInfo {
   id: number;
@@ -624,20 +625,41 @@ export default function HomeClient() {
       if (claim?.condition && !claim.error) {
         // Check if token has remaining supply
         if (info.remaining <= BigInt(0)) continue;
-        
+
         // Check if mint has started
         const now = BigInt(Math.floor(Date.now() / 1000));
         if (claim.condition.startTimestamp > now) continue;
-        
+
         // Check if claim condition has remaining supply
         if (claim.condition.supplyClaimed >= claim.condition.maxClaimableSupply) continue;
-        
-        // Return pricePerToken (even if 0 for free mint)
-        return claim.condition.pricePerToken;
+
+        // Return full condition (includes price and currency)
+        return claim.condition;
       }
     }
     return null;
   }, [supplyInfo, claimInfo]);
+
+  const priceDisplay = useMemo(() => {
+    if (!representativePrice) return null;
+
+    try {
+      const { pricePerToken, currency } = representativePrice;
+      const ethLikeAddresses = [
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "0x0000000000000000000000000000000000000000",
+      ];
+      const isEth =
+        ethLikeAddresses.includes(currency.toLowerCase());
+
+      const symbol = isEth ? "ETH" : "TOKEN";
+      const formattedPrice = formatEther(pricePerToken);
+
+      return { formattedPrice, symbol };
+    } catch {
+      return null;
+    }
+  }, [representativePrice]);
 
   // Button states and labels - only: Mint, Minted, Already Minted
   const primaryButtonLabel = useMemo(() => {
@@ -790,7 +812,9 @@ export default function HomeClient() {
             </button>
             {/* PRICE TEXT */}
             <p className="text-xs text-white/70 text-center mt-2">
-              You have to pay 0.003 ETH + gas
+              {priceDisplay
+                ? `You have to pay ${priceDisplay.formattedPrice} ${priceDisplay.symbol} + gas`
+                : "Mint price is loading. Please wait..."}
             </p>
           </div>
 

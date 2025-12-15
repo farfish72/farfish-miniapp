@@ -123,15 +123,15 @@ export default function LeaderboardPage() {
               <tbody className="divide-y divide-white/5">
                 {loading && (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-white/60">
-                      Loading leaderboard...
+                    <td colSpan={4} className="py-4 text-center text-white/60 animate-pulse">
+                      Loading leaderboard…
                     </td>
                   </tr>
                 )}
                 {!loading && entries.length === 0 && (
                   <tr>
                     <td colSpan={4} className="py-4 text-center text-white/60">
-                      No leaderboard data yet.
+                      No referrals yet.
                     </td>
                   </tr>
                 )}

@@ -100,6 +100,9 @@ function ProfilePageContent() {
   // Tasks are UX-only; we do not persist or verify completion
   const [taskState, setTaskState] = useState<TaskState>({ followComplete: false, recastComplete: false });
   const [nftInfo, setNftInfo] = useState<{ tokenId: number; uri: string } | null>(null);
+  const [nftLoading, setNftLoading] = useState(false);
+  const [nftError, setNftError] = useState<string | null>(null);
+  const [nftChecked, setNftChecked] = useState(false);
   const { blocked, message } = useFarcasterGate();
 
   const isBaseNetwork = chainId === base.id;
@@ -108,23 +111,26 @@ function ProfilePageContent() {
   // Farcaster detection
   useFarcasterEnvironment("Profile page");
 
-  // Check if redirected from Home with View NFT
-  useEffect(() => {
-    const viewNft = searchParams.get("viewNft");
-    if (viewNft === "true" && address) {
-      // Fetch NFT info
-      fetchNFTInfo();
-    }
-  }, [searchParams, address]);
-
   // Fetch NFT info when viewing NFT
   const fetchNFTInfo = useCallback(async () => {
-    if (!address || !NFT_CONTRACT_ADDRESS) return;
+    if (!address || !NFT_CONTRACT_ADDRESS) {
+      setNftChecked(true);
+      return;
+    }
+
+    setNftLoading(true);
+    setNftError(null);
+    setNftChecked(false);
     try {
       const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
-      if (!publicClient) return;
+      if (!publicClient) {
+        setNftError("Network client unavailable");
+        setNftChecked(true);
+        return;
+      }
 
       // Find which tokenId user owns
+      let found = false;
       for (const id of TOKEN_IDS) {
         const balance = await (publicClient.readContract as any)({
           address: NFT_CONTRACT_ADDRESS as `0x${string}`,
@@ -142,25 +148,46 @@ function ProfilePageContent() {
               args: [BigInt(id)],
             }) as string;
             setNftInfo({ tokenId: id, uri });
+            found = true;
             break;
           } catch {
             // Continue if URI fetch fails
           }
         }
       }
+
+      if (!found) {
+        setNftInfo(null);
+      }
     } catch (error) {
       console.error("Failed to fetch NFT info:", error);
+      setNftError("Failed to load NFT data");
+    } finally {
+      setNftLoading(false);
+      setNftChecked(true);
     }
   }, [address]);
 
+  // Check if redirected from Home with View NFT
+  useEffect(() => {
+    const viewNft = searchParams.get("viewNft");
+    if (viewNft === "true" && address) {
+      fetchNFTInfo();
+    }
+  }, [searchParams, address, fetchNFTInfo]);
+
   // Fetch live stats
+  const [statsError, setStatsError] = useState(false);
+
   const fetchLiveStats = useCallback(async () => {
     if (!address) {
       setLiveStats({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
+      setStatsError(false);
       return;
     }
 
     setLoadingStats(true);
+    setStatsError(false);
     try {
       // Fetch NFT owned count
       let nftsOwned = 0;
@@ -181,6 +208,7 @@ function ProfilePageContent() {
           }
         } catch (error) {
           console.error("Failed to fetch NFT owned count:", error);
+          setStatsError(true);
         }
       }
 
@@ -224,6 +252,7 @@ function ProfilePageContent() {
           }
         } catch (error) {
           console.error("Failed to fetch staked count:", error);
+          setStatsError(true);
         }
       }
 
@@ -240,6 +269,7 @@ function ProfilePageContent() {
         }
       } catch (error) {
         console.error("Failed to fetch chest streak:", error);
+        setStatsError(true);
       }
 
       // Fetch rank from leaderboard API
@@ -254,11 +284,13 @@ function ProfilePageContent() {
         }
       } catch (error) {
         console.error("Failed to fetch rank:", error);
+        setStatsError(true);
       }
 
       setLiveStats({ nftsOwned, stakedCount, chestStreak, rank });
     } catch (error) {
       console.error("Failed to fetch live stats:", error);
+      setStatsError(true);
     } finally {
       setLoadingStats(false);
     }
@@ -280,22 +312,22 @@ function ProfilePageContent() {
     () => [
       {
         label: "NFT Owned",
-        value: loadingStats ? "—" : formatStatValue(liveStats.nftsOwned),
+        value: loadingStats ? "…" : statsError ? "Error" : formatStatValue(liveStats.nftsOwned),
       },
       {
         label: "Staked NFT",
-        value: loadingStats ? "—" : formatStatValue(liveStats.stakedCount),
+        value: loadingStats ? "…" : statsError ? "Error" : formatStatValue(liveStats.stakedCount),
       },
       {
         label: "Chest Streak",
-        value: loadingStats ? "—" : formatStatValue(liveStats.chestStreak, " days"),
+        value: loadingStats ? "…" : statsError ? "Error" : formatStatValue(liveStats.chestStreak, " days"),
       },
       {
         label: "Rank",
-        value: loadingStats ? "—" : (liveStats.rank ? `#${liveStats.rank}` : "Unranked"),
+        value: loadingStats ? "…" : statsError ? "Error" : (liveStats.rank ? `#${liveStats.rank}` : "Unranked"),
       },
     ],
-    [liveStats, loadingStats]
+    [liveStats, loadingStats, statsError]
   );
 
   const followComplete = false;
@@ -406,21 +438,34 @@ function ProfilePageContent() {
       <Header title="Profile" />
 
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
-        {/* NFT Info Section - shown when viewing NFT */}
-        {nftInfo && (
+        {/* NFT Info Section - shown when redirected from mint */}
+        {(nftChecked || nftLoading || nftInfo) && (
           <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
             <h3 className="text-lg font-semibold mb-2">Your NFT</h3>
             <div className="space-y-2">
-              <p className="text-sm text-white/70">Token ID: {nftInfo.tokenId}</p>
-              {nftInfo.uri && (
-                <a
-                  href={nftInfo.uri}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-[#00d4c4] hover:underline"
-                >
-                  View on IPFS
-                </a>
+              {nftLoading && (
+                <p className="text-sm text-white/60 animate-pulse">Checking your FarFISH NFT…</p>
+              )}
+              {!nftLoading && nftError && (
+                <p className="text-sm text-red-300">{nftError}</p>
+              )}
+              {!nftLoading && !nftError && nftInfo && (
+                <>
+                  <p className="text-sm text-white/70">Token ID: {nftInfo.tokenId}</p>
+                  {nftInfo.uri && (
+                    <a
+                      href={nftInfo.uri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-[#00d4c4] hover:underline"
+                    >
+                      View on IPFS
+                    </a>
+                  )}
+                </>
+              )}
+              {!nftLoading && !nftError && nftChecked && !nftInfo && (
+                <p className="text-sm text-white/70">You don&apos;t own a FarFISH NFT yet.</p>
               )}
             </div>
           </section>
@@ -461,7 +506,9 @@ function ProfilePageContent() {
             {stats.map((stat) => (
               <div
                 key={stat.label}
-                className="rounded-xl border border-white/10 bg-white/5 p-3 text-center"
+                className={`rounded-xl border border-white/10 bg-white/5 p-3 text-center ${
+                  loadingStats ? "animate-pulse" : ""
+                }`}
               >
                 <p className="text-[11px] uppercase tracking-wide text-white/60">
                   {stat.label}
@@ -470,6 +517,11 @@ function ProfilePageContent() {
               </div>
             ))}
           </div>
+          {statsError && !loadingStats && (
+            <p className="mt-2 text-xs text-red-300 text-center">
+              Some stats failed to load. Try again later.
+            </p>
+          )}
         </section>
 
         <section id="refer-earn" className="bg-white/5 border border-white/10 rounded-2xl p-4">
@@ -599,7 +651,13 @@ function ProfilePageContent() {
 
 export default function ProfilePage() {
   return (
-    <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-40 h-10 rounded-xl bg-white/10 animate-pulse" />
+        </div>
+      }
+    >
       <ProfilePageContent />
     </Suspense>
   );
