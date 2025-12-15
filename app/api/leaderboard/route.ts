@@ -16,7 +16,8 @@ export async function GET() {
   try {
     ensureReferralEnv();
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Missing required environment variables" }, { status: 500 });
+    // Missing env/KV → return safe empty list
+    return NextResponse.json([]);
   }
 
   try {
@@ -27,19 +28,25 @@ export async function GET() {
 
     const withCounts = await Promise.all(
       referrers.map(async (wallet) => {
-        // Use verified referral count instead of raw count
-        const verifiedCountRaw = await getKey<number | string | null>(`verified_refcount:${normalizeWallet(wallet)}`);
-        const verified_count = Number(verifiedCountRaw ?? 0);
-        
+        // Unified referral count source of truth
+        const countRaw = await getKey<number | string | null>(`refcount:${normalizeWallet(wallet)}`);
+        const count = Number(countRaw ?? 0);
+
         return {
           wallet: normalizeWallet(wallet),
-          referrals_count: Number.isFinite(verified_count) ? verified_count : 0,
+          referrals_count: Number.isFinite(count) && count > 0 ? count : 0,
         };
-      })
+      }),
     );
 
+    // Filter out wallets with zero referrals to avoid noise
+    const nonZero = withCounts.filter((row) => row.referrals_count > 0);
+    if (!nonZero.length) {
+      return NextResponse.json([]);
+    }
+
     // Calculate rewards: referrals × 20 FRH (referral-based only, no staking)
-    const withRewards: LeaderboardRow[] = withCounts.map((row) => ({
+    const withRewards: LeaderboardRow[] = nonZero.map((row) => ({
       ...row,
       rewards: row.referrals_count * 20, // Referrals × 20 FRH
     }));
@@ -54,7 +61,8 @@ export async function GET() {
     return NextResponse.json(withRanks);
   } catch (error: any) {
     console.error("Leaderboard generation failed:", error);
-    return NextResponse.json({ error: error?.message || "Failed to generate leaderboard" }, { status: 500 });
+    // On error, return safe empty list
+    return NextResponse.json([]);
   }
 }
 

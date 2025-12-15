@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureReferralEnv } from "../../../config/referral";
-import { getKey, setKey } from "../../../../lib/upstash";
+import { getKey, incrKey, setKey } from "../../../../lib/upstash";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
@@ -26,15 +26,6 @@ type RecordReferralBody = {
  * - Do NOT verify tasks or track task completion
  */
 export async function POST(req: NextRequest) {
-  try {
-    ensureReferralEnv();
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || "Missing required environment variables" },
-      { status: 500 },
-    );
-  }
-
   let body: RecordReferralBody;
   try {
     body = (await req.json()) as RecordReferralBody;
@@ -55,6 +46,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Validate env only when we are about to touch KV
+    try {
+      ensureReferralEnv();
+    } catch (error: any) {
+      // Soft-fail if env/KV missing – do not crash client, just skip recording
+      return NextResponse.json(
+        { success: false, error: error?.message || "Referral storage unavailable" },
+        { status: 200 },
+      );
+    }
+
     // If this wallet already has a referral record, do nothing
     const existing = await getKey<string | Record<string, unknown> | null>(`referral:${wallet}`);
     if (existing) {
@@ -80,7 +82,11 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
+    // Bind referrer -> referee exactly once
     await setKey(`referral:${wallet}`, payload);
+
+    // Increment unified referral count for referrer
+    await incrKey(`refcount:${referrer}`);
 
     return NextResponse.json({ success: true, referrer });
   } catch (error: any) {

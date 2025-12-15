@@ -41,6 +41,7 @@ export const ensureReferralEnv = () => {
   }
 };
 
+// Server-side env access with runtime validation. Call inside API handlers only.
 export const getServerReferralEnv = () => {
   ensureReferralEnv();
   return {
@@ -49,14 +50,28 @@ export const getServerReferralEnv = () => {
   };
 };
 
-export const getPublicReferralEnv = () => {
-  ensurePublicReferralEnv();
-  return {
-    appUrl: trimTrailingSlash(process.env.NEXT_PUBLIC_APP_URL as string),
-    chainId: getParsedChainId(),
-  };
+// Client-side safe accessors that never throw at module import.
+export const getSafePublicReferralEnv = () => {
+  try {
+    const missing = missingPublicEnv();
+    if (missing.length) {
+      return {
+        appUrl: "",
+        chainId: 0,
+        missing,
+      };
+    }
+
+    return {
+      appUrl: trimTrailingSlash(process.env.NEXT_PUBLIC_APP_URL as string),
+      chainId: getParsedChainId(),
+      missing: [] as string[],
+    };
+  } catch {
+    return {
+      appUrl: "",
+      chainId: 0,
+      missing: ["UNKNOWN"],
+    };
+  }
 };
-
-export const REFERRAL_APP_URL = getPublicReferralEnv().appUrl;
-export const REFERRAL_CHAIN_ID = getPublicReferralEnv().chainId;
-

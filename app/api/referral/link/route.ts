@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureReferralEnv, REFERRAL_APP_URL } from "../../../config/referral";
+import { ensureReferralEnv } from "../../../config/referral";
 import { getKey, setKey } from "../../../../lib/upstash";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
@@ -7,12 +7,6 @@ const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  try {
-    ensureReferralEnv();
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Missing required environment variables" }, { status: 500 });
-  }
-
   const userFromHeader = req.headers.get("x-user-wallet")?.trim();
   const userFromQuery = req.nextUrl.searchParams.get("user")?.trim();
   const wallet = (userFromHeader || userFromQuery || "").toLowerCase();
@@ -22,14 +16,26 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Generate refCode from wallet (last 8 chars) - this is the username
+    // Validate env only when touching KV
+    try {
+      ensureReferralEnv();
+    } catch (error: any) {
+      return NextResponse.json({
+        bound: false,
+        referrer: "",
+        link: `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${wallet.slice(-8).toLowerCase()}`,
+        referralsCount: 0,
+      });
+    }
+
+    // Generate refCode from wallet (last 8 chars)
     const refCode = wallet.slice(-8).toLowerCase();
 
     // Store refCode -> wallet mapping for lookup (KV stores full wallet)
     await setKey(`refcode:${refCode}`, wallet);
 
-    const refRecordRaw = await getKey<string | null>(`ref:${wallet}`);
-    
+    const refRecordRaw = await getKey<string | null>(`referral:${wallet}`);
+
     let referrer = "";
     let bound = false;
 
@@ -43,23 +49,27 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Get verified referral count (only counts verified referrals)
-    const verifiedCountRaw = await getKey<number | string | null>(`verified_refcount:${wallet}`);
-    const referralsCount = Number(verifiedCountRaw ?? 0);
-    
-    // Use correct referral link format: https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=XXXXXXXX
-    // Where XXXXXXXXX = last 8 characters of wallet (username)
+    // Unified referral count
+    const countRaw = await getKey<number | string | null>(`refcount:${wallet}`);
+    const referralsCount = Number(countRaw ?? 0);
+
+    // Referral link format: https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=XXXXXXXX
     const link = `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${refCode}`;
 
     return NextResponse.json({
       bound,
       referrer,
       link,
-      referralsCount: Number.isFinite(referralsCount) ? referralsCount : 0,
+      referralsCount: Number.isFinite(referralsCount) && referralsCount > 0 ? referralsCount : 0,
     });
   } catch (error: any) {
     console.error("Referral link lookup failed:", error);
-    return NextResponse.json({ error: error?.message || "Failed to load referral link" }, { status: 500 });
+    return NextResponse.json({
+      bound: false,
+      referrer: "",
+      link: `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${wallet.slice(-8).toLowerCase()}`,
+      referralsCount: 0,
+    });
   }
 }
 

@@ -3,7 +3,7 @@
 
 import Image from "next/image";
 import { useMemo, useState, useEffect, useCallback, useRef, Suspense } from "react";
-import { useAccount, useReadContract, useChainId } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { useSearchParams, useRouter } from "next/navigation";
 import { base } from "viem/chains";
 import { getPublicClient } from "@wagmi/core";
@@ -14,7 +14,6 @@ import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { FARCASTER_PROFILE_URL, NFT_CONTRACT_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
 import useFarcasterGate from "../hooks/useFarcasterGate";
-import { REFERRAL_APP_URL } from "../config/referral";
 import nftDropAbi from "../abi/nftDrop.json";
 import stakeAbi from "../abi/stake.json";
 
@@ -98,8 +97,8 @@ function ProfilePageContent() {
   const [toast, setToast] = useState<ToastState>(null);
   const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
   const [loadingStats, setLoadingStats] = useState(false);
-  // Task state is loaded from KV; start null to avoid flashes
-  const [taskState, setTaskState] = useState<TaskState>(null);
+  // Tasks are UX-only; we do not persist or verify completion
+  const [taskState, setTaskState] = useState<TaskState>({ followComplete: false, recastComplete: false });
   const [nftInfo, setNftInfo] = useState<{ tokenId: number; uri: string } | null>(null);
   const { blocked, message } = useFarcasterGate();
 
@@ -154,15 +153,6 @@ function ProfilePageContent() {
     }
   }, [address]);
 
-  // Read staked count from staking contract
-  const { data: stakeInfo } = useReadContract({
-    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-    abi: stakeAbi as any,
-    functionName: "getStakeInfo",
-    args: address ? [address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled && Boolean(STAKING_CONTRACT_ADDRESS), refetchInterval: 30000 },
-  } as any);
-
   // Fetch live stats
   const fetchLiveStats = useCallback(async () => {
     if (!address) {
@@ -194,12 +184,46 @@ function ProfilePageContent() {
         }
       }
 
-      // Get staked count from stakeInfo
+      // Get staked count using the same pattern as the Stake page:
+      // getUserStakeIds(address) then count active (not unstaked) positions.
       let stakedCount = 0;
-      if (stakeInfo && Array.isArray(stakeInfo) && stakeInfo.length >= 1) {
-        const tokensStaked = stakeInfo[0] as bigint[];
-        if (tokensStaked) {
-          stakedCount = tokensStaked.length;
+      if (STAKING_CONTRACT_ADDRESS) {
+        try {
+          const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+          if (publicClient && address) {
+            const stakeIds = (await (publicClient.readContract as any)({
+              address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+              abi: stakeAbi as any,
+              functionName: "getUserStakeIds",
+              args: [address as `0x${string}`],
+            })) as bigint[];
+
+            if (Array.isArray(stakeIds) && stakeIds.length > 0) {
+              const stakeInfos = await Promise.all(
+                stakeIds.map(async (stakeId) => {
+                  try {
+                    const info = await (publicClient.readContract as any)({
+                      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+                      abi: stakeAbi as any,
+                      functionName: "getStakeInfo",
+                      args: [stakeId],
+                    });
+                    return info as any[];
+                  } catch {
+                    return null;
+                  }
+                }),
+              );
+
+              stakedCount = stakeInfos.filter((info) => {
+                if (!info || !Array.isArray(info) || info.length < 9) return false;
+                const unstaked = Boolean(info[8]);
+                return !unstaked;
+              }).length;
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch staked count:", error);
         }
       }
 
@@ -238,52 +262,14 @@ function ProfilePageContent() {
     } finally {
       setLoadingStats(false);
     }
-  }, [address, stakeInfo]);
+  }, [address]);
 
   // Fetch live stats when address or stakeInfo changes
   useEffect(() => {
     fetchLiveStats();
   }, [fetchLiveStats]);
 
-  // Fetch task completion status from KV (tasks:{wallet})
-  const fetchTaskStatus = useCallback(async () => {
-    if (!address) {
-      // Do not reset local state when address is unavailable
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/profile/tasks?wallet=${address}`, {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        // Only set values from KV; never flip a true back to false locally
-        setTaskState((prev) => ({
-          followComplete: prev?.followComplete === true || Boolean(data?.followComplete),
-          recastComplete: prev?.recastComplete === true || Boolean(data?.recastComplete),
-        }));
-      }
-    } catch (error) {
-      console.error("Failed to fetch task status:", error);
-      // Keep any existing state on error
-    }
-  }, [address]);
-
-  // Track last fetched address to avoid redundant fetches
-  const lastFetchedAddressRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (address && address !== lastFetchedAddressRef.current) {
-      lastFetchedAddressRef.current = address;
-      fetchTaskStatus();
-    }
-
-    if (!address) {
-      lastFetchedAddressRef.current = null;
-      // Do not clear taskState to avoid losing persisted completion indicators
-    }
-  }, [address, fetchTaskStatus]);
+  // Tasks are UX-only engagement elements; no KV calls are made.
 
   const showToast = useCallback(
     (type: "error" | "success", msg: string) => setToast({ type, message: msg }),
@@ -312,48 +298,25 @@ function ProfilePageContent() {
     [liveStats, loadingStats]
   );
 
-  const followComplete = taskState?.followComplete === true;
-  const recastComplete = taskState?.recastComplete === true;
-  const tasksLoading = taskState === null;
+  const followComplete = false;
+  const recastComplete = false;
+  const tasksLoading = false;
 
-  // Bypass-style auto completion: click -> mark complete in KV (tasks:{wallet})
+  // Task buttons only open destinations; they do not verify or persist state.
   const handleGoTask = useCallback(
-    async (taskType: "follow" | "recast") => {
+    (taskType: "follow" | "recast") => {
       if (!address) {
         showToast("error", "Please connect your wallet");
         return;
       }
 
-      // Optionally open related Farcaster destinations (no verification)
       if (taskType === "follow") {
         window.open(FARCASTER_PROFILE_URL, "_blank", "noopener,noreferrer");
       } else {
         window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
       }
-
-      try {
-        const res = await fetch("/api/referral/verify-tasks", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            wallet: address,
-            task: taskType,
-          }),
-        });
-
-        if (res.ok) {
-          // Always refresh from KV so UI state is solely KV-driven
-          await fetchTaskStatus();
-        } else {
-          console.error("Failed to save task status");
-        }
-      } catch (error) {
-        console.error("Failed to save task status:", error);
-      }
     },
-    [address, fetchTaskStatus, showToast],
+    [address, showToast],
   );
 
   const createReferralLink = useCallback((wallet: string) => {
