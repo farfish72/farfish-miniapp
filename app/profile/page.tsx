@@ -529,8 +529,11 @@ function ProfilePageContent() {
                     type="button"
                     onClick={() => {
                       // Open Farcaster post to like & recast
-                      // Using a generic Farcaster URL - adjust if you have a specific cast URL
-                      window.open("https://warpcast.com/~/channel/farcaster", "_blank", "noopener,noreferrer");
+                      window.open(
+                        "https://farcaster.xyz/farf/0x2dc370c3",
+                        "_blank",
+                        "noopener,noreferrer"
+                      );
                     }}
                     className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
                   >
