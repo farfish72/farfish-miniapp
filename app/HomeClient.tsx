@@ -609,9 +609,7 @@ export default function HomeClient() {
     if (!shareUrl) return;
 
     // Exact share text as specified - NO newline, NO trailing space, URL must be last character
-    const castText =
-      "Hey, I just minted FarFISH limited edition NFT 🐟 Join the wave on Base 👇 " +
-      shareUrl;
+    const castText = `Hey, I just minted FarFISH limited edition NFT 🐟 Join the wave on Base 👇https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${address!.slice(-8).toLowerCase()}`;
 
     if (isInFarcaster) {
       try {
