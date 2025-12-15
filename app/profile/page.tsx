@@ -278,6 +278,42 @@ function ProfilePageContent() {
     []
   );
 
+  // Handle Go button - opens link and marks task as complete instantly
+  const handleGoTask = useCallback(async (taskType: "follow" | "recast") => {
+    if (!address) {
+      showToast("error", "Please connect your wallet");
+      return;
+    }
+
+    // Open the appropriate link
+    if (taskType === "follow") {
+      window.open(FARCASTER_PROFILE_URL, "_blank", "noopener,noreferrer");
+    } else {
+      window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
+    }
+
+    // Mark as completed instantly (UX-based)
+    const newState = {
+      followComplete: taskType === "follow" ? true : taskState.followComplete,
+      recastComplete: taskType === "recast" ? true : taskState.recastComplete,
+    };
+    setTaskState(newState);
+
+    // Persist to KV
+    try {
+      await fetch("/api/referral/verify-tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-wallet": address,
+        },
+        body: JSON.stringify(newState),
+      });
+    } catch (error) {
+      console.error("Failed to save task status:", error);
+    }
+  }, [address, taskState, showToast]);
+
   // Verify task (UX-based, no hard verification)
   const handleVerifyTask = useCallback(async (taskType: "follow" | "recast") => {
     if (!address) {
@@ -288,28 +324,26 @@ function ProfilePageContent() {
     setVerifyingTask(taskType);
     try {
       // UX-based verification: mark as verified when user clicks Verify
+      const newState = {
+        followComplete: taskType === "follow" ? true : taskState.followComplete,
+        recastComplete: taskType === "recast" ? true : taskState.recastComplete,
+      };
+
       const res = await fetch("/api/referral/verify-tasks", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-user-wallet": address,
         },
-        body: JSON.stringify({
-          followComplete: taskType === "follow" ? true : taskState.followComplete,
-          recastComplete: taskType === "recast" ? true : taskState.recastComplete,
-        }),
+        body: JSON.stringify(newState),
       });
 
       if (!res.ok) {
         throw new Error("Verification failed");
       }
 
-      const data = await res.json();
       // Mark task as verified immediately (UX-based)
-      setTaskState({
-        followComplete: Boolean(data?.followComplete ?? (taskType === "follow" ? true : taskState.followComplete)),
-        recastComplete: Boolean(data?.recastComplete ?? (taskType === "recast" ? true : taskState.recastComplete)),
-      });
+      setTaskState(newState);
       showToast("success", "Task verified successfully");
       fetchTaskStatus();
     } catch (error) {
@@ -406,6 +440,18 @@ function ProfilePageContent() {
     }
   }, [user?.walletAddress, fetchReferralInfo]);
 
+  // Auto-scroll to Refer & Earn section when hash is present
+  useEffect(() => {
+    if (window.location.hash === "#refer-earn") {
+      const element = document.getElementById("refer-earn");
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 4000);
@@ -483,7 +529,7 @@ function ProfilePageContent() {
           </div>
         </section>
 
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <section id="refer-earn" className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
           <p className="text-sm text-white/70">
             Complete tasks to verify referrals. Share your link to earn referral rewards.
@@ -493,31 +539,26 @@ function ProfilePageContent() {
               <span className="text-sm font-semibold text-white/80 flex-1">Follow on Farcaster</span>
               <div className="flex items-center gap-2">
                 {!taskState.followComplete && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Open Farcaster profile to follow
-                      window.open(FARCASTER_PROFILE_URL, "_blank", "noopener,noreferrer");
-                    }}
-                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
-                  >
-                    Go
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleGoTask("follow")}
+                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                    >
+                      Go
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyTask("follow")}
+                      disabled={verifyingTask === "follow"}
+                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
+                    >
+                      {verifyingTask === "follow" ? "Verifying..." : "Verify"}
+                    </button>
+                  </>
                 )}
-                {taskState.followComplete ? (
+                {taskState.followComplete && (
                   <span className="text-green-400 text-lg">✔</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // UX-based verification: mark as verified when user clicks Verify
-                      handleVerifyTask("follow");
-                    }}
-                    disabled={verifyingTask === "follow"}
-                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
-                  >
-                    {verifyingTask === "follow" ? "Verifying..." : "Verify"}
-                  </button>
                 )}
               </div>
             </div>
@@ -525,35 +566,26 @@ function ProfilePageContent() {
               <span className="text-sm font-semibold text-white/80 flex-1">Like & Recast</span>
               <div className="flex items-center gap-2">
                 {!taskState.recastComplete && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Open Farcaster post to like & recast
-                      window.open(
-                        "https://farcaster.xyz/farf/0x2dc370c3",
-                        "_blank",
-                        "noopener,noreferrer"
-                      );
-                    }}
-                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
-                  >
-                    Go
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleGoTask("recast")}
+                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                    >
+                      Go
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyTask("recast")}
+                      disabled={verifyingTask === "recast"}
+                      className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
+                    >
+                      {verifyingTask === "recast" ? "Verifying..." : "Verify"}
+                    </button>
+                  </>
                 )}
-                {taskState.recastComplete ? (
+                {taskState.recastComplete && (
                   <span className="text-green-400 text-lg">✔</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // UX-based verification: mark as verified when user clicks Verify
-                      handleVerifyTask("recast");
-                    }}
-                    disabled={verifyingTask === "recast"}
-                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition disabled:opacity-60"
-                  >
-                    {verifyingTask === "recast" ? "Verifying..." : "Verify"}
-                  </button>
                 )}
               </div>
             </div>

@@ -5,8 +5,8 @@ import { getKey } from "../../../../lib/upstash";
 export const dynamic = "force-dynamic";
 
 /**
- * Lookup wallet address by refCode (last 6 chars of wallet)
- * refCode is stored as key: refcode:xxxxxx -> wallet address
+ * Lookup wallet address by refCode (last 8 chars of wallet)
+ * refCode is stored as key: refcode:xxxxxxxx -> wallet address
  */
 export async function GET(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   }
 
   const refCode = req.nextUrl.searchParams.get("code")?.trim().toLowerCase();
-  if (!refCode || refCode.length !== 6) {
+  if (!refCode || refCode.length !== 8) {
     return NextResponse.json({ error: "Invalid refCode" }, { status: 400 });
   }
 

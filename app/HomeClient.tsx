@@ -22,10 +22,7 @@ import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "./lib/wagmi";
 import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
-import { detectFarcasterEnvironment } from "./utils/farcaster";
-import { REFERRAL_APP_URL } from "./config/referral";
 import { base } from "viem/chains";
-import { sdk } from "@farcaster/miniapp-sdk";
 
 interface SupplyInfo {
   id: number;
@@ -588,50 +585,14 @@ export default function HomeClient() {
     }
   }, [address, isConnected, hasMinted, supplyInfo, claimInfo, writeMint, handleConnect]);
 
-  // Generate referral link using last 8 characters of wallet address
-  const referralLink = useMemo(() => {
-    if (!address) return null;
-    const refCode = address.slice(-8).toLowerCase();
-    return `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${refCode}`;
-  }, [address]);
-
-  const handleShare = useCallback(async () => {
+  const handleShare = useCallback(() => {
     if (!isConnected || !address) {
       return;
     }
 
-    const isInFarcaster = isFarcasterEnv || detectFarcasterEnvironment();
-
-    if (typeof window === "undefined") return;
-
-    // Generate referral link with refCode (last 8 chars)
-    const shareUrl = referralLink || REFERRAL_APP_URL;
-    if (!shareUrl) return;
-
-    // Exact share text as specified - NO newline, NO trailing space, URL must be last character
-    const castText =
-  `Hey, I just minted FarFISH limited edition NFT\n` +
-  `Join the wave on Base\n` +
-  `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${address!.slice(-8).toLowerCase()}`;
-    if (isInFarcaster) {
-      try {
-        // Use official Farcaster Mini App compose method
-        await sdk.actions.composeCast({
-          text: castText,
-        });
-        return;
-      } catch (error) {
-        console.error("Failed to open native composer", error);
-        // Fallback to Warpcast compose URL
-        const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
-        window.open(warpcastUrl, "_blank", "noopener,noreferrer");
-      }
-    } else {
-      // Fallback to Warpcast compose URL
-      const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}`;
-      window.open(warpcastUrl, "_blank", "noopener,noreferrer");
-    }
-  }, [isFarcasterEnv, referralLink, isConnected, address]);
+    // Redirect to Profile page and auto-scroll to Refer & Earn section
+    window.location.href = "/profile#refer-earn";
+  }, [isConnected, address]);
 
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   // Support both refCode and full wallet address
   if (body.refCode) {
     const refCode = body.refCode.trim().toLowerCase();
-    if (refCode.length !== 6) {
+    if (refCode.length !== 8) {
       return NextResponse.json({ error: "Invalid refCode" }, { status: 400 });
     }
     // Lookup wallet from refCode

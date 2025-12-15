@@ -45,41 +45,12 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     });
 
-    // Check if both tasks are completed
-    const bothComplete = followComplete && recastComplete;
-
-    // If both tasks are now complete, verify the referral for the referrer
-    if (bothComplete) {
-      const refRecordRaw = await getKey<string | null>(`ref:${wallet}`);
-      if (refRecordRaw) {
-        let referrer = "";
-        try {
-          const parsed = JSON.parse(refRecordRaw as string);
-          referrer = parsed?.referrer || "";
-        } catch {
-          referrer = typeof refRecordRaw === "string" ? refRecordRaw : "";
-        }
-
-        if (referrer) {
-          // Check if this referral was already verified
-          const verifiedKey = `verified:${wallet}`;
-          const alreadyVerifiedRaw = await getKey<string>(verifiedKey);
-          const alreadyVerified = alreadyVerifiedRaw === "true";
-          
-          if (!alreadyVerified) {
-            // Mark as verified
-            await setKey(verifiedKey, "true");
-            
-            // Increment verified referral count for referrer
-            await incrKey(`verified_refcount:${referrer.toLowerCase()}`);
-          }
-        }
-      }
-    }
+    // Note: Referral counting now happens immediately on app open via /api/referral/record
+    // Tasks are UX-based only (soft verification) and don't affect referral counting
+    // This endpoint just stores task completion status for display purposes
 
     return NextResponse.json({
       success: true,
-      bothComplete,
       followComplete,
       recastComplete,
     });

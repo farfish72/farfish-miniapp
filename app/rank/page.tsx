@@ -181,15 +181,6 @@ export default function LeaderboardPage() {
             </div>
           )}
 
-          {/* Static Rules Section */}
-          <div className="mt-4 pt-4 border-t border-white/10">
-            <div className="text-xs text-white/50 space-y-1">
-              <p>Cheating, fake referrals, or self-referrals will result in an immediate ban.</p>
-              <p>Suspicious activity may lead to permanent removal from the leaderboard.</p>
-              <p>Referral data is strictly monitored. No appeals will be accepted.</p>
-              <p>Final rewards will be reviewed and distributed only to eligible users on listing day.</p>
-            </div>
-          </div>
         </section>
       </div>
 

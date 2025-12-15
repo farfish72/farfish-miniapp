@@ -24,15 +24,12 @@ export default function useAutoBindReferral() {
     const urlParams = new URLSearchParams(window.location.search);
     const refCode = urlParams.get("ref");
 
-    if (!refCode || refCode.length !== 6) return;
+    if (!refCode || refCode.length !== 8) return;
 
     // Auto-bind referral
     const bindReferral = async () => {
       try {
-        // Lookup wallet address from refCode
-        // Since refCode is last 6 chars of wallet, we need to find matching wallet
-        // For now, we'll store refCode -> wallet mapping, or reverse lookup
-        // But for simplicity, we'll assume refCode maps to a wallet's last 6 chars
+        // Lookup wallet address from refCode (last 8 chars of wallet)
         
         // Check if already bound
         const checkRes = await fetch(`/api/referral/link?user=${address}`, {
@@ -48,10 +45,7 @@ export default function useAutoBindReferral() {
           }
         }
 
-        // Find wallet by refCode (last 6 chars match)
-        // We'll use a lookup API or try to reverse it
-        // For now, let's try to get the referrer wallet from the refCode
-        // This requires a new API endpoint: GET /api/referral/wallet-by-code?code=xxx
+        // Find wallet by refCode (last 8 chars of wallet)
         const walletRes = await fetch(`/api/referral/wallet-by-code?code=${refCode}`, {
           cache: "no-store",
         });
@@ -71,8 +65,9 @@ export default function useAutoBindReferral() {
           return;
         }
 
-        // Bind referral using refCode
-        const bindRes = await fetch("/api/referral/bind", {
+        // Record referral using the new record endpoint (single source of truth)
+        // This immediately counts the referral and updates leaderboard
+        const recordRes = await fetch("/api/referral/record", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -81,7 +76,7 @@ export default function useAutoBindReferral() {
           body: JSON.stringify({ refCode }),
         });
 
-        if (bindRes.ok || bindRes.status === 409) {
+        if (recordRes.ok || recordRes.status === 409) {
           hasAutoBound.current = true;
         }
       } catch (error) {
