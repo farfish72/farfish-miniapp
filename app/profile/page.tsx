@@ -2,7 +2,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, useEffect, useCallback, Suspense } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useAccount, useReadContract, useChainId } from "wagmi";
 import { useSearchParams, useRouter } from "next/navigation";
 import { base } from "viem/chains";
@@ -98,6 +98,7 @@ function ProfilePageContent() {
   const [toast, setToast] = useState<ToastState>(null);
   const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
   const [loadingStats, setLoadingStats] = useState(false);
+  // Initialize task state as empty - will be loaded from KV only
   const [taskState, setTaskState] = useState<TaskState>({ followComplete: false, recastComplete: false });
   const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
   const [nftInfo, setNftInfo] = useState<{ tokenId: number; uri: string } | null>(null);
@@ -245,10 +246,10 @@ function ProfilePageContent() {
     fetchLiveStats();
   }, [fetchLiveStats]);
 
-  // Fetch task completion status
+  // Fetch task completion status - ONLY from KV, never reset to false
   const fetchTaskStatus = useCallback(async () => {
     if (!address) {
-      setTaskState({ followComplete: false, recastComplete: false });
+      // Do NOT reset state when address is unavailable - just return early
       return;
     }
 
@@ -259,6 +260,7 @@ function ProfilePageContent() {
       });
       if (res.ok) {
         const data = await res.json();
+        // Only update state from API response - never reset to false
         setTaskState({
           followComplete: Boolean(data?.followComplete),
           recastComplete: Boolean(data?.recastComplete),
@@ -266,19 +268,34 @@ function ProfilePageContent() {
       }
     } catch (error) {
       console.error("Failed to fetch task status:", error);
+      // Do NOT reset state on error - keep existing state
     }
   }, [address]);
 
+  // Track last fetched address to prevent unnecessary re-fetches
+  const lastFetchedAddressRef = useRef<string | null>(null);
+
+  // Fetch task status when address is available and hasn't been fetched yet
   useEffect(() => {
-    fetchTaskStatus();
-  }, [fetchTaskStatus]);
+    if (address && address !== lastFetchedAddressRef.current) {
+      lastFetchedAddressRef.current = address;
+      fetchTaskStatus();
+    }
+    // If address becomes undefined, clear the ref but don't reset task state
+    if (!address) {
+      lastFetchedAddressRef.current = null;
+      // Do NOT reset taskState - keep it as is
+    }
+    // Only run when address changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
 
   const showToast = useCallback(
     (type: "error" | "success", msg: string) => setToast({ type, message: msg }),
     []
   );
 
-  // Handle Go button - opens link and marks task as complete instantly
+  // Handle Go button - opens link and marks task as complete after API confirms
   const handleGoTask = useCallback(async (taskType: "follow" | "recast") => {
     if (!address) {
       showToast("error", "Please connect your wallet");
@@ -292,16 +309,15 @@ function ProfilePageContent() {
       window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
     }
 
-    // Mark as completed instantly (UX-based)
+    // Prepare new state
     const newState = {
       followComplete: taskType === "follow" ? true : taskState.followComplete,
       recastComplete: taskType === "recast" ? true : taskState.recastComplete,
     };
-    setTaskState(newState);
 
-    // Persist to KV
+    // Persist to KV first, then update state from API response
     try {
-      await fetch("/api/referral/verify-tasks", {
+      const res = await fetch("/api/referral/verify-tasks", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -309,10 +325,18 @@ function ProfilePageContent() {
         },
         body: JSON.stringify(newState),
       });
+
+      if (res.ok) {
+        // Re-fetch task state from API to ensure consistency
+        await fetchTaskStatus();
+      } else {
+        console.error("Failed to save task status");
+      }
     } catch (error) {
       console.error("Failed to save task status:", error);
+      // Do NOT update state on error - keep existing state
     }
-  }, [address, taskState, showToast]);
+  }, [address, taskState, showToast, fetchTaskStatus]);
 
   // Verify task (UX-based, no hard verification)
   const handleVerifyTask = useCallback(async (taskType: "follow" | "recast") => {
@@ -323,7 +347,7 @@ function ProfilePageContent() {
 
     setVerifyingTask(taskType);
     try {
-      // UX-based verification: mark as verified when user clicks Verify
+      // Prepare new state
       const newState = {
         followComplete: taskType === "follow" ? true : taskState.followComplete,
         recastComplete: taskType === "recast" ? true : taskState.recastComplete,
@@ -342,13 +366,13 @@ function ProfilePageContent() {
         throw new Error("Verification failed");
       }
 
-      // Mark task as verified immediately (UX-based)
-      setTaskState(newState);
+      // Re-fetch task state from API - do NOT optimistically update
+      await fetchTaskStatus();
       showToast("success", "Task verified successfully");
-      fetchTaskStatus();
     } catch (error) {
       console.error("Failed to verify task:", error);
       showToast("error", "Failed to verify task. Please try again.");
+      // Do NOT update state on error - keep existing state
     } finally {
       setVerifyingTask(null);
     }
