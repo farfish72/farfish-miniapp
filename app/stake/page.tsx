@@ -3,7 +3,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import Header from "../components/Header";
-import { useAccount, useReadContract, useChainId } from "wagmi";
+import { useAccount, useReadContract, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "../lib/wagmi";
 import { base } from "viem/chains";
@@ -20,16 +20,32 @@ const getExpectedChainId = () => {
   return process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
 };
 
+interface RawStakeInfo {
+  stakeId: bigint;
+  staker: string;
+  tokenId: bigint;
+  amount: bigint;
+  stakeTimestamp: bigint;
+  lockDuration: bigint;
+  unlockTimestamp: bigint;
+  rewardAmount: bigint;
+  claimed: boolean;
+  unstaked: boolean;
+}
+
 interface StakedPosition {
+  stakeId: bigint;
   tokenId: number;
-  quantity: bigint;
-  stakedAt: bigint;
-  lockDays: bigint;
+  amount: bigint;
+  stakeTimestamp: bigint;
+  lockDuration: bigint;
+  unlockTimestamp: bigint;
+  rewardAmount: bigint;
+  claimed: boolean;
+  unstaked: boolean;
   isUnlocked: boolean;
-  lockDaysDisplay: string; // Pre-calculated display string
+  lockDaysDisplay: string; // Remaining time until unlock
   rewardsDisplay: string; // Pre-formatted rewards string
-  lockEndTimestamp?: bigint;
-  rewards?: bigint;
 }
 
 export default function StakingPage() {
@@ -38,64 +54,92 @@ export default function StakingPage() {
   const [isStakeModalOpen, setIsStakeModalOpen] = useState(false);
   const [isUnstakeModalOpen, setIsUnstakeModalOpen] = useState(false);
   const [selectedUnstakePosition, setSelectedUnstakePosition] = useState<StakedPosition | null>(null);
+  const [stakeInfos, setStakeInfos] = useState<RawStakeInfo[]>([]);
+  const [isLoadingStakeInfos, setIsLoadingStakeInfos] = useState(false);
+  const [claimingStakeId, setClaimingStakeId] = useState<bigint | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   const expectedChainId = getExpectedChainId();
   const isBaseNetwork = chainId === expectedChainId;
   const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
 
-  // Read stake info to get all staked tokens
-  const { data: stakeInfo, refetch: refetchStakeInfo, isLoading: isLoadingStakeInfo } = useReadContract({
+  // Get user's stake IDs
+  const { data: stakeIds, refetch: refetchStakeIds, isLoading: isLoadingStakeIds } = useReadContract({
     address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
     abi: stakeAbi as any,
-    functionName: "getStakeInfo",
+    functionName: "getUserStakeIds",
     args: address ? [address as `0x${string}`] : undefined,
     query: { enabled: readEnabled, refetchInterval: 30000 },
   } as any);
+  // Fetch stake info tuples for each stakeId
+  useEffect(() => {
+    const fetchStakeInfos = async () => {
+      if (!readEnabled) {
+        setStakeInfos([]);
+        return;
+      }
 
-  // Parse staked token IDs and total rewards from getStakeInfo
-  const { stakedTokenIds, totalRewards } = useMemo(() => {
-    if (!stakeInfo || !Array.isArray(stakeInfo) || stakeInfo.length < 3) {
-      return { stakedTokenIds: [], totalRewards: BigInt(0) };
-    }
-    
-    const tokensStaked = stakeInfo[0] as bigint[];
-    const totalRewardsValue = stakeInfo[2] as bigint;
-    
-    if (!tokensStaked) {
-      return { stakedTokenIds: [], totalRewards: totalRewardsValue || BigInt(0) };
-    }
-    
-    return {
-      stakedTokenIds: tokensStaked.map((tokenId) => Number(tokenId)),
-      totalRewards: totalRewardsValue || BigInt(0),
+      if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+        setStakeInfos([]);
+        return;
+      }
+
+      try {
+        const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+        if (!publicClient) return;
+
+        setIsLoadingStakeInfos(true);
+        const results = await Promise.all(
+          (stakeIds as bigint[]).map(async (stakeId) => {
+            try {
+              const data = await (publicClient.readContract as any)({
+                address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+                abi: stakeAbi as any,
+                functionName: "getStakeInfo",
+                args: [stakeId],
+              });
+
+              if (!data || typeof data !== "object") return null;
+
+              const [
+                staker,
+                tokenId,
+                amount,
+                stakeTimestamp,
+                lockDuration,
+                unlockTimestamp,
+                rewardAmount,
+                claimed,
+                unstaked,
+              ] = data as any[];
+
+              return {
+                stakeId,
+                staker: staker as string,
+                tokenId: BigInt(tokenId ?? 0),
+                amount: BigInt(amount ?? 0),
+                stakeTimestamp: BigInt(stakeTimestamp ?? 0),
+                lockDuration: BigInt(lockDuration ?? 0),
+                unlockTimestamp: BigInt(unlockTimestamp ?? 0),
+                rewardAmount: BigInt(rewardAmount ?? 0),
+                claimed: Boolean(claimed),
+                unstaked: Boolean(unstaked),
+              } as RawStakeInfo;
+            } catch (err) {
+              console.error("Failed to fetch stake info for id", stakeId, err);
+              return null;
+            }
+          })
+        );
+
+        setStakeInfos(results.filter(Boolean) as RawStakeInfo[]);
+      } finally {
+        setIsLoadingStakeInfos(false);
+      }
     };
-  }, [stakeInfo]);
 
-  // Query tokens 0-15 unconditionally (hooks must be called in same order every render)
-  // We'll filter results to only show staked tokens
-  const query0 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(0), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(0), refetchInterval: 30000 } } as any);
-  const query1 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(1), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(1), refetchInterval: 30000 } } as any);
-  const query2 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(2), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(2), refetchInterval: 30000 } } as any);
-  const query3 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(3), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(3), refetchInterval: 30000 } } as any);
-  const query4 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(4), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(4), refetchInterval: 30000 } } as any);
-  const query5 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(5), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(5), refetchInterval: 30000 } } as any);
-  const query6 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(6), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(6), refetchInterval: 30000 } } as any);
-  const query7 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(7), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(7), refetchInterval: 30000 } } as any);
-  const query8 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(8), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(8), refetchInterval: 30000 } } as any);
-  const query9 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(9), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(9), refetchInterval: 30000 } } as any);
-  const query10 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(10), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(10), refetchInterval: 30000 } } as any);
-  const query11 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(11), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(11), refetchInterval: 30000 } } as any);
-  const query12 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(12), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(12), refetchInterval: 30000 } } as any);
-  const query13 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(13), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(13), refetchInterval: 30000 } } as any);
-  const query14 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(14), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(14), refetchInterval: 30000 } } as any);
-  const query15 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(15), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(15), refetchInterval: 30000 } } as any);
-
-  const allQueries = [
-    { tokenId: 0, query: query0 }, { tokenId: 1, query: query1 }, { tokenId: 2, query: query2 }, { tokenId: 3, query: query3 },
-    { tokenId: 4, query: query4 }, { tokenId: 5, query: query5 }, { tokenId: 6, query: query6 }, { tokenId: 7, query: query7 },
-    { tokenId: 8, query: query8 }, { tokenId: 9, query: query9 }, { tokenId: 10, query: query10 }, { tokenId: 11, query: query11 },
-    { tokenId: 12, query: query12 }, { tokenId: 13, query: query13 }, { tokenId: 14, query: query14 }, { tokenId: 15, query: query15 },
-  ];
+    fetchStakeInfos();
+  }, [readEnabled, stakeIds]);
 
   // Get current block timestamp
   const [currentBlockTimestamp, setCurrentBlockTimestamp] = useState<bigint | null>(null);
@@ -128,21 +172,16 @@ export default function StakingPage() {
   }, [readEnabled]);
 
   // Calculate lock days display string (function with guards)
-  const calculateLockDaysDisplay = (lockEnd: bigint | undefined, currentBlock: bigint | null): string => {
-    // Guard: if no lockEnd or currentBlock, return "—"
-    if (!lockEnd || !currentBlock) return "—";
-    
-    // Guard: if lockEnd <= currentBlock, return "Unlocked"
-    if (lockEnd <= currentBlock) return "Unlocked";
-    
-    // Calculate: (lockEnd - currentBlock) / 86400
+  const calculateLockDaysDisplay = (unlockTimestamp: bigint | undefined, currentBlock: bigint | null): string => {
+    if (!unlockTimestamp || !currentBlock) return "—";
+    if (unlockTimestamp <= currentBlock) return "Unlocked";
+
     try {
-      const remainingSeconds = lockEnd - currentBlock;
+      const remainingSeconds = unlockTimestamp - currentBlock;
       const days = Number(remainingSeconds) / 86400;
-      
-      // Guard: check for NaN or invalid
+
       if (!Number.isFinite(days) || days <= 0) return "—";
-      
+
       return `${Math.ceil(days)} days`;
     } catch (error) {
       console.error("Error calculating lock days:", error);
@@ -169,79 +208,87 @@ export default function StakingPage() {
 
   // Combine positions with detailed info - only include tokens that are actually staked
   const stakedPositions: StakedPosition[] = useMemo(() => {
-    const result: StakedPosition[] = [];
-    
-    // Guard: return empty if no block timestamp
-    if (!currentBlockTimestamp) {
-      return result;
-    }
-    
-    allQueries.forEach(({ tokenId, query }) => {
-      // Only process tokens that are in the staked list
-      if (!stakedTokenIds.includes(tokenId)) return;
-      if (!query.data) return;
-      
-      const data = query.data;
-      // getStakeInfoForToken returns: [_tokensStaked, _rewards]
-      // But code expects: [quantity, stakedAt, lockDays] - assuming contract returns more or wrapper exists
-      const quantity = typeof data === "object" && "quantity" in data ? data.quantity : (Array.isArray(data) ? data[0] : BigInt(0));
-      const stakedAt = typeof data === "object" && "stakedAt" in data ? data.stakedAt : (Array.isArray(data) ? data[1] : BigInt(0));
-      const lockDays = typeof data === "object" && "lockDays" in data ? data.lockDays : (Array.isArray(data) ? data[2] : BigInt(0));
-      // Try to get rewards - might be in a different index or property
-      const rewards = typeof data === "object" && "rewards" in data ? data.rewards : (Array.isArray(data) && data.length > 3 ? data[3] : BigInt(0));
-      
-      // Guard: skip if quantity is zero or invalid
-      if (!quantity || quantity <= BigInt(0)) return;
-      
-      // Guard: validate stakedAt and lockDays
-      if (!stakedAt || !lockDays) return;
-      
-      // Calculate lock end timestamp (stakedAt + lockDays in seconds)
-      let lockEndTimestamp: bigint;
-      try {
-        lockEndTimestamp = stakedAt + (lockDays * BigInt(86400));
-      } catch (error) {
-        console.error("Error calculating lockEndTimestamp:", error);
-        return;
-      }
-      
-      // Guard: validate lockEndTimestamp
-      if (!lockEndTimestamp) return;
-      
-      const isUnlocked = lockEndTimestamp <= currentBlockTimestamp;
-      
-      // Calculate lock days display (with guards)
-      const lockDaysDisplay = calculateLockDaysDisplay(lockEndTimestamp, currentBlockTimestamp);
-      
-      // Format rewards (with guards)
-      const rewardsDisplay = formatRewards(rewards);
-      
-      result.push({
-        tokenId,
-        quantity,
-        stakedAt,
-        lockDays,
-        isUnlocked,
-        lockDaysDisplay,
-        rewardsDisplay,
-        lockEndTimestamp,
-        rewards,
-      });
-    });
-    
-    return result;
-  }, [allQueries, stakedTokenIds, currentBlockTimestamp]);
+    if (!stakeInfos.length) return [];
 
-  const isLoading = isLoadingStakeInfo || allQueries.some(({ query }) => query.isLoading);
+    return stakeInfos
+      .filter((info) => info.staker?.toLowerCase() === (address || "").toLowerCase() && !info.unstaked)
+      .map((info) => {
+        const isUnlocked = currentBlockTimestamp ? info.unlockTimestamp <= currentBlockTimestamp : false;
+        const lockDaysDisplay = calculateLockDaysDisplay(info.unlockTimestamp, currentBlockTimestamp);
+        const rewardsDisplay = formatRewards(info.rewardAmount);
+
+        return {
+          stakeId: info.stakeId,
+          tokenId: Number(info.tokenId),
+          amount: info.amount,
+          stakeTimestamp: info.stakeTimestamp,
+          lockDuration: info.lockDuration,
+          unlockTimestamp: info.unlockTimestamp,
+          rewardAmount: info.rewardAmount,
+          claimed: info.claimed,
+          unstaked: info.unstaked,
+          isUnlocked,
+          lockDaysDisplay,
+          rewardsDisplay,
+        };
+      });
+  }, [stakeInfos, address, currentBlockTimestamp]);
+
+  const totalRewards = useMemo(() => {
+    return stakedPositions.reduce((sum, pos) => {
+      if (pos.claimed) return sum;
+      if (pos.rewardAmount && (!pos.lockDuration || pos.isUnlocked)) {
+        return sum + pos.rewardAmount;
+      }
+      return sum;
+    }, BigInt(0));
+  }, [stakedPositions]);
+
+  const isLoading = isLoadingStakeIds || isLoadingStakeInfos;
 
   const handleStakeSuccess = () => {
-    refetchStakeInfo();
-    allQueries.forEach(({ query }) => (query as any).refetch?.());
+    refetchStakeIds();
   };
 
   const handleUnstakeSuccess = () => {
-    refetchStakeInfo();
-    allQueries.forEach(({ query }) => (query as any).refetch?.());
+    refetchStakeIds();
+  };
+
+  // Claim reward
+  const { writeContract: writeClaim, data: claimTxHash, isPending: isClaimPending, error: claimWriteError } = useWriteContract();
+  const { isLoading: isClaimConfirming, isSuccess: isClaimSuccess } = useWaitForTransactionReceipt({
+    hash: claimTxHash,
+  });
+
+  useEffect(() => {
+    if (claimWriteError) {
+      setClaimError(claimWriteError.message || String(claimWriteError));
+    }
+  }, [claimWriteError]);
+
+  useEffect(() => {
+    if (isClaimSuccess) {
+      setClaimingStakeId(null);
+      setClaimError(null);
+      refetchStakeIds();
+    }
+  }, [isClaimSuccess, refetchStakeIds]);
+
+  const handleClaim = (stakeId: bigint) => {
+    if (!readEnabled || isClaimPending) return;
+    setClaimError(null);
+    setClaimingStakeId(stakeId);
+    try {
+      writeClaim({
+        address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+        abi: stakeAbi as any,
+        functionName: "claim",
+        args: [stakeId],
+      } as any);
+    } catch (error: any) {
+      setClaimError(error?.message || String(error));
+      setClaimingStakeId(null);
+    }
   };
 
   return (
@@ -295,7 +342,6 @@ export default function StakingPage() {
             <p className="text-sm text-white/70">You have no staked NFTs yet. Use the Stake NFT button above to get started.</p>
           )}
           {readEnabled && !isLoading && (() => {
-            // Render guard: check if positions is valid array
             if (!stakedPositions || !Array.isArray(stakedPositions) || stakedPositions.length === 0) {
               return null;
             }
@@ -303,54 +349,69 @@ export default function StakingPage() {
             return (
               <div className="space-y-3">
                 {stakedPositions.map((position) => {
-                  // Guard: validate position data
                   if (!position || position.tokenId === undefined) return null;
                   
-                  // Guard: validate lockEndTimestamp
-                  const lockEnd = position.lockEndTimestamp;
-                  const rewardAmount = position.rewards;
-                  
+                  const rewardAmount = position.rewardAmount;
+                  const canClaim = position.isUnlocked && !position.claimed && rewardAmount > BigInt(0);
+
                   return (
                     <div
-                      key={`${position.tokenId}-${position.stakedAt}`}
-                      className="rounded-xl border border-white/10 bg-white/5 p-4"
+                      key={`${position.stakeId.toString()}-${position.stakeTimestamp.toString()}`}
+                      className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3"
                     >
-                      <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <p className="text-sm font-semibold">
-                            {getNameFromTokenId(position.tokenId) ?? "FarFISH"}
+                            {getNameFromTokenId(position.tokenId) ?? "FarFISH"} • Stake #{position.stakeId.toString()}
                           </p>
                           <p className="text-xs text-white/70 mt-1">
-                            Quantity Staked: {(() => {
-                              try {
-                                return Number(position.quantity).toLocaleString();
-                              } catch {
-                                return "0";
-                              }
-                            })()}
+                            Quantity Staked: {Number(position.amount || 0).toLocaleString()}
                           </p>
                           <p className="text-xs text-white/70 mt-1">
-                            Lock Duration: {position.lockDaysDisplay || "—"}
+                            Unlocks In: {position.lockDaysDisplay || "—"}
                           </p>
-                          {rewardAmount !== undefined && rewardAmount > BigInt(0) && (
-                            <p className="text-xs text-white/70 mt-1">
-                              Rewards: <span className="font-semibold text-[#00d4c4]">
-                                {position.rewardsDisplay || "0"} FRH
-                              </span>
-                            </p>
-                          )}
+                          <p className="text-xs text-white/70 mt-1">
+                            Reward: <span className="font-semibold text-[#00d4c4]">
+                              {position.rewardsDisplay || "0"} FRH
+                            </span>{" "}
+                            {position.claimed ? "(claimed)" : ""}
+                          </p>
+                        </div>
+                        <div className="text-xs text-white/70">
+                          {position.isUnlocked ? "✅ Unlocked" : "🔒 Locked"}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedUnstakePosition(position);
-                          setIsUnstakeModalOpen(true);
-                        }}
-                        className="mt-2 w-full rounded-lg py-2 text-sm font-semibold transition bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
-                      >
-                        Unstake
-                      </button>
+                      {claimError && claimingStakeId === position.stakeId && (
+                        <p className="text-xs text-red-400">Claim failed: {claimError}</p>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedUnstakePosition(position);
+                            setIsUnstakeModalOpen(true);
+                          }}
+                          className="rounded-lg py-2 text-sm font-semibold transition bg-white/10 text-white hover:bg-white/15 border border-white/20"
+                        >
+                          Unstake
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canClaim || isClaimPending || isClaimConfirming}
+                          onClick={() => handleClaim(position.stakeId)}
+                          className={`rounded-lg py-2 text-sm font-semibold transition ${
+                            canClaim && !isClaimPending && !isClaimConfirming
+                              ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+                              : "bg-white/10 text-white/40 cursor-not-allowed"
+                          }`}
+                        >
+                          {claimingStakeId === position.stakeId && (isClaimPending || isClaimConfirming)
+                            ? "Claiming..."
+                            : position.claimed
+                            ? "Claimed"
+                            : "Claim Rewards"}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

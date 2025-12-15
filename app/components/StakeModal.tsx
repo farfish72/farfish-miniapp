@@ -28,7 +28,6 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   const chainId = useChainId();
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<LockDuration>(30);
-  const [amount, setAmount] = useState<string>("1");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [needsApproval, setNeedsApproval] = useState<boolean | null>(null);
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | null>(null);
@@ -63,7 +62,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   const isPending = isApprovalPending || isApprovalConfirming || isStakePending || isStakeConfirming;
   const currentTxHash = approvalTx || stakeTx;
 
-  const canStake = isConnected && isBaseNetwork && selectedTokenId !== null && selectedDuration && amount && Number(amount) > 0;
+  const canStake = isConnected && isBaseNetwork && selectedTokenId !== null && selectedDuration;
 
   // Update needsApproval when approval status changes
   useEffect(() => {
@@ -77,7 +76,6 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
     if (!isOpen) {
       setSelectedTokenId(null);
       setSelectedDuration(30);
-      setAmount("1");
       setToast(null);
       setNeedsApproval(null);
       setApprovalTxHash(null);
@@ -95,18 +93,14 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   const proceedWithStake = useCallback(() => {
     if (!address || !STAKING_CONTRACT_ADDRESS || selectedTokenId === null || !selectedDuration) return;
 
-    const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      setToast({ type: "error", message: "Please enter a valid amount" });
-      return;
-    }
+    const lockDurationSeconds = BigInt(selectedDuration * 24 * 60 * 60);
 
     try {
       writeStake({
         address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
         abi: stakeAbi as any,
         functionName: "stake",
-        args: [BigInt(selectedTokenId), BigInt(amountNum)],
+        args: [BigInt(selectedTokenId), lockDurationSeconds],
       } as any);
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
@@ -117,7 +111,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
     }
-  }, [address, STAKING_CONTRACT_ADDRESS, selectedTokenId, selectedDuration, amount, writeStake]);
+  }, [address, STAKING_CONTRACT_ADDRESS, selectedTokenId, selectedDuration, writeStake]);
 
   // Handle approval transaction success
   useEffect(() => {
@@ -193,12 +187,6 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
 
     if (!isBaseNetwork) {
       setToast({ type: "error", message: `Please switch to the correct network (chainId ${expectedChainId})` });
-      return;
-    }
-
-    const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      setToast({ type: "error", message: "Please enter a valid amount" });
       return;
     }
 
@@ -311,20 +299,6 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Amount Input */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Amount</label>
-          <input
-            type="number"
-            min="1"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            disabled={isPending}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#00d4c4] disabled:opacity-50"
-            placeholder="Enter amount"
-          />
         </div>
 
         {/* Approval Status */}

@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
+import { getPublicClient } from "@wagmi/core";
+import { wagmiConfig } from "../lib/wagmi";
+import { base } from "viem/chains";
 
 interface UnstakeModalProps {
   isOpen: boolean;
@@ -13,10 +16,13 @@ interface UnstakeModalProps {
 }
 
 interface StakedPosition {
+  stakeId: bigint;
   tokenId: number;
-  quantity: bigint;
-  stakedAt: bigint;
-  lockDays: bigint;
+  amount: bigint;
+  unlockTimestamp: bigint;
+  rewardAmount: bigint;
+  claimed: boolean;
+  unstaked: boolean;
   isUnlocked: boolean;
 }
 
@@ -31,91 +37,97 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const [selectedPosition, setSelectedPosition] = useState<StakedPosition | null>(null);
-  const [withdrawAmount, setWithdrawAmount] = useState<string>("");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+  const [positions, setPositions] = useState<StakedPosition[]>([]);
+  const [isLoadingPositions, setIsLoadingPositions] = useState(false);
 
   const expectedChainId = getExpectedChainId();
   const isBaseNetwork = chainId === expectedChainId;
   const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
 
-  // Read stake info to get all staked tokens
-  const { data: stakeInfo, refetch: refetchStakeInfo } = useReadContract({
+  // Get user's stake IDs
+  const { data: stakeIds, refetch: refetchStakeIds } = useReadContract({
     address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
     abi: stakeAbi as any,
-    functionName: "getStakeInfo",
+    functionName: "getUserStakeIds",
     args: address ? [address as `0x${string}`] : undefined,
     query: { enabled: readEnabled },
   } as any);
 
-  // Parse staked token IDs from getStakeInfo
-  const stakedTokenIds = useMemo(() => {
-    if (!stakeInfo || !Array.isArray(stakeInfo) || stakeInfo.length < 2) return [];
-    
-    const tokensStaked = stakeInfo[0] as bigint[];
-    if (!tokensStaked) return [];
-    
-    // Limit to first 20 tokens to avoid too many queries
-    return tokensStaked.slice(0, 20).map((tokenId) => Number(tokenId));
-  }, [stakeInfo]);
+  // Fetch stake info tuples for each stakeId
+  useEffect(() => {
+    const fetchStakeInfos = async () => {
+      if (!readEnabled) {
+        setPositions([]);
+        return;
+      }
 
-  // Query tokens 0-19 unconditionally (hooks must be called in same order every render)
-  // We'll filter results to only show staked tokens
-  const query0 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(0), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(0) } } as any);
-  const query1 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(1), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(1) } } as any);
-  const query2 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(2), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(2) } } as any);
-  const query3 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(3), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(3) } } as any);
-  const query4 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(4), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(4) } } as any);
-  const query5 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(5), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(5) } } as any);
-  const query6 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(6), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(6) } } as any);
-  const query7 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(7), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(7) } } as any);
-  const query8 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(8), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(8) } } as any);
-  const query9 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(9), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(9) } } as any);
-  const query10 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(10), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(10) } } as any);
-  const query11 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(11), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(11) } } as any);
-  const query12 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(12), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(12) } } as any);
-  const query13 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(13), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(13) } } as any);
-  const query14 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(14), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(14) } } as any);
-  const query15 = useReadContract({ address: STAKING_CONTRACT_ADDRESS as `0x${string}`, abi: stakeAbi as any, functionName: "getStakeInfoForToken", args: address ? [BigInt(15), address as `0x${string}`] : undefined, query: { enabled: readEnabled && stakedTokenIds.includes(15) } } as any);
+      if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+        setPositions([]);
+        return;
+      }
 
-  const allQueries = [
-    { tokenId: 0, query: query0 }, { tokenId: 1, query: query1 }, { tokenId: 2, query: query2 }, { tokenId: 3, query: query3 },
-    { tokenId: 4, query: query4 }, { tokenId: 5, query: query5 }, { tokenId: 6, query: query6 }, { tokenId: 7, query: query7 },
-    { tokenId: 8, query: query8 }, { tokenId: 9, query: query9 }, { tokenId: 10, query: query10 }, { tokenId: 11, query: query11 },
-    { tokenId: 12, query: query12 }, { tokenId: 13, query: query13 }, { tokenId: 14, query: query14 }, { tokenId: 15, query: query15 },
-  ];
+      try {
+        const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+        if (!publicClient) return;
 
-  // Combine positions with detailed info - only include tokens that are actually staked
-  const positions: StakedPosition[] = useMemo(() => {
-    const result: StakedPosition[] = [];
-    
-    allQueries.forEach(({ tokenId, query }) => {
-      // Only process tokens that are in the staked list
-      if (!stakedTokenIds.includes(tokenId)) return;
-      if (!query.data) return;
-      
-      const data = query.data;
-      const quantity = typeof data === "object" && "quantity" in data ? data.quantity : (Array.isArray(data) ? data[0] : BigInt(0));
-      const stakedAt = typeof data === "object" && "stakedAt" in data ? data.stakedAt : (Array.isArray(data) ? data[1] : BigInt(0));
-      const lockDays = typeof data === "object" && "lockDays" in data ? data.lockDays : (Array.isArray(data) ? data[2] : BigInt(0));
-      
-      if (quantity <= 0) return;
-      
-      const stakedAtMs = Number(stakedAt) * 1000; // Assuming timestamp is in seconds
-      const lockDaysNum = Number(lockDays);
-      const unlockMs = stakedAtMs + (lockDaysNum * 24 * 60 * 60 * 1000);
-      const isUnlocked = Date.now() >= unlockMs;
-      
-      result.push({
-        tokenId,
-        quantity,
-        stakedAt,
-        lockDays,
-        isUnlocked,
-      });
-    });
-    
-    return result;
-  }, [allQueries, stakedTokenIds]);
+        setIsLoadingPositions(true);
+
+        const results = await Promise.all(
+          (stakeIds as bigint[]).map(async (stakeId) => {
+            try {
+              const data = await (publicClient.readContract as any)({
+                address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+                abi: stakeAbi as any,
+                functionName: "getStakeInfo",
+                args: [stakeId],
+              });
+
+              if (!data || typeof data !== "object") return null;
+
+              const [
+                staker,
+                tokenId,
+                amount,
+                _stakeTimestamp,
+                _lockDuration,
+                unlockTimestamp,
+                rewardAmount,
+                claimed,
+                unstaked,
+              ] = data as any[];
+
+              if (!staker || staker.toLowerCase() !== (address || "").toLowerCase()) {
+                return null;
+              }
+
+              const isUnlocked = unlockTimestamp ? BigInt(unlockTimestamp) <= BigInt(Math.floor(Date.now() / 1000)) : false;
+
+              return {
+                stakeId,
+                tokenId: Number(tokenId ?? 0),
+                amount: BigInt(amount ?? 0),
+                unlockTimestamp: BigInt(unlockTimestamp ?? 0),
+                rewardAmount: BigInt(rewardAmount ?? 0),
+                claimed: Boolean(claimed),
+                unstaked: Boolean(unstaked),
+                isUnlocked,
+              } as StakedPosition;
+            } catch (err) {
+              console.error("Failed to fetch stake info for id", stakeId, err);
+              return null;
+            }
+          })
+        );
+
+        setPositions(results.filter(Boolean) as StakedPosition[]);
+      } finally {
+        setIsLoadingPositions(false);
+      }
+    };
+
+    fetchStakeInfos();
+  }, [readEnabled, stakeIds, address]);
 
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
   const { isLoading: isTxConfirming, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
@@ -123,13 +135,12 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   });
 
   const isPending = isWritePending || isTxConfirming;
-  const canWithdraw = selectedPosition && withdrawAmount && Number(withdrawAmount) > 0 && selectedPosition.isUnlocked;
+  const canWithdraw = selectedPosition && selectedPosition.isUnlocked && !selectedPosition.unstaked;
 
   // Set initial position when modal opens or initialPosition changes
   useEffect(() => {
     if (isOpen && initialPosition) {
       setSelectedPosition(initialPosition);
-      setWithdrawAmount(Number(initialPosition.quantity).toString());
     }
   }, [isOpen, initialPosition]);
 
@@ -137,7 +148,6 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   useEffect(() => {
     if (!isOpen) {
       setSelectedPosition(null);
-      setWithdrawAmount("");
       setToast(null);
     }
   }, [isOpen]);
@@ -146,14 +156,13 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   useEffect(() => {
     if (isTxSuccess && txHash) {
       setToast({ type: "success", message: "NFT unstaked successfully!" });
-      refetchStakeInfo();
-      allQueries.forEach(({ query }) => (query as any).refetch?.());
+      refetchStakeIds();
       setTimeout(() => {
         onSuccess?.();
         onClose();
       }, 2000);
     }
-  }, [isTxSuccess, txHash, refetchStakeInfo, allQueries, onSuccess, onClose]);
+  }, [isTxSuccess, txHash, refetchStakeIds, onSuccess, onClose]);
 
   // Handle write errors
   useEffect(() => {
@@ -189,17 +198,6 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
       return;
     }
 
-    const amountNum = Number(withdrawAmount);
-    if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      setToast({ type: "error", message: "Please enter a valid amount" });
-      return;
-    }
-
-    if (amountNum > Number(selectedPosition.quantity)) {
-      setToast({ type: "error", message: "Amount exceeds staked quantity" });
-      return;
-    }
-
     if (!selectedPosition.isUnlocked) {
       setToast({ type: "error", message: "This position is still locked" });
       return;
@@ -209,8 +207,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
       writeContract({
         address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
         abi: stakeAbi as any,
-        functionName: "withdraw",
-        args: [BigInt(selectedPosition.tokenId), BigInt(amountNum)],
+        functionName: "unstake",
+        args: [selectedPosition.stakeId],
       } as any);
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
@@ -259,6 +257,10 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
             <p className="text-sm text-white/70">Connect wallet to view positions.</p>
           </div>
+        ) : isLoadingPositions ? (
+          <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
+            <p className="text-sm text-white/70">Loading staked positions...</p>
+          </div>
         ) : positions.length === 0 ? (
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
             <p className="text-sm text-white/70">You have no staked positions to unstake.</p>
@@ -273,18 +275,17 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
                   const name = getNameFromTokenId(position.tokenId) ?? "FarFISH";
                   return (
                     <button
-                      key={position.tokenId}
+                      key={position.stakeId.toString()}
                       type="button"
                       onClick={() => {
                         setSelectedPosition(position);
-                        setWithdrawAmount(Number(position.quantity).toString());
                       }}
-                      disabled={isPending || !position.isUnlocked}
+                      disabled={isPending || !position.isUnlocked || position.unstaked}
                       className={`w-full rounded-xl p-3 border text-left transition ${
                         isSelected
                           ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
                           : "border-white/10 bg-white/5 hover:bg-white/10"
-                      } ${isPending || !position.isUnlocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                      } ${isPending || !position.isUnlocked || position.unstaked ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -292,10 +293,12 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
                             {name}
                           </span>
                           <span className="text-xs text-white/70">
-                            Quantity: {Number(position.quantity)} • Lock: {Number(position.lockDays)} days
+                            Stake #{position.stakeId.toString()} • Quantity: {Number(position.amount)}
                           </span>
                         </div>
-                        {position.isUnlocked ? (
+                        {position.unstaked ? (
+                          <span className="text-xs text-white/60">Already unstaked</span>
+                        ) : position.isUnlocked ? (
                           <span className="text-xs text-green-400">✅ Unlocked</span>
                         ) : (
                           <span className="text-xs text-yellow-400">🔒 Locked</span>
@@ -306,26 +309,6 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
                 })}
               </div>
             </div>
-
-            {/* Withdraw Amount */}
-            {selectedPosition && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Withdraw Amount</label>
-                <input
-                  type="number"
-                  min="1"
-                  max={Number(selectedPosition.quantity)}
-                  value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
-                  disabled={isPending}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#00d4c4] disabled:opacity-50"
-                  placeholder={`Max: ${Number(selectedPosition.quantity)}`}
-                />
-                <p className="text-xs text-white/70 mt-1">
-                  Available: {Number(selectedPosition.quantity)}
-                </p>
-              </div>
-            )}
           </>
         )}
 
