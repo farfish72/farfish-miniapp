@@ -8,7 +8,7 @@ import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "../lib/wagmi";
 import { base } from "viem/chains";
 import { formatUnits } from "viem";
-import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
+import { STAKING_CONTRACT_ADDRESS } from "../constants";
 import stakeAbi from "../abi/stake.json";
 import StakeModal from "../components/StakeModal";
 import UnstakeModal from "../components/UnstakeModal";
@@ -20,32 +20,16 @@ const getExpectedChainId = () => {
   return process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
 };
 
-interface RawStakeInfo {
+// Minimal stake model for UI built *only* from getStakeInfo(stakeId).
+// We intentionally do NOT track tokenId, ownership, metadata, or any
+// off-chain assumptions; the contract is the single source of truth.
+interface StakePosition {
   stakeId: bigint;
-  staker: string;
-  tokenId: bigint;
-  amount: bigint;
-  stakeTimestamp: bigint;
+  rewardAmount: bigint;
   lockDuration: bigint;
   unlockTimestamp: bigint;
-  rewardAmount: bigint;
   claimed: boolean;
   unstaked: boolean;
-}
-
-interface StakedPosition {
-  stakeId: bigint;
-  tokenId: number;
-  amount: bigint;
-  stakeTimestamp: bigint;
-  lockDuration: bigint;
-  unlockTimestamp: bigint;
-  rewardAmount: bigint;
-  claimed: boolean;
-  unstaked: boolean;
-  isUnlocked: boolean;
-  lockDaysDisplay: string; // Remaining time until unlock
-  rewardsDisplay: string; // Pre-formatted rewards string
 }
 
 export default function StakingPage() {
@@ -53,10 +37,10 @@ export default function StakingPage() {
   const chainId = useChainId();
   const [isStakeModalOpen, setIsStakeModalOpen] = useState(false);
   const [isUnstakeModalOpen, setIsUnstakeModalOpen] = useState(false);
-  const [selectedUnstakePosition, setSelectedUnstakePosition] = useState<StakedPosition | null>(null);
-  const [stakeInfos, setStakeInfos] = useState<RawStakeInfo[]>([]);
-  const [isLoadingStakeInfos, setIsLoadingStakeInfos] = useState(false);
-  const [stakeInfosError, setStakeInfosError] = useState(false);
+  const [selectedStakeIdForUnstake, setSelectedStakeIdForUnstake] = useState<bigint | null>(null);
+  const [positions, setPositions] = useState<StakePosition[]>([]);
+  const [isLoadingPositions, setIsLoadingPositions] = useState(false);
+  const [positionsError, setPositionsError] = useState(false);
   const [claimingStakeId, setClaimingStakeId] = useState<bigint | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
 
@@ -79,38 +63,40 @@ export default function StakingPage() {
     },
   } as any);
 
-  // Keep stakeInfos as "last known good" data and NEVER clear them on transient
-  // disabled reads or undefined stakeIds, otherwise React/Wagmi hydration races
-  // can briefly report "no stake" even though on-chain state is unchanged.
+  // Keep stake positions as "last known good" data and NEVER clear them on
+  // transient disabled reads or undefined stakeIds. React/Wagmi hydration
+  // races can briefly flip readEnabled/undefined stakeIds; if we eagerly wipe
+  // state we would falsely render "no stake" even though on-chain state is
+  // unchanged. The contract is the source of truth; UI just reflects it.
   // Fetch stake info tuples for each stakeId
   useEffect(() => {
-    const fetchStakeInfos = async () => {
+    const fetchPositions = async () => {
       if (!readEnabled) {
-        // Do NOT wipe stakeInfos here; readEnabled can flap during hydration or
-        // short network glitches and we must preserve previously loaded positions.
+        // Do NOT wipe positions here; readEnabled can flap during hydration or
+        // short network glitches and we must preserve previously loaded stakes.
         return;
       }
 
       try {
-        setStakeInfosError(false);
+        setPositionsError(false);
 
         if (!stakeIds) {
           // When stakeIds is temporarily undefined during initial mount or refetch,
-          // keep existing stakeInfos to avoid a false "no staked NFTs" UI.
+          // keep existing positions to avoid a false "no staked NFTs" UI.
           return;
         }
 
         if (Array.isArray(stakeIds) && stakeIds.length === 0) {
           // getUserStakeIds is the single source of truth; an explicit empty
           // array means the user truly has no active stakes.
-          setStakeInfos([]);
+          setPositions([]);
           return;
         }
 
         const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
         if (!publicClient) return;
 
-        setIsLoadingStakeInfos(true);
+        setIsLoadingPositions(true);
         const results = await Promise.all(
           (stakeIds as bigint[]).map(async (stakeId) => {
             try {
@@ -124,10 +110,10 @@ export default function StakingPage() {
               if (!data || typeof data !== "object") return null;
 
               const [
-                staker,
-                tokenId,
-                amount,
-                stakeTimestamp,
+                _staker,
+                _tokenId,
+                _amount,
+                _stakeTimestamp,
                 lockDuration,
                 unlockTimestamp,
                 rewardAmount,
@@ -137,16 +123,12 @@ export default function StakingPage() {
 
               return {
                 stakeId,
-                staker: staker as string,
-                tokenId: BigInt(tokenId ?? 0),
-                amount: BigInt(amount ?? 0),
-                stakeTimestamp: BigInt(stakeTimestamp ?? 0),
+                rewardAmount: BigInt(rewardAmount ?? 0),
                 lockDuration: BigInt(lockDuration ?? 0),
                 unlockTimestamp: BigInt(unlockTimestamp ?? 0),
-                rewardAmount: BigInt(rewardAmount ?? 0),
                 claimed: Boolean(claimed),
                 unstaked: Boolean(unstaked),
-              } as RawStakeInfo;
+              } as StakePosition;
             } catch (err) {
               console.error("Failed to fetch stake info for id", stakeId, err);
               return null;
@@ -154,17 +136,19 @@ export default function StakingPage() {
           })
         );
 
-        setStakeInfos(results.filter(Boolean) as RawStakeInfo[]);
+        // Preserve only successfully decoded positions; we never infer from tokenId
+        // or ownership, we only reflect what getStakeInfo(stakeId) returns.
+        setPositions(results.filter(Boolean) as StakePosition[]);
       } catch (error) {
         console.error("Failed to fetch stake infos:", error);
-        // Preserve any previously loaded stakeInfos so the UI never lies with a false \"no stake\" state.
-        setStakeInfosError(true);
+        // Preserve any previously loaded positions so the UI never lies with a false "no stake" state.
+        setPositionsError(true);
       } finally {
-        setIsLoadingStakeInfos(false);
+        setIsLoadingPositions(false);
       }
     };
 
-    fetchStakeInfos();
+    fetchPositions();
   }, [readEnabled, stakeIds]);
 
   // Listen for global staking lifecycle updates so this page always refetches
@@ -183,54 +167,6 @@ export default function StakingPage() {
     };
   }, [readEnabled, refetchStakeIds]);
 
-  // Get current block timestamp
-  const [currentBlockTimestamp, setCurrentBlockTimestamp] = useState<bigint | null>(null);
-
-  useEffect(() => {
-    if (!readEnabled) {
-      setCurrentBlockTimestamp(null);
-      return;
-    }
-
-    const fetchBlockTimestamp = async () => {
-      try {
-        const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
-        if (!publicClient) return;
-        
-        const block = await publicClient.getBlock({ blockTag: "latest" });
-        if (block?.timestamp) {
-          setCurrentBlockTimestamp(block.timestamp);
-        }
-      } catch (error) {
-        console.error("Failed to fetch block timestamp:", error);
-        // Fallback to current time in seconds
-        setCurrentBlockTimestamp(BigInt(Math.floor(Date.now() / 1000)));
-      }
-    };
-
-    fetchBlockTimestamp();
-    const interval = setInterval(fetchBlockTimestamp, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, [readEnabled]);
-
-  // Calculate lock days display string (function with guards)
-  const calculateLockDaysDisplay = (unlockTimestamp: bigint | undefined, currentBlock: bigint | null): string => {
-    if (!unlockTimestamp || !currentBlock) return "—";
-    if (unlockTimestamp <= currentBlock) return "Unlocked";
-
-    try {
-      const remainingSeconds = unlockTimestamp - currentBlock;
-      const days = Number(remainingSeconds) / 86400;
-
-      if (!Number.isFinite(days) || days <= 0) return "—";
-
-      return `${Math.ceil(days)} days`;
-    } catch (error) {
-      console.error("Error calculating lock days:", error);
-      return "—";
-    }
-  };
-
   // Format rewards using formatUnits (function with guards)
   const formatRewards = (rewards: bigint | undefined): string => {
     if (!rewards || rewards === BigInt(0)) return "0";
@@ -248,36 +184,16 @@ export default function StakingPage() {
     }
   };
 
-  // Combine positions with detailed info - only include tokens that are actually staked
-  const stakedPositions: StakedPosition[] = useMemo(() => {
-    if (!stakeInfos.length) return [];
-
-    return stakeInfos
-      .filter((info) => info.staker?.toLowerCase() === (address || "").toLowerCase() && !info.unstaked)
-      .map((info) => {
-        const isUnlocked = currentBlockTimestamp ? info.unlockTimestamp <= currentBlockTimestamp : false;
-        const lockDaysDisplay = calculateLockDaysDisplay(info.unlockTimestamp, currentBlockTimestamp);
-        const rewardsDisplay = formatRewards(info.rewardAmount);
-
-        return {
-          stakeId: info.stakeId,
-          tokenId: Number(info.tokenId),
-          amount: info.amount,
-          stakeTimestamp: info.stakeTimestamp,
-          lockDuration: info.lockDuration,
-          unlockTimestamp: info.unlockTimestamp,
-          rewardAmount: info.rewardAmount,
-          claimed: info.claimed,
-          unstaked: info.unstaked,
-          isUnlocked,
-          lockDaysDisplay,
-          rewardsDisplay,
-        };
-      });
-  }, [stakeInfos, address, currentBlockTimestamp]);
+  // We only work with positions derived directly from getStakeInfo(stakeId)
+  // and only use stakeId, rewardAmount, lockDuration, unlockTimestamp,
+  // claimed, and unstaked. No tokenId, balances, or metadata.
+  const activePositions: StakePosition[] = useMemo(() => {
+    if (!positions.length) return [];
+    return positions.filter((pos) => !pos.unstaked);
+  }, [positions]);
 
   const totalRewards = useMemo(() => {
-    return stakedPositions.reduce((sum, pos) => {
+    return activePositions.reduce((sum, pos) => {
       if (pos.claimed) return sum;
       // Show all unclaimed rewards - contract decides eligibility
       if (pos.rewardAmount) {
@@ -285,9 +201,9 @@ export default function StakingPage() {
       }
       return sum;
     }, BigInt(0));
-  }, [stakedPositions]);
+  }, [activePositions]);
 
-  const isLoading = isLoadingStakeIds || isLoadingStakeInfos;
+  const isLoading = isLoadingStakeIds || isLoadingPositions;
 
   const handleStakeSuccess = () => {
     refetchStakeIds();
@@ -381,52 +297,61 @@ export default function StakingPage() {
           {readEnabled && isLoading && (
             <p className="text-sm text-white/70">Loading staked NFTs...</p>
           )}
-          {readEnabled && !isLoading && stakeInfosError && stakedPositions.length === 0 && (
+          {readEnabled && !isLoading && positionsError && activePositions.length === 0 && (
             <p className="text-sm text-red-400">Failed to load your staked NFTs. Please try again in a moment.</p>
           )}
-          {readEnabled && !isLoading && !stakeInfosError && stakedPositions.length === 0 && (
+          {readEnabled && !isLoading && !positionsError && activePositions.length === 0 && (
             <p className="text-sm text-white/70">
               You have no staked NFTs yet. Use the Stake NFT button above to get started.
             </p>
           )}
           {readEnabled && !isLoading && (() => {
-            if (!stakedPositions || !Array.isArray(stakedPositions) || stakedPositions.length === 0) {
+            if (!activePositions || !Array.isArray(activePositions) || activePositions.length === 0) {
               return null;
             }
             
             return (
               <div className="space-y-3">
-                {stakedPositions.map((position) => {
-                  if (!position || position.tokenId === undefined) return null;
-                  
-                  const rewardAmount = position.rewardAmount;
-                  // Let contract decide eligibility - only disable if already claimed or transaction pending
+                {activePositions.map((position) => {
+                  if (!position) return null;
+
+                  // Let the contract decide eligibility; we only prevent duplicate
+                  // clicks while a tx is in-flight or after a claim is marked claimed.
                   const isDisabled = position.claimed || isClaimPending || isClaimConfirming;
+                  const lockDays =
+                    position.lockDuration > BigInt(0)
+                      ? Number(position.lockDuration) / 86400
+                      : 0;
+                  const unlockDate =
+                    position.unlockTimestamp && position.unlockTimestamp > BigInt(0)
+                      ? new Date(Number(position.unlockTimestamp) * 1000).toLocaleString()
+                      : "—";
 
                   return (
                     <div
-                      key={`${position.stakeId.toString()}-${position.stakeTimestamp.toString()}`}
+                      key={position.stakeId.toString()}
                       className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <p className="text-sm font-semibold">
-                            {getNameFromTokenId(position.tokenId) ?? "FarFISH"} • Stake #{position.stakeId.toString()}
+                            Stake #{position.stakeId.toString()}
                           </p>
                           <p className="text-xs text-white/70 mt-1">
-                            Quantity Staked: {Number(position.amount || 0).toLocaleString()}
-                          </p>
-                          <p className="text-xs text-white/70 mt-1">
-                            Lock Duration: {Number(position.lockDuration) / (24 * 60 * 60)} days
-                          </p>
-                          <p className="text-xs text-white/70 mt-1">
-                            Reward: <span className="font-semibold text-[#00d4c4]">
-                              {position.rewardsDisplay || "0"} FRH
+                            Reward:{" "}
+                            <span className="font-semibold text-[#00d4c4]">
+                              {formatRewards(position.rewardAmount)} FRH
                             </span>{" "}
                             {position.claimed ? "(claimed)" : ""}
                           </p>
                           <p className="text-xs text-white/70 mt-1">
-                            Status: {position.unstaked ? "Unstaked" : position.isUnlocked ? "Unlockable" : "Locked"}
+                            Lock: {lockDays > 0 ? `${lockDays} days` : "—"}
+                          </p>
+                          <p className="text-xs text-white/70 mt-1">
+                            Unlocks at: {unlockDate}
+                          </p>
+                          <p className="text-xs text-white/70 mt-1">
+                            Status: {position.claimed ? "Claimed" : "Claimable"}
                           </p>
                         </div>
                       </div>
@@ -437,7 +362,7 @@ export default function StakingPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedUnstakePosition(position);
+                            setSelectedStakeIdForUnstake(position.stakeId);
                             setIsUnstakeModalOpen(true);
                           }}
                           className="rounded-lg py-2 text-sm font-semibold transition bg-white/10 text-white hover:bg-white/15 border border-white/20"
@@ -480,10 +405,10 @@ export default function StakingPage() {
         isOpen={isUnstakeModalOpen}
         onClose={() => {
           setIsUnstakeModalOpen(false);
-          setSelectedUnstakePosition(null);
+          setSelectedStakeIdForUnstake(null);
         }}
         onSuccess={handleUnstakeSuccess}
-        initialPosition={selectedUnstakePosition}
+        initialStakeId={selectedStakeIdForUnstake}
       />
     </div>
   );

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
-import { STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
+import { STAKING_CONTRACT_ADDRESS } from "../constants";
 import stakeAbi from "../abi/stake.json";
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "../lib/wagmi";
@@ -12,18 +12,18 @@ interface UnstakeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-  initialPosition?: StakedPosition | null;
+  // Optional UX hint from parent: which stakeId to pre-select when opening.
+  initialStakeId?: bigint | null;
 }
 
+// Minimal stake model for the Unstake modal, driven ONLY by getStakeInfo(stakeId).
+// We intentionally do NOT track tokenId, balances, or metadata. The contract
+// and stakeId are the single source of truth for lifecycle and eligibility.
 interface StakedPosition {
   stakeId: bigint;
-  tokenId: number;
-  amount: bigint;
   unlockTimestamp: bigint;
-  rewardAmount: bigint;
   claimed: boolean;
   unstaked: boolean;
-  isUnlocked: boolean;
 }
 
 const BASESCAN_URL = "https://basescan.org/tx";
@@ -33,7 +33,7 @@ const getExpectedChainId = () => {
   return process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
 };
 
-export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPosition }: UnstakeModalProps) {
+export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeId }: UnstakeModalProps) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const [selectedPosition, setSelectedPosition] = useState<StakedPosition | null>(null);
@@ -46,7 +46,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   const isBaseNetwork = chainId === expectedChainId;
   const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
 
-  // Get user's stake IDs
+  // Get user's stake IDs. stakeId is the ONLY lifecycle identifier we use.
   const { data: stakeIds, refetch: refetchStakeIds } = useReadContract({
     address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
     abi: stakeAbi as any,
@@ -55,9 +55,10 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
     query: { enabled: readEnabled },
   } as any);
 
-  // Keep positions as "last known good" view of stakeIds and NEVER clear them
-  // just because readEnabled briefly flips false or stakeIds is undefined; those
-  // hydration/rpc races would otherwise show a misleading "no positions" state.
+  // Keep positions as "last known good" view driven solely by stakeId. We NEVER
+  // clear them on transient readEnabled=false or undefined stakeIds, otherwise
+  // hydration/RPC races could briefly show a false "no positions" state even
+  // though the contract still has active stakes.
   // Fetch stake info tuples for each stakeId
   useEffect(() => {
     const fetchStakeInfos = async () => {
@@ -102,32 +103,21 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
               if (!data || typeof data !== "object") return null;
 
               const [
-                staker,
-                tokenId,
-                amount,
+                _staker,
+                _tokenId,
+                _amount,
                 _stakeTimestamp,
                 _lockDuration,
                 unlockTimestamp,
-                rewardAmount,
                 claimed,
                 unstaked,
               ] = data as any[];
 
-              if (!staker || staker.toLowerCase() !== (address || "").toLowerCase()) {
-                return null;
-              }
-
-              const isUnlocked = unlockTimestamp ? BigInt(unlockTimestamp) <= BigInt(Math.floor(Date.now() / 1000)) : false;
-
               return {
                 stakeId,
-                tokenId: Number(tokenId ?? 0),
-                amount: BigInt(amount ?? 0),
                 unlockTimestamp: BigInt(unlockTimestamp ?? 0),
-                rewardAmount: BigInt(rewardAmount ?? 0),
                 claimed: Boolean(claimed),
                 unstaked: Boolean(unstaked),
-                isUnlocked,
               } as StakedPosition;
             } catch (err) {
               console.error("Failed to fetch stake info for id", stakeId, err);
@@ -136,7 +126,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
           })
         );
 
-        // Filter out already unstaked positions - only show active stakes
+        // Only show positions that the contract still considers staked. We do
+        // not infer anything from tokenId, balances, or off-chain metadata.
         const activePositions = results.filter((pos): pos is StakedPosition =>
           Boolean(pos) && !pos.unstaked
         );
@@ -176,15 +167,18 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   });
 
   const isPending = isWritePending || isTxConfirming;
-  // Let contract decide eligibility - don't block in UI
-  const canWithdraw = selectedPosition && !selectedPosition.unstaked;
+  // Let contract decide eligibility - we only require a position to be
+  // selected; the staking contract enforces lock and reward rules.
+  const canWithdraw = Boolean(selectedPosition);
 
-  // Set initial position when modal opens or initialPosition changes
+  // Set initial selection by stakeId when modal opens (optional UX)
   useEffect(() => {
-    if (isOpen && initialPosition) {
-      setSelectedPosition(initialPosition);
+    if (!isOpen || !initialStakeId || !positions.length) return;
+    const match = positions.find((p) => p.stakeId === initialStakeId);
+    if (match) {
+      setSelectedPosition(match);
     }
-  }, [isOpen, initialPosition]);
+  }, [isOpen, initialStakeId, positions]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -249,7 +243,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
       return;
     }
 
-    // Let contract decide eligibility - don't block in UI
+    // Let contract decide eligibility - don't block in UI based on timestamps,
+    // rewards, or local state. If it reverts, the contract is correct.
     try {
       writeContract({
         address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
@@ -299,7 +294,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
           </div>
         )}
 
-        {/* Position Selection */}
+        {/* Position Selection - driven solely by stakeId and getStakeInfo(stakeId) */}
         {!isConnected ? (
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
             <p className="text-sm text-white/70">Connect wallet to view positions.</p>
@@ -322,9 +317,18 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
               <label className="block text-sm font-medium mb-2">Select Staked Position</label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {positions.map((position) => {
-                  // Selection is by stakeId (lifecycle identifier), not tokenId.
                   const isSelected = selectedPosition?.stakeId === position.stakeId;
-                  const name = getNameFromTokenId(position.tokenId) ?? "FarFISH";
+                  const unlockDate =
+                    position.unlockTimestamp && position.unlockTimestamp > BigInt(0)
+                      ? new Date(Number(position.unlockTimestamp) * 1000).toLocaleString()
+                      : "—";
+                  const nowSec = BigInt(Math.floor(Date.now() / 1000));
+                  const isUnlockable =
+                    position.unlockTimestamp && position.unlockTimestamp > BigInt(0)
+                      ? position.unlockTimestamp <= nowSec
+                      : false;
+                  const statusLabel = isUnlockable ? "Unlockable" : "Locked";
+
                   return (
                     <button
                       key={position.stakeId.toString()}
@@ -332,27 +336,25 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
                       onClick={() => {
                         setSelectedPosition(position);
                       }}
-                      disabled={isPending || position.unstaked}
+                      disabled={isPending}
                       className={`w-full rounded-xl p-3 border text-left transition ${
                         isSelected
                           ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
                           : "border-white/10 bg-white/5 hover:bg-white/10"
-                      } ${isPending || position.unstaked ? "opacity-50 cursor-not-allowed" : ""}`}
+                      } ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-1">
                           <span className="text-sm font-semibold block">
-                            {name}
+                            Stake #{position.stakeId.toString()}
                           </span>
-                          <span className="text-xs text-white/70">
-                            Stake #{position.stakeId.toString()} • Quantity: {Number(position.amount)}
+                          <span className="text-xs text-white/70 block">
+                            Unlocks at: {unlockDate}
                           </span>
                         </div>
-                        {position.unstaked ? (
-                          <span className="text-xs text-white/60">Already unstaked</span>
-                        ) : (
-                          <span className="text-xs text-white/70">Stake #{position.stakeId.toString()}</span>
-                        )}
+                        <span className="text-xs px-2 py-1 rounded-full border border-white/20 text-white/80">
+                          Status: {statusLabel}
+                        </span>
                       </div>
                     </button>
                   );
