@@ -177,17 +177,24 @@ function ProfilePageContent() {
   }, [searchParams, address, fetchNFTInfo]);
 
   // Fetch live stats
-  const [statsError, setStatsError] = useState(false);
+  type StatsErrorState = { nftsOwned: boolean; stakedCount: boolean; chestStreak: boolean; rank: boolean };
+  const [statsError, setStatsError] = useState<StatsErrorState>({
+    nftsOwned: false,
+    stakedCount: false,
+    chestStreak: false,
+    rank: false,
+  });
+  const [statsRefreshToken, setStatsRefreshToken] = useState(0);
 
   const fetchLiveStats = useCallback(async () => {
     if (!address) {
       setLiveStats({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
-      setStatsError(false);
+      setStatsError({ nftsOwned: false, stakedCount: false, chestStreak: false, rank: false });
       return;
     }
 
     setLoadingStats(true);
-    setStatsError(false);
+    setStatsError({ nftsOwned: false, stakedCount: false, chestStreak: false, rank: false });
     try {
       // Fetch NFT owned count
       let nftsOwned = 0;
@@ -208,7 +215,7 @@ function ProfilePageContent() {
           }
         } catch (error) {
           console.error("Failed to fetch NFT owned count:", error);
-          setStatsError(true);
+          setStatsError((prev) => ({ ...prev, nftsOwned: true }));
         }
       }
 
@@ -252,7 +259,7 @@ function ProfilePageContent() {
           }
         } catch (error) {
           console.error("Failed to fetch staked count:", error);
-          setStatsError(true);
+          setStatsError((prev) => ({ ...prev, stakedCount: true }));
         }
       }
 
@@ -269,7 +276,7 @@ function ProfilePageContent() {
         }
       } catch (error) {
         console.error("Failed to fetch chest streak:", error);
-        setStatsError(true);
+        setStatsError((prev) => ({ ...prev, chestStreak: true }));
       }
 
       // Fetch rank from leaderboard API
@@ -284,22 +291,39 @@ function ProfilePageContent() {
         }
       } catch (error) {
         console.error("Failed to fetch rank:", error);
-        setStatsError(true);
+        setStatsError((prev) => ({ ...prev, rank: true }));
       }
 
       setLiveStats({ nftsOwned, stakedCount, chestStreak, rank });
     } catch (error) {
       console.error("Failed to fetch live stats:", error);
-      setStatsError(true);
+      setStatsError((prev) => ({
+        nftsOwned: prev.nftsOwned || true,
+        stakedCount: prev.stakedCount || true,
+        chestStreak: prev.chestStreak || true,
+        rank: prev.rank || true,
+      }));
     } finally {
       setLoadingStats(false);
     }
-  }, [address]);
+  }, [address, statsRefreshToken]);
 
-  // Fetch live stats when address or stakeInfo changes
+  // Fetch live stats when address changes or when explicitly refreshed (e.g. after stake/unstake/chest updates)
   useEffect(() => {
     fetchLiveStats();
   }, [fetchLiveStats]);
+
+  // Listen for global staking updates so Profile stays in sync with on-chain state
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      setStatsRefreshToken((prev) => prev + 1);
+    };
+    window.addEventListener("farfish:staking-updated", handler);
+    return () => {
+      window.removeEventListener("farfish:staking-updated", handler);
+    };
+  }, []);
 
   // Tasks are UX-only engagement elements; no KV calls are made.
 
@@ -312,19 +336,19 @@ function ProfilePageContent() {
     () => [
       {
         label: "NFT Owned",
-        value: loadingStats ? "…" : statsError ? "Error" : formatStatValue(liveStats.nftsOwned),
+        value: loadingStats ? "…" : statsError.nftsOwned ? "Error" : formatStatValue(liveStats.nftsOwned),
       },
       {
         label: "Staked NFT",
-        value: loadingStats ? "…" : statsError ? "Error" : formatStatValue(liveStats.stakedCount),
+        value: loadingStats ? "…" : statsError.stakedCount ? "Error" : formatStatValue(liveStats.stakedCount),
       },
       {
         label: "Chest Streak",
-        value: loadingStats ? "…" : statsError ? "Error" : formatStatValue(liveStats.chestStreak, " days"),
+        value: loadingStats ? "…" : statsError.chestStreak ? "Error" : formatStatValue(liveStats.chestStreak, " days"),
       },
       {
         label: "Rank",
-        value: loadingStats ? "…" : statsError ? "Error" : (liveStats.rank ? `#${liveStats.rank}` : "Unranked"),
+        value: loadingStats ? "…" : statsError.rank ? "Error" : (liveStats.rank ? `#${liveStats.rank}` : "Unranked"),
       },
     ],
     [liveStats, loadingStats, statsError]
@@ -517,7 +541,7 @@ function ProfilePageContent() {
               </div>
             ))}
           </div>
-          {statsError && !loadingStats && (
+          {Object.values(statsError).some(Boolean) && !loadingStats && (
             <p className="mt-2 text-xs text-red-300 text-center">
               Some stats failed to load. Try again later.
             </p>

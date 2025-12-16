@@ -263,6 +263,19 @@ export default function ChestView() {
     refetchStakeIds();
   }, [readDailyChest, readSilverChest, refetchStakeIds]);
 
+  // Also listen for global staking updates so chest eligibility and staking-derived rewards
+  // stay in sync with on-chain state even after stake/unstake on the Stake page.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      refetchAllChestData();
+    };
+    window.addEventListener("farfish:staking-updated", handler);
+    return () => {
+      window.removeEventListener("farfish:staking-updated", handler);
+    };
+  }, [refetchAllChestData]);
+
   // Refetch on mount and when address changes (navigation back)
   useEffect(() => {
     if (isConnected && address && isBaseNetwork) {

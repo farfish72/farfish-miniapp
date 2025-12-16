@@ -40,7 +40,8 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<LockDuration>(30);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
-  const [needsApproval, setNeedsApproval] = useState<boolean | null>(null);
+  // Default to requiring approval until we know otherwise so the button is never stuck in a permanent "Loading..." state.
+  const [needsApproval, setNeedsApproval] = useState<boolean | null>(true);
   const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | null>(null);
   const [stakeTxHash, setStakeTxHash] = useState<`0x${string}` | null>(null);
 
@@ -205,7 +206,18 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
     if (isStakeSuccess && stakeTx) {
       setStakeTxHash(stakeTx);
       setToast({ type: "success", message: "NFT staked successfully!" });
-      // Reset all pending states immediately
+
+      // Broadcast a global staking update so other parts of the app (Profile, Chest, Stake page)
+      // can refetch on-chain data such as getUserStakeIds, profile stats, and chest eligibility.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("farfish:staking-updated", {
+            detail: { type: "stake", txHash: stakeTx },
+          }),
+        );
+      }
+
+      // Let the parent trigger its own refetch and close the modal after a brief success state.
       setTimeout(() => {
         onSuccess?.();
         onClose();
@@ -439,9 +451,11 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
           </button>
           <button
             onClick={handleStake}
-            disabled={!canStake || isPending || needsApproval === null || isResolvingTokenId || !!ownershipError}
+            // Only block interaction while we know a transaction or ownership check is in-flight, or input is invalid.
+            // This avoids a "Loading..." label that can get stuck if the approval status never resolves.
+            disabled={!canStake || isPending || isResolvingTokenId || !!ownershipError}
             className={`flex-1 rounded-lg py-3 text-sm font-semibold transition ${
-              canStake && !isPending && needsApproval !== null && !isResolvingTokenId && !ownershipError
+              canStake && !isPending && !isResolvingTokenId && !ownershipError
                 ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
                 : "bg-white/10 text-white/40 cursor-not-allowed"
             }`}
@@ -456,8 +470,6 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
               ? "Cannot Stake"
               : needsApproval === true
               ? "Approve & Stake"
-              : needsApproval === null
-              ? "Loading..."
               : "Stake"}
           </button>
         </div>

@@ -138,7 +138,7 @@ export default function HomeClient() {
     }
 
     try {
-      // Explicitly get public client for Base chain (chainId 8453)
+      // Use the configured Base chain from wagmi to ensure we always read from the same chain
       const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
       if (!publicClient) {
         return {
