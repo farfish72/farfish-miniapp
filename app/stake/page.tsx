@@ -36,7 +36,16 @@ export default function StakingPage() {
 
   // Format rewards using formatUnits (function with guards)
   const formatRewards = (rewards: bigint | undefined): string => {
-    if (!rewards || rewards === BigInt(0)) return "0";
+    // Explicitly check bigint value - do NOT use truthy checks
+    // Compare with BigInt(0) explicitly (not 0n for ES compatibility)
+    if (rewards === undefined || rewards === null || rewards === BigInt(0)) {
+      return "0";
+    }
+    
+    // Only format if rewards > BigInt(0)
+    if (rewards <= BigInt(0)) {
+      return "0";
+    }
     
     try {
       // Use formatUnits with 18 decimals
@@ -55,7 +64,8 @@ export default function StakingPage() {
     return activeStakes.reduce((sum, pos) => {
       if (pos.claimed) return sum;
       // Show all unclaimed rewards - contract decides eligibility
-      if (pos.rewardAmount) {
+      // Explicitly check bigint value - do NOT use truthy checks
+      if (pos.rewardAmount && pos.rewardAmount > BigInt(0)) {
         return sum + pos.rewardAmount;
       }
       return sum;
@@ -185,14 +195,23 @@ export default function StakingPage() {
                   // Let the contract decide eligibility; we only prevent duplicate
                   // clicks while a tx is in-flight or after a claim is marked claimed.
                   const isDisabled = position.claimed || isClaimPending || isClaimConfirming;
-                  const lockDays =
-                    position.lockDuration > BigInt(0)
-                      ? Number(position.lockDuration) / 86400
-                      : 0;
-                  const unlockDate =
-                    position.unlockTimestamp && position.unlockTimestamp > BigInt(0)
-                      ? new Date(Number(position.unlockTimestamp) * 1000).toLocaleString()
-                      : "—";
+                  
+                  // Handle lockDuration: explicitly compare bigint with > BigInt(0), convert to number only after checking
+                  const lockDuration = position.lockDuration;
+                  const lockDays = lockDuration > BigInt(0) ? Number(lockDuration) / 86400 : 0;
+                  const lockDurationDisplay = lockDuration > BigInt(0) ? `${lockDays} days` : "No lock";
+                  
+                  // Handle unlockTimestamp: explicitly compare bigint with > BigInt(0), convert to number only after checking
+                  const unlockTimestamp = position.unlockTimestamp;
+                  const unlockDate = unlockTimestamp > BigInt(0) 
+                    ? new Date(Number(unlockTimestamp) * 1000).toLocaleString()
+                    : "Unlocked";
+                  
+                  // Handle rewardAmount: explicitly compare bigint with > BigInt(0)
+                  const rewardAmount = position.rewardAmount;
+                  const rewardDisplay = rewardAmount > BigInt(0) 
+                    ? formatRewards(rewardAmount) 
+                    : "0";
 
                   return (
                     <div
@@ -207,11 +226,11 @@ export default function StakingPage() {
                         <p className="text-xs text-white/70">
                           Reward:{" "}
                           <span className="font-semibold text-[#00d4c4]">
-                            {formatRewards(position.rewardAmount)} FRH
+                            {rewardDisplay} FRH
                           </span>
                         </p>
                         <p className="text-xs text-white/70">
-                          Lock Duration: {lockDays > 0 ? `${lockDays} days` : "—"}
+                          Lock Duration: {lockDurationDisplay}
                         </p>
                         <p className="text-xs text-white/70">
                           Unlock Timestamp: {unlockDate}
