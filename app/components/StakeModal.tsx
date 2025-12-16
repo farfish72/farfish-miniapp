@@ -5,6 +5,9 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId,
 import { STAKING_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import stakeAbi from "../abi/stake.json";
 import nftDropAbi from "../abi/nftDrop.json";
+import { getPublicClient } from "@wagmi/core";
+import { wagmiConfig } from "../lib/wagmi";
+import { base } from "viem/chains";
 
 interface StakeModalProps {
   isOpen: boolean;
@@ -15,10 +18,15 @@ interface StakeModalProps {
 const LOCK_DURATIONS = [30, 90, 180, 360] as const;
 type LockDuration = typeof LOCK_DURATIONS[number];
 
-// Only show 4 names: Bluefin, GoldRay, RedSpike, ShadowGill
-// Token IDs: Bluefin (0-6), GoldRay (7-11), RedSpike (12-14), ShadowGill (15)
-// We use representative token IDs for each rarity
-const TOKEN_IDS = [0, 7, 12, 15]; // Representative tokenIds for each rarity
+// Category → Token Range Map (ON-CHAIN REALITY)
+const NFT_CATEGORIES = {
+  BlueFin: [0, 1, 2, 3, 4, 5, 6],
+  GoldRay: [7, 8, 9, 10, 11],
+  RedSpike: [12, 13, 14],
+  ShadowGill: [15],
+} as const;
+
+type NFTCategory = keyof typeof NFT_CATEGORIES;
 
 const BASESCAN_URL = "https://basescan.org/tx";
 const BASE_CHAIN_ID = 8453;
@@ -26,7 +34,10 @@ const BASE_CHAIN_ID = 8453;
 export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalProps) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<NFTCategory | null>(null);
+  const [resolvedTokenId, setResolvedTokenId] = useState<number | null>(null);
+  const [isResolvingTokenId, setIsResolvingTokenId] = useState(false);
+  const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<LockDuration>(30);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [needsApproval, setNeedsApproval] = useState<boolean | null>(null);
@@ -62,7 +73,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   const isPending = isApprovalPending || isApprovalConfirming || isStakePending || isStakeConfirming;
   const currentTxHash = approvalTx || stakeTx;
 
-  const canStake = isConnected && isBaseNetwork && selectedTokenId !== null && selectedDuration;
+  const canStake = isConnected && isBaseNetwork && resolvedTokenId !== null && selectedDuration && !isResolvingTokenId && !ownershipError;
 
   // Update needsApproval when approval status changes
   useEffect(() => {
@@ -71,10 +82,73 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
     }
   }, [isApproved]);
 
+  // Resolve tokenId when category is selected
+  useEffect(() => {
+    const resolveTokenId = async () => {
+      if (!selectedCategory || !readEnabled || !address || !NFT_CONTRACT_ADDRESS) {
+        setResolvedTokenId(null);
+        setOwnershipError(null);
+        return;
+      }
+
+      setIsResolvingTokenId(true);
+      setOwnershipError(null);
+
+      try {
+        const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+        if (!publicClient) {
+          setResolvedTokenId(null);
+          setOwnershipError(null);
+          setIsResolvingTokenId(false);
+          return;
+        }
+
+        const tokenIds = NFT_CATEGORIES[selectedCategory];
+        
+        // Iterate through tokenIds and find first one with balance > 0
+        for (const tokenId of tokenIds) {
+          try {
+            const balance = await (publicClient.readContract as any)({
+              address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+              abi: nftDropAbi as any,
+              functionName: "balanceOf",
+              args: [address as `0x${string}`, BigInt(tokenId)],
+            }) as bigint;
+
+            if (balance > BigInt(0)) {
+              setResolvedTokenId(tokenId);
+              setOwnershipError(null);
+              setIsResolvingTokenId(false);
+              return;
+            }
+          } catch (err) {
+            console.error(`Failed to check balance for tokenId ${tokenId}:`, err);
+            // Continue to next tokenId
+          }
+        }
+
+        // No tokenId found with balance > 0
+        setResolvedTokenId(null);
+        setOwnershipError("You do not own this NFT");
+        setIsResolvingTokenId(false);
+      } catch (error) {
+        console.error("Failed to resolve tokenId:", error);
+        setResolvedTokenId(null);
+        setOwnershipError(null);
+        setIsResolvingTokenId(false);
+      }
+    };
+
+    resolveTokenId();
+  }, [selectedCategory, readEnabled, address, NFT_CONTRACT_ADDRESS]);
+
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setSelectedTokenId(null);
+      setSelectedCategory(null);
+      setResolvedTokenId(null);
+      setIsResolvingTokenId(false);
+      setOwnershipError(null);
       setSelectedDuration(30);
       setToast(null);
       setNeedsApproval(null);
@@ -91,16 +165,16 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   }, [isOpen, readEnabled, refetchApproval]);
 
   const proceedWithStake = useCallback(() => {
-    if (!address || !STAKING_CONTRACT_ADDRESS || selectedTokenId === null || !selectedDuration) return;
+    if (!address || !STAKING_CONTRACT_ADDRESS || resolvedTokenId === null || !selectedDuration) return;
 
-    const lockDurationSeconds = BigInt(selectedDuration * 24 * 60 * 60);
+    const lockDurationSeconds = BigInt(selectedDuration * 86400);
 
     try {
       writeStake({
         address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
         abi: stakeAbi as any,
         functionName: "stake",
-        args: [BigInt(selectedTokenId), lockDurationSeconds],
+        args: [BigInt(resolvedTokenId), lockDurationSeconds],
       } as any);
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
@@ -111,7 +185,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
     }
-  }, [address, STAKING_CONTRACT_ADDRESS, selectedTokenId, selectedDuration, writeStake]);
+  }, [address, STAKING_CONTRACT_ADDRESS, resolvedTokenId, selectedDuration, writeStake]);
 
   // Handle approval transaction success
   useEffect(() => {
@@ -177,7 +251,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
   }, [toast]);
 
   const handleStake = () => {
-    if (!canStake || !address || !STAKING_CONTRACT_ADDRESS || !NFT_CONTRACT_ADDRESS || selectedTokenId === null || !selectedDuration) return;
+    if (!canStake || !address || !STAKING_CONTRACT_ADDRESS || !NFT_CONTRACT_ADDRESS || resolvedTokenId === null || !selectedDuration) return;
 
     // Precondition checks
     if (!isConnected) {
@@ -253,30 +327,36 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
           </div>
         )}
 
-        {/* Token Selection - Show only 4 names: Bluefin, GoldRay, RedSpike, ShadowGill */}
+        {/* Category Selection - Show only 4 names: BlueFin, GoldRay, RedSpike, ShadowGill */}
         <div className="mb-4">
           <label className="block text-sm font-medium mb-2">Select NFT</label>
           <div className="grid grid-cols-2 gap-2">
-            {TOKEN_IDS.map((tokenId) => {
-              const name = getNameFromTokenId(tokenId);
-              if (!name) return null;
+            {(Object.keys(NFT_CATEGORIES) as NFTCategory[]).map((category) => {
               return (
                 <button
-                  key={tokenId}
+                  key={category}
                   type="button"
-                  onClick={() => setSelectedTokenId(tokenId)}
-                  disabled={isPending}
+                  onClick={() => setSelectedCategory(category)}
+                  disabled={isPending || isResolvingTokenId}
                   className={`rounded-xl p-3 border text-left transition ${
-                    selectedTokenId === tokenId
+                    selectedCategory === category
                       ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
                       : "border-white/10 bg-white/5 hover:bg-white/10"
-                  } ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
+                  } ${isPending || isResolvingTokenId ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  <span className="text-sm font-semibold block">{name}</span>
+                  <span className="text-sm font-semibold block">{category}</span>
+                  {selectedCategory === category && isResolvingTokenId && (
+                    <span className="text-xs text-white/60 mt-1">Checking ownership...</span>
+                  )}
                 </button>
               );
             })}
           </div>
+          {ownershipError && selectedCategory && (
+            <div className="mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-sm text-red-200">{ownershipError}</p>
+            </div>
+          )}
         </div>
 
         {/* Lock Duration Selection */}
@@ -359,17 +439,21 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
           </button>
           <button
             onClick={handleStake}
-            disabled={!canStake || isPending || needsApproval === null}
+            disabled={!canStake || isPending || needsApproval === null || isResolvingTokenId || !!ownershipError}
             className={`flex-1 rounded-lg py-3 text-sm font-semibold transition ${
-              canStake && !isPending && needsApproval !== null
+              canStake && !isPending && needsApproval !== null && !isResolvingTokenId && !ownershipError
                 ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
                 : "bg-white/10 text-white/40 cursor-not-allowed"
             }`}
           >
-            {isPending
+            {isResolvingTokenId
+              ? "Checking ownership..."
+              : isPending
               ? isApprovalPending || isApprovalConfirming
                 ? "Approving..."
                 : "Staking..."
+              : ownershipError
+              ? "Cannot Stake"
               : needsApproval === true
               ? "Approve & Stake"
               : needsApproval === null
