@@ -197,50 +197,37 @@ export default function StakingPage() {
                   return (
                     <div
                       key={position.stakeId.toString()}
-                      className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3"
+                      className="rounded-xl border border-white/10 bg-white/5 p-4"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold">
-                            Stake #{position.stakeId.toString()}
-                          </p>
-                          <p className="text-xs text-white/70 mt-1">
-                            Reward:{" "}
-                            <span className="font-semibold text-[#00d4c4]">
-                              {formatRewards(position.rewardAmount)} FRH
-                            </span>{" "}
-                            {position.claimed ? "(claimed)" : ""}
-                          </p>
-                          <p className="text-xs text-white/70 mt-1">
-                            Lock: {lockDays > 0 ? `${lockDays} days` : "—"}
-                          </p>
-                          <p className="text-xs text-white/70 mt-1">
-                            Unlocks at: {unlockDate}
-                          </p>
-                          <p className="text-xs text-white/70 mt-1">
-                            Status: {position.claimed ? "Claimed" : "Claimable"}
-                          </p>
-                        </div>
+                      {/* Info Section - Grouped Together */}
+                      <div className="space-y-2 mb-4">
+                        <p className="text-sm font-semibold">
+                          Stake #{position.stakeId.toString()}
+                        </p>
+                        <p className="text-xs text-white/70">
+                          Reward:{" "}
+                          <span className="font-semibold text-[#00d4c4]">
+                            {formatRewards(position.rewardAmount)} FRH
+                          </span>
+                        </p>
+                        <p className="text-xs text-white/70">
+                          Lock Duration: {lockDays > 0 ? `${lockDays} days` : "—"}
+                        </p>
+                        <p className="text-xs text-white/70">
+                          Unlock Timestamp: {unlockDate}
+                        </p>
+                        {claimError && claimingStakeId === position.stakeId && (
+                          <p className="text-xs text-red-400 mt-2">Claim failed: {claimError}</p>
+                        )}
                       </div>
-                      {claimError && claimingStakeId === position.stakeId && (
-                        <p className="text-xs text-red-400">Claim failed: {claimError}</p>
-                      )}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedStakeIdForUnstake(position.stakeId);
-                            setIsUnstakeModalOpen(true);
-                          }}
-                          className="rounded-lg py-2 text-sm font-semibold transition bg-white/10 text-white hover:bg-white/15 border border-white/20"
-                        >
-                          Unstake
-                        </button>
+                      
+                      {/* Action Section - Visually Separated */}
+                      <div className="pt-3 border-t border-white/10 flex justify-end">
                         <button
                           type="button"
                           disabled={isDisabled}
                           onClick={() => handleClaim(position.stakeId)}
-                          className={`rounded-lg py-2 text-sm font-semibold transition ${
+                          className={`rounded-lg py-2 px-4 text-sm font-semibold transition ${
                             !isDisabled
                               ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
                               : "bg-white/10 text-white/40 cursor-not-allowed"
@@ -250,7 +237,7 @@ export default function StakingPage() {
                             ? "Claiming..."
                             : position.claimed
                             ? "Claimed"
-                            : "Claim Rewards"}
+                            : "Claim"}
                         </button>
                       </div>
                     </div>
