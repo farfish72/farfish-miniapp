@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureReferralEnv } from "../../../config/referral";
-import { getKey, incrKey, setKey } from "../../../../lib/upstash";
+import { getKey, incrKey, setKey, sadd } from "../../../../lib/upstash";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
@@ -86,7 +86,13 @@ export async function POST(req: NextRequest) {
     await setKey(`referral:${wallet}`, payload);
 
     // Increment unified referral count for referrer
-    await incrKey(`refcount:${referrer}`);
+    const newCount = await incrKey(`refcount:${referrer}`);
+
+    // Add referrer to set:referrers if this is their first referral (count becomes 1)
+    // This ensures they appear in leaderboard queries
+    if (newCount === 1) {
+      await sadd("set:referrers", referrer);
+    }
 
     return NextResponse.json({ success: true, referrer });
   } catch (error: any) {

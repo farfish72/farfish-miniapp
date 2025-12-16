@@ -120,7 +120,11 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
           })
         );
 
-        setPositions(results.filter(Boolean) as StakedPosition[]);
+        // Filter out already unstaked positions - only show active stakes
+        const activePositions = results.filter((pos): pos is StakedPosition => 
+          Boolean(pos) && !pos.unstaked
+        );
+        setPositions(activePositions);
       } finally {
         setIsLoadingPositions(false);
       }
