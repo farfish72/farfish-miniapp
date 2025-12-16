@@ -69,7 +69,13 @@ export default function StakingPage() {
     abi: stakeAbi as any,
     functionName: "getUserStakeIds",
     args: address ? [address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000 },
+    query: {
+      enabled: readEnabled,
+      // Removed periodic polling to avoid stacked calls; manual refetch after tx
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: false,
+    },
   } as any);
   // Fetch stake info tuples for each stakeId
   useEffect(() => {

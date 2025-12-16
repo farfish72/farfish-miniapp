@@ -89,7 +89,7 @@ export default function ChestView() {
     args: address ? [address] : undefined,
     query: {
       enabled: Boolean(isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork),
-      refetchInterval: 30000, // Refetch every 30 seconds
+      // Removed aggressive polling to avoid stacked calls; refetch on demand
       refetchOnMount: true,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
@@ -104,7 +104,7 @@ export default function ChestView() {
     args: address ? [address] : undefined,
     query: {
       enabled: Boolean(isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork),
-      refetchInterval: 30000, // Refetch every 30 seconds
+      // Removed aggressive polling to avoid stacked calls; refetch on demand
       refetchOnMount: true,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
@@ -119,7 +119,13 @@ export default function ChestView() {
     abi: stakeAbi as any,
     functionName: "getUserStakeIds",
     args: address ? [address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
+    query: {
+      enabled: readEnabled,
+      // Avoid background polling; manual refetch after tx / navigation
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: false,
+    },
   } as any);
 
   // Fetch stake info for each stakeId
