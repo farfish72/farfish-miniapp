@@ -12,10 +12,10 @@ import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { FARCASTER_PROFILE_URL, NFT_CONTRACT_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
+import { FARCASTER_PROFILE_URL, NFT_CONTRACT_ADDRESS } from "../constants";
 import useFarcasterGate from "../hooks/useFarcasterGate";
 import nftDropAbi from "../abi/nftDrop.json";
-import stakeAbi from "../abi/stake.json";
+import useUserStakes from "../hooks/useUserStakes";
 
 type ToastState = { type: "error" | "success"; message: string } | null;
 
@@ -33,7 +33,6 @@ type TaskState = {
 
 type LiveStats = {
   nftsOwned: number;
-  stakedCount: number;
   chestStreak: number;
   rank: number | null;
 };
@@ -95,7 +94,7 @@ function ProfilePageContent() {
   const [referralState, setReferralState] = useState<ReferralState>({ bound: false, referralsCount: 0 });
   const [loadingReferral, setLoadingReferral] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
-  const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
+  const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, chestStreak: 0, rank: null });
   const [loadingStats, setLoadingStats] = useState(false);
   // Tasks are UX-only; we do not persist or verify completion
   const [taskState, setTaskState] = useState<TaskState>({ followComplete: false, recastComplete: false });
@@ -104,6 +103,7 @@ function ProfilePageContent() {
   const [nftError, setNftError] = useState<string | null>(null);
   const [nftChecked, setNftChecked] = useState(false);
   const { blocked, message } = useFarcasterGate();
+  const { stakes } = useUserStakes();
 
   const isBaseNetwork = chainId === base.id;
   const readEnabled = Boolean(isConnected && address && isBaseNetwork);
@@ -177,10 +177,9 @@ function ProfilePageContent() {
   }, [searchParams, address, fetchNFTInfo]);
 
   // Fetch live stats
-  type StatsErrorState = { nftsOwned: boolean; stakedCount: boolean; chestStreak: boolean; rank: boolean };
+  type StatsErrorState = { nftsOwned: boolean; chestStreak: boolean; rank: boolean };
   const [statsError, setStatsError] = useState<StatsErrorState>({
     nftsOwned: false,
-    stakedCount: false,
     chestStreak: false,
     rank: false,
   });
@@ -188,15 +187,15 @@ function ProfilePageContent() {
 
   const fetchLiveStats = useCallback(async () => {
     if (!address) {
-      setLiveStats({ nftsOwned: 0, stakedCount: 0, chestStreak: 0, rank: null });
-      setStatsError({ nftsOwned: false, stakedCount: false, chestStreak: false, rank: false });
+      setLiveStats({ nftsOwned: 0, chestStreak: 0, rank: null });
+      setStatsError({ nftsOwned: false, chestStreak: false, rank: false });
       return;
     }
 
     setLoadingStats(true);
-    setStatsError({ nftsOwned: false, stakedCount: false, chestStreak: false, rank: false });
+    setStatsError({ nftsOwned: false, chestStreak: false, rank: false });
     try {
-      // Fetch NFT owned count
+      // Fetch NFT owned count (tokenId-based, ERC1155 balanceOf is valid here)
       let nftsOwned = 0;
       if (NFT_CONTRACT_ADDRESS) {
         try {
@@ -216,30 +215,6 @@ function ProfilePageContent() {
         } catch (error) {
           console.error("Failed to fetch NFT owned count:", error);
           setStatsError((prev) => ({ ...prev, nftsOwned: true }));
-        }
-      }
-
-      // Get staked count from on-chain stakeIds only (stakeId is the lifecycle identifier; tokenId ownership is irrelevant post-stake).
-      let stakedCount = 0;
-      if (STAKING_CONTRACT_ADDRESS) {
-        try {
-          const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
-          if (publicClient && address) {
-            const stakeIds = (await (publicClient.readContract as any)({
-              address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-              abi: stakeAbi as any,
-              functionName: "getUserStakeIds",
-              args: [address as `0x${string}`],
-            })) as bigint[];
-
-            if (Array.isArray(stakeIds)) {
-              // stakeId can be 0; length is the on-chain truth for staked positions.
-              stakedCount = stakeIds.length;
-            }
-          }
-        } catch (error) {
-          console.error("Failed to fetch staked count:", error);
-          setStatsError((prev) => ({ ...prev, stakedCount: true }));
         }
       }
 
@@ -274,12 +249,11 @@ function ProfilePageContent() {
         setStatsError((prev) => ({ ...prev, rank: true }));
       }
 
-      setLiveStats({ nftsOwned, stakedCount, chestStreak, rank });
+      setLiveStats({ nftsOwned, chestStreak, rank });
     } catch (error) {
       console.error("Failed to fetch live stats:", error);
       setStatsError((prev) => ({
         nftsOwned: prev.nftsOwned || true,
-        stakedCount: prev.stakedCount || true,
         chestStreak: prev.chestStreak || true,
         rank: prev.rank || true,
       }));
@@ -320,7 +294,7 @@ function ProfilePageContent() {
       },
       {
         label: "Staked NFT",
-        value: loadingStats ? "…" : statsError.stakedCount ? "Error" : formatStatValue(liveStats.stakedCount),
+        value: loadingStats ? "…" : formatStatValue(stakes.length),
       },
       {
         label: "Chest Streak",
