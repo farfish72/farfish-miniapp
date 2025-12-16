@@ -5,12 +5,15 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { base } from "viem/chains";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getPublicClient } from "@wagmi/core";
+import { wagmiConfig } from "../lib/wagmi";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS, getNameFromTokenId } from "../constants";
 import claimControllerAbi from "../abi/claimController.json";
 import stakeAbi from "../abi/stake.json";
+import { formatUnits } from "viem";
 
 const BASE_CHAIN_ID = 8453;
 const BASESCAN_URL = "https://basescan.org/tx";
@@ -65,7 +68,18 @@ export default function ChestView() {
 
   const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
-  const [claimingPosition, setClaimingPosition] = useState<{ tokenId: number; lockDays: number } | null>(null);
+  const [claimingStakeId, setClaimingStakeId] = useState<bigint | null>(null);
+  const [stakingPositions, setStakingPositions] = useState<Array<{
+    stakeId: bigint;
+    tokenId: number;
+    lockDuration: bigint;
+    startTime: bigint;
+    unstaked: boolean;
+    claimed: boolean;
+    rewardAmount: bigint;
+    unlockTimestamp: bigint;
+  }>>([]);
+  const [isLoadingStakingPositions, setIsLoadingStakingPositions] = useState(false);
 
   // Read daily chest claim status
   const readDailyChest = useReadContract({
@@ -97,40 +111,103 @@ export default function ChestView() {
     },
   } as any);
 
-  // Read staking positions for each token
+  // Read staking positions using getUserStakeIds + getStakeInfo
   const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
   
-  const readToken0 = useReadContract({
+  const { data: stakeIds, refetch: refetchStakeIds } = useReadContract({
     address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
     abi: stakeAbi as any,
-    functionName: "getStakeInfoForToken",
-    args: address ? [0, address as `0x${string}`] : undefined,
+    functionName: "getUserStakeIds",
+    args: address ? [address as `0x${string}`] : undefined,
     query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
   } as any);
 
-  const readToken1 = useReadContract({
-    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-    abi: stakeAbi as any,
-    functionName: "getStakeInfoForToken",
-    args: address ? [1, address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
-  } as any);
+  // Fetch stake info for each stakeId
+  useEffect(() => {
+    const fetchStakeInfos = async () => {
+      if (!readEnabled) {
+        setStakingPositions([]);
+        setIsLoadingStakingPositions(false);
+        return;
+      }
 
-  const readToken2 = useReadContract({
-    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-    abi: stakeAbi as any,
-    functionName: "getStakeInfoForToken",
-    args: address ? [2, address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
-  } as any);
+      if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+        setStakingPositions([]);
+        setIsLoadingStakingPositions(false);
+        return;
+      }
 
-  const readToken3 = useReadContract({
-    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-    abi: stakeAbi as any,
-    functionName: "getStakeInfoForToken",
-    args: address ? [3, address as `0x${string}`] : undefined,
-    query: { enabled: readEnabled, refetchInterval: 30000, refetchOnMount: true, refetchOnReconnect: true, refetchOnWindowFocus: true },
-  } as any);
+      try {
+        const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+        if (!publicClient) return;
+
+        setIsLoadingStakingPositions(true);
+
+        const results = await Promise.all(
+          (stakeIds as bigint[]).map(async (stakeId) => {
+            try {
+              const data = await (publicClient.readContract as any)({
+                address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+                abi: stakeAbi as any,
+                functionName: "getStakeInfo",
+                args: [stakeId],
+              });
+
+              if (!data || typeof data !== "object") return null;
+
+              const [
+                staker,
+                tokenId,
+                amount,
+                stakeTimestamp,
+                lockDuration,
+                unlockTimestamp,
+                rewardAmount,
+                claimed,
+                unstaked,
+              ] = data as any[];
+
+              if (!staker || staker.toLowerCase() !== (address || "").toLowerCase()) {
+                return null;
+              }
+
+              return {
+                stakeId,
+                tokenId: Number(tokenId ?? 0),
+                lockDuration: BigInt(lockDuration ?? 0),
+                startTime: BigInt(stakeTimestamp ?? 0),
+                unstaked: Boolean(unstaked),
+                claimed: Boolean(claimed),
+                rewardAmount: BigInt(rewardAmount ?? 0),
+                unlockTimestamp: BigInt(unlockTimestamp ?? 0),
+              };
+            } catch (err) {
+              console.error("Failed to fetch stake info for id", stakeId, err);
+              return null;
+            }
+          })
+        );
+
+        setStakingPositions(results.filter(Boolean) as Array<{
+          stakeId: bigint;
+          tokenId: number;
+          lockDuration: bigint;
+          startTime: bigint;
+          unstaked: boolean;
+          claimed: boolean;
+          rewardAmount: bigint;
+          unlockTimestamp: bigint;
+        }>);
+      } catch (error) {
+        console.error("Failed to fetch stake infos:", error);
+        setStakingPositions([]);
+      } finally {
+        setIsLoadingStakingPositions(false);
+      }
+    };
+
+    fetchStakeInfos();
+  }, [readEnabled, stakeIds, address]);
 
   // Write contract hooks
   const { writeContract: writeDailyClaim, data: dailyTxHash, isPending: isWriteDailyPending, error: writeDailyError } = useWriteContract();
@@ -173,61 +250,12 @@ export default function ChestView() {
     };
   }, [readSilverChest.data]);
 
-  // Parse staking positions
-  const stakingPositions = useMemo(() => {
-    const positions: Array<{ tokenId: number; name: string; displayLabel: string; lockDays: number; stakedAt: number; quantity: number; isVoided: boolean; canClaim: boolean; daysRemaining: number }> = [];
-    
-    const processToken = (tokenId: number, data: any) => {
-      if (!data) return;
-      const quantity = Number((data?.quantity ?? (Array.isArray(data) ? data[0] : 0)) ?? 0);
-      if (!Number.isFinite(quantity) || quantity <= 0) return;
-      
-      const stakedAt = Number((data?.stakedAt ?? (Array.isArray(data) ? data[1] : 0)) ?? 0);
-      const lockDays = Number((data?.lockDays ?? (Array.isArray(data) ? data[2] : 0)) ?? 0);
-      
-      if (!Number.isFinite(stakedAt) || !Number.isFinite(lockDays) || lockDays <= 0) return;
-      
-      // Check if position is voided (unstaked before lock period)
-      // We can't directly check this, but if stakedAt is 0 or invalid, consider it voided
-      const isVoided = stakedAt <= 0;
-      
-      // Calculate if lock period is met
-      const unlockTimestamp = stakedAt + (lockDays * 24 * 60 * 60 * 1000);
-      const now = Date.now();
-      const canClaim = !isVoided && now >= unlockTimestamp;
-      const daysRemaining = canClaim ? 0 : Math.ceil((unlockTimestamp - now) / (24 * 60 * 60 * 1000));
-      
-      const name = getNameFromTokenId(tokenId) ?? tokenName[tokenId] ?? "FarFISH";
-      positions.push({
-        tokenId,
-        name,
-        displayLabel: name,
-        lockDays,
-        stakedAt,
-        quantity,
-        isVoided,
-        canClaim,
-        daysRemaining: Math.max(0, daysRemaining),
-      });
-    };
-    
-    processToken(0, readToken0?.data);
-    processToken(1, readToken1?.data);
-    processToken(2, readToken2?.data);
-    processToken(3, readToken3?.data);
-    
-    return positions;
-  }, [readToken0?.data, readToken1?.data, readToken2?.data, readToken3?.data]);
-
   // Refetch all chest data
   const refetchAllChestData = useCallback(() => {
     (readDailyChest as any)?.refetch?.();
     (readSilverChest as any)?.refetch?.();
-    (readToken0 as any)?.refetch?.();
-    (readToken1 as any)?.refetch?.();
-    (readToken2 as any)?.refetch?.();
-    (readToken3 as any)?.refetch?.();
-  }, [readDailyChest, readSilverChest, readToken0, readToken1, readToken2, readToken3]);
+    refetchStakeIds();
+  }, [readDailyChest, readSilverChest, refetchStakeIds]);
 
   // Refetch on mount and when address changes (navigation back)
   useEffect(() => {
@@ -262,18 +290,19 @@ export default function ChestView() {
 
   // Handle staking claim transaction success
   useEffect(() => {
-    if (isStakingTxSuccess && stakingTxHash && claimingPosition) {
-      const rewardAmount = rewardAmounts[claimingPosition.tokenId]?.[claimingPosition.lockDays] || 0;
+    if (isStakingTxSuccess && stakingTxHash && claimingStakeId) {
+      const position = stakingPositions.find(p => p.stakeId === claimingStakeId);
+      const rewardAmount = position ? formatUnits(position.rewardAmount, 18) : "0";
       setToast({ type: "success", message: `Staking reward claimed (${rewardAmount} FRH)` });
-      // Clear claiming position immediately
-      setClaimingPosition(null);
+      // Clear claiming stakeId immediately
+      setClaimingStakeId(null);
       // Immediate refetch for instant UI update
       setTimeout(() => {
         refetchAllChestData();
         router.refresh();
       }, 100);
     }
-  }, [isStakingTxSuccess, stakingTxHash, claimingPosition, refetchAllChestData, router]);
+  }, [isStakingTxSuccess, stakingTxHash, claimingStakeId, stakingPositions, refetchAllChestData, router]);
 
   // Handle write errors - clear states on error
   useEffect(() => {
@@ -313,8 +342,8 @@ export default function ChestView() {
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
-      // Clear claiming position and refetch
-      setClaimingPosition(null);
+      // Clear claiming stakeId and refetch
+      setClaimingStakeId(null);
       setTimeout(() => refetchAllChestData(), 500);
     }
   }, [writeStakingError, refetchAllChestData]);
@@ -322,7 +351,7 @@ export default function ChestView() {
   // Clear states on unmount
   useEffect(() => {
     return () => {
-      setClaimingPosition(null);
+      setClaimingStakeId(null);
       setToast(null);
     };
   }, []);
@@ -424,9 +453,9 @@ export default function ChestView() {
     }
   }, [isConnected, address, isBaseNetwork, silverChestData, isWriteSilverPending, isSilverTxConfirming, writeSilverClaim]);
 
-  const handleStakingClaim = useCallback((tokenId: number, lockDays: number) => {
+  const handleStakingClaim = useCallback((stakeId: bigint) => {
     // Prevent double-claim: check if already pending or claiming
-    if (isWriteStakingPending || isStakingTxConfirming || claimingPosition) {
+    if (isWriteStakingPending || isStakingTxConfirming || claimingStakeId) {
       return;
     }
 
@@ -446,20 +475,15 @@ export default function ChestView() {
       return;
     }
 
-    const position = stakingPositions.find(p => p.tokenId === tokenId && p.lockDays === lockDays);
-    if (!position || !position.canClaim || position.isVoided) {
-      return;
-    }
-
     // Disable button immediately to prevent double-claim
-    setClaimingPosition({ tokenId, lockDays });
+    setClaimingStakeId(stakeId);
 
     try {
       writeStakingClaim({
         address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
         abi: stakeAbi as any,
-        functionName: "claimRewards",
-        args: [BigInt(tokenId)],
+        functionName: "claim",
+        args: [stakeId],
       } as any);
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
@@ -469,10 +493,10 @@ export default function ChestView() {
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
-      // Clear claiming position on error
-      setClaimingPosition(null);
+      // Clear claiming stakeId on error
+      setClaimingStakeId(null);
     }
-  }, [isConnected, address, isBaseNetwork, stakingPositions, isWriteStakingPending, isStakingTxConfirming, claimingPosition, writeStakingClaim]);
+  }, [isConnected, address, isBaseNetwork, isWriteStakingPending, isStakingTxConfirming, claimingStakeId, writeStakingClaim]);
 
   // Daily Bronze card state - fully lock button during any pending state
   const dailyCanClaim = dailyChestData?.canClaim ?? false;
@@ -625,11 +649,11 @@ export default function ChestView() {
             </div>
           </div>
 
-          {(readToken0?.isLoading || readToken1?.isLoading || readToken2?.isLoading || readToken3?.isLoading) && (
+          {isLoadingStakingPositions && (
             <p className="text-sm text-white/70">Loading staking positions...</p>
           )}
 
-          {!readToken0?.isLoading && !readToken1?.isLoading && !readToken2?.isLoading && !readToken3?.isLoading && stakingPositions.length === 0 && (
+          {!isLoadingStakingPositions && stakingPositions.length === 0 && (
             <div className="mt-4">
               <p className="text-sm text-white/70 mb-3">You have no staked NFTs. Visit the Stake page to begin earning rewards.</p>
               <Link
@@ -643,104 +667,66 @@ export default function ChestView() {
 
           {stakingPositions.length > 0 && (
             <div className="mt-4 space-y-3">
-              {stakingPositions.map((position, idx) => {
-                const rewardAmount = rewardAmounts[position.tokenId]?.[position.lockDays] || 0;
-                const isClaiming = claimingPosition?.tokenId === position.tokenId && claimingPosition?.lockDays === position.lockDays;
-                const isPending = isWriteStakingPending || isStakingTxConfirming;
-                
-                // If voided, show no claim button
-                if (position.isVoided) {
+              {stakingPositions
+                .filter(p => !p.unstaked)
+                .map((position) => {
+                  const nftName = getNameFromTokenId(position.tokenId) ?? "FarFISH";
+                  const lockDays = Number(position.lockDuration) / (24 * 60 * 60);
+                  const isClaiming = claimingStakeId === position.stakeId;
+                  const isPending = isWriteStakingPending || isStakingTxConfirming;
+                  const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
+                  const isUnlocked = position.unlockTimestamp <= currentTimestamp;
+                  const rewardAmountFormatted = formatUnits(position.rewardAmount, 18);
+                  
+                  // Calculate status
+                  let status: "Locked" | "Unlockable" | "Unstaked" = "Locked";
+                  if (position.unstaked) {
+                    status = "Unstaked";
+                  } else if (isUnlocked) {
+                    status = "Unlockable";
+                  }
+
                   return (
-                    <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div key={position.stakeId.toString()} className="rounded-xl border border-white/10 bg-white/5 p-3">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1">
-                          <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
-                          <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
-                          <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
-                          <p className="text-xs text-red-400 mt-1">Voided (unstaked)</p>
+                          <p className="text-sm font-semibold">{nftName} ({lockDays} Days)</p>
+                          <p className="text-xs text-white/70">Stake #{position.stakeId.toString()}</p>
+                          <p className="text-xs text-white/70">Status: {status}</p>
+                          {position.rewardAmount > BigInt(0) && (
+                            <p className="text-xs text-white/70 mt-1">
+                              Reward: <span className="font-semibold text-[#00d4c4]">{rewardAmountFormatted} FRH</span>
+                              {position.claimed ? " (claimed)" : ""}
+                            </p>
+                          )}
                         </div>
                       </div>
+                      {!position.unstaked && (
+                        <button
+                          type="button"
+                          disabled={isPending || isClaiming || position.claimed}
+                          onClick={() => {
+                            if (!isPending && !isClaiming && !position.claimed) {
+                              handleStakingClaim(position.stakeId);
+                            }
+                          }}
+                          className={`w-full rounded-lg py-2 text-sm font-semibold transition ${
+                            isPending || isClaiming || position.claimed
+                              ? "bg-white/10 text-white/40 cursor-not-allowed"
+                              : "bg-emerald-400/80 text-black hover:bg-emerald-400"
+                          }`}
+                        >
+                          {isClaiming ? "Claiming..." : position.claimed ? "Claimed" : `Claim ${rewardAmountFormatted} FRH reward`}
+                        </button>
+                      )}
                     </div>
                   );
-                }
-                
-                // If days remaining > 0, show disabled button
-                if (position.daysRemaining > 0) {
-                  return (
-                    <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
-                          <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
-                          <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
-                          <p className="text-xs text-white/70 mt-1">🔒 {position.daysRemaining} day{position.daysRemaining !== 1 ? 's' : ''} remaining</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={true}
-                        className="w-full rounded-lg py-2 text-sm font-semibold transition bg-white/10 text-white/40 cursor-not-allowed"
-                      >
-                        Requires {position.daysRemaining} day{position.daysRemaining !== 1 ? 's' : ''} to unlock
-                      </button>
-                    </div>
-                  );
-                }
-                
-                // If unlocked & not claimed, show enabled claim button
-                // Note: We don't have a way to track if already claimed, so we show claim button if canClaim is true
-                if (position.canClaim) {
-                  // Fully lock button during any pending state or if this position is being claimed
-                  const claimDisabled = isPending || isClaiming;
-                  return (
-                    <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
-                          <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
-                          <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
-                          <p className="text-xs text-green-400 mt-1">✅ Ready to claim ({rewardAmount} FRH)</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={claimDisabled}
-                        onClick={() => {
-                          // Double-check to prevent any race condition
-                          if (!claimDisabled && !isPending && !isClaiming) {
-                            handleStakingClaim(position.tokenId, position.lockDays);
-                          }
-                        }}
-                        className={`w-full rounded-lg py-2 text-sm font-semibold transition ${
-                          claimDisabled
-                            ? "bg-white/10 text-white/40 cursor-not-allowed"
-                            : "bg-emerald-400/80 text-black hover:bg-emerald-400"
-                        }`}
-                      >
-                        {isClaiming ? "Claiming..." : `Claim ${rewardAmount} FRH reward`}
-                      </button>
-                    </div>
-                  );
-                }
-                
-                // Fallback (shouldn't reach here, but just in case)
-                return (
-                  <div key={`${position.tokenId}-${position.lockDays}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold">{position.displayLabel} ({position.lockDays} Days)</p>
-                        <p className="text-xs text-white/70">Quantity: {position.quantity}</p>
-                        <p className="text-xs text-white/70">Staked: {position.stakedAt ? new Date(position.stakedAt).toLocaleDateString() : "—"}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                })}
             </div>
           )}
 
           {/* Pending state and tx link for staking claim */}
-          {(isWriteStakingPending || isStakingTxConfirming) && claimingPosition && (
+          {(isWriteStakingPending || isStakingTxConfirming) && claimingStakeId && (
             <div className="mt-4 bg-white/5 border border-white/10 rounded-2xl p-4">
               <p className="text-sm text-white/70">
                 {isStakingTxConfirming ? "Confirming transaction..." : "Transaction pending..."}

@@ -237,7 +237,8 @@ export default function StakingPage() {
   const totalRewards = useMemo(() => {
     return stakedPositions.reduce((sum, pos) => {
       if (pos.claimed) return sum;
-      if (pos.rewardAmount && (!pos.lockDuration || pos.isUnlocked)) {
+      // Show all unclaimed rewards - contract decides eligibility
+      if (pos.rewardAmount) {
         return sum + pos.rewardAmount;
       }
       return sum;
@@ -352,7 +353,8 @@ export default function StakingPage() {
                   if (!position || position.tokenId === undefined) return null;
                   
                   const rewardAmount = position.rewardAmount;
-                  const canClaim = position.isUnlocked && !position.claimed && rewardAmount > BigInt(0);
+                  // Let contract decide eligibility - only disable if already claimed or transaction pending
+                  const isDisabled = position.claimed || isClaimPending || isClaimConfirming;
 
                   return (
                     <div
@@ -368,7 +370,7 @@ export default function StakingPage() {
                             Quantity Staked: {Number(position.amount || 0).toLocaleString()}
                           </p>
                           <p className="text-xs text-white/70 mt-1">
-                            Unlocks In: {position.lockDaysDisplay || "—"}
+                            Lock Duration: {Number(position.lockDuration) / (24 * 60 * 60)} days
                           </p>
                           <p className="text-xs text-white/70 mt-1">
                             Reward: <span className="font-semibold text-[#00d4c4]">
@@ -376,9 +378,9 @@ export default function StakingPage() {
                             </span>{" "}
                             {position.claimed ? "(claimed)" : ""}
                           </p>
-                        </div>
-                        <div className="text-xs text-white/70">
-                          {position.isUnlocked ? "✅ Unlocked" : "🔒 Locked"}
+                          <p className="text-xs text-white/70 mt-1">
+                            Status: {position.unstaked ? "Unstaked" : position.isUnlocked ? "Unlockable" : "Locked"}
+                          </p>
                         </div>
                       </div>
                       {claimError && claimingStakeId === position.stakeId && (
@@ -397,10 +399,10 @@ export default function StakingPage() {
                         </button>
                         <button
                           type="button"
-                          disabled={!canClaim || isClaimPending || isClaimConfirming}
+                          disabled={isDisabled}
                           onClick={() => handleClaim(position.stakeId)}
                           className={`rounded-lg py-2 text-sm font-semibold transition ${
-                            canClaim && !isClaimPending && !isClaimConfirming
+                            !isDisabled
                               ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
                               : "bg-white/10 text-white/40 cursor-not-allowed"
                           }`}

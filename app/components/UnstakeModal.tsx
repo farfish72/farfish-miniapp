@@ -135,7 +135,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   });
 
   const isPending = isWritePending || isTxConfirming;
-  const canWithdraw = selectedPosition && selectedPosition.isUnlocked && !selectedPosition.unstaked;
+  // Let contract decide eligibility - don't block in UI
+  const canWithdraw = selectedPosition && !selectedPosition.unstaked;
 
   // Set initial position when modal opens or initialPosition changes
   useEffect(() => {
@@ -198,11 +199,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
       return;
     }
 
-    if (!selectedPosition.isUnlocked) {
-      setToast({ type: "error", message: "This position is still locked" });
-      return;
-    }
-
+    // Let contract decide eligibility - don't block in UI
     try {
       writeContract({
         address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
@@ -280,12 +277,12 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
                       onClick={() => {
                         setSelectedPosition(position);
                       }}
-                      disabled={isPending || !position.isUnlocked || position.unstaked}
+                      disabled={isPending || position.unstaked}
                       className={`w-full rounded-xl p-3 border text-left transition ${
                         isSelected
                           ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
                           : "border-white/10 bg-white/5 hover:bg-white/10"
-                      } ${isPending || !position.isUnlocked || position.unstaked ? "opacity-50 cursor-not-allowed" : ""}`}
+                      } ${isPending || position.unstaked ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -298,10 +295,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
                         </div>
                         {position.unstaked ? (
                           <span className="text-xs text-white/60">Already unstaked</span>
-                        ) : position.isUnlocked ? (
-                          <span className="text-xs text-green-400">✅ Unlocked</span>
                         ) : (
-                          <span className="text-xs text-yellow-400">🔒 Locked</span>
+                          <span className="text-xs text-white/70">Stake #{position.stakeId.toString()}</span>
                         )}
                       </div>
                     </button>
