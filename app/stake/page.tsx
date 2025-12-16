@@ -78,18 +78,31 @@ export default function StakingPage() {
       refetchOnWindowFocus: false,
     },
   } as any);
+
+  // Keep stakeInfos as "last known good" data and NEVER clear them on transient
+  // disabled reads or undefined stakeIds, otherwise React/Wagmi hydration races
+  // can briefly report "no stake" even though on-chain state is unchanged.
   // Fetch stake info tuples for each stakeId
   useEffect(() => {
     const fetchStakeInfos = async () => {
       if (!readEnabled) {
-        setStakeInfos([]);
+        // Do NOT wipe stakeInfos here; readEnabled can flap during hydration or
+        // short network glitches and we must preserve previously loaded positions.
         return;
       }
 
       try {
         setStakeInfosError(false);
 
-        if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+        if (!stakeIds) {
+          // When stakeIds is temporarily undefined during initial mount or refetch,
+          // keep existing stakeInfos to avoid a false "no staked NFTs" UI.
+          return;
+        }
+
+        if (Array.isArray(stakeIds) && stakeIds.length === 0) {
+          // getUserStakeIds is the single source of truth; an explicit empty
+          // array means the user truly has no active stakes.
           setStakeInfos([]);
           return;
         }
@@ -153,6 +166,22 @@ export default function StakingPage() {
 
     fetchStakeInfos();
   }, [readEnabled, stakeIds]);
+
+  // Listen for global staking lifecycle updates so this page always refetches
+  // getUserStakeIds when any stake/unstake/claim succeeds elsewhere in the app.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handler = () => {
+      if (!readEnabled) return;
+      refetchStakeIds();
+    };
+
+    window.addEventListener("farfish:staking-updated", handler);
+    return () => {
+      window.removeEventListener("farfish:staking-updated", handler);
+    };
+  }, [readEnabled, refetchStakeIds]);
 
   // Get current block timestamp
   const [currentBlockTimestamp, setCurrentBlockTimestamp] = useState<bigint | null>(null);

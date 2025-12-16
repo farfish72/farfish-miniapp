@@ -55,18 +55,31 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
     query: { enabled: readEnabled },
   } as any);
 
+  // Keep positions as "last known good" view of stakeIds and NEVER clear them
+  // just because readEnabled briefly flips false or stakeIds is undefined; those
+  // hydration/rpc races would otherwise show a misleading "no positions" state.
   // Fetch stake info tuples for each stakeId
   useEffect(() => {
     const fetchStakeInfos = async () => {
       if (!readEnabled) {
-        setPositions([]);
+        // Do NOT clear positions here; we gate rendering on connection/network
+        // and must not throw away valid stake state on transient disconnects.
         return;
       }
 
       try {
         setPositionsError(false);
 
-        if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+        if (!stakeIds) {
+          // During initial mount or a refetch, stakeIds can be temporarily
+          // undefined; keep existing positions so the modal doesn't show a
+          // false "no positions" gap while RPC catches up.
+          return;
+        }
+
+        if (Array.isArray(stakeIds) && stakeIds.length === 0) {
+          // getUserStakeIds is the single source of truth; an explicit empty
+          // array means there are no active positions to unstake.
           setPositions([]);
           return;
         }
@@ -139,6 +152,23 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
 
     fetchStakeInfos();
   }, [readEnabled, stakeIds, address]);
+
+  // Keep the Unstake modal in sync with global staking lifecycle events
+  // (stake / unstake / claim) by refetching getUserStakeIds whenever the
+  // farfish:staking-updated event is fired elsewhere in the app.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handler = () => {
+      if (!readEnabled) return;
+      refetchStakeIds();
+    };
+
+    window.addEventListener("farfish:staking-updated", handler);
+    return () => {
+      window.removeEventListener("farfish:staking-updated", handler);
+    };
+  }, [readEnabled, refetchStakeIds]);
 
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
   const { isLoading: isTxConfirming, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
