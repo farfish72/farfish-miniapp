@@ -219,8 +219,7 @@ function ProfilePageContent() {
         }
       }
 
-      // Get staked count using the same pattern as the Stake page:
-      // getUserStakeIds(address) then count active (not unstaked) positions.
+      // Get staked count from on-chain stakeIds only (stakeId is the lifecycle identifier; tokenId ownership is irrelevant post-stake).
       let stakedCount = 0;
       if (STAKING_CONTRACT_ADDRESS) {
         try {
@@ -233,28 +232,9 @@ function ProfilePageContent() {
               args: [address as `0x${string}`],
             })) as bigint[];
 
-            if (Array.isArray(stakeIds) && stakeIds.length > 0) {
-              const stakeInfos = await Promise.all(
-                stakeIds.map(async (stakeId) => {
-                  try {
-                    const info = await (publicClient.readContract as any)({
-                      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-                      abi: stakeAbi as any,
-                      functionName: "getStakeInfo",
-                      args: [stakeId],
-                    });
-                    return info as any[];
-                  } catch {
-                    return null;
-                  }
-                }),
-              );
-
-              stakedCount = stakeInfos.filter((info) => {
-                if (!info || !Array.isArray(info) || info.length < 9) return false;
-                const unstaked = Boolean(info[8]);
-                return !unstaked;
-              }).length;
+            if (Array.isArray(stakeIds)) {
+              // stakeId can be 0; length is the on-chain truth for staked positions.
+              stakedCount = stakeIds.length;
             }
           }
         } catch (error) {

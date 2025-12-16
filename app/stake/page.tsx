@@ -56,6 +56,7 @@ export default function StakingPage() {
   const [selectedUnstakePosition, setSelectedUnstakePosition] = useState<StakedPosition | null>(null);
   const [stakeInfos, setStakeInfos] = useState<RawStakeInfo[]>([]);
   const [isLoadingStakeInfos, setIsLoadingStakeInfos] = useState(false);
+  const [stakeInfosError, setStakeInfosError] = useState(false);
   const [claimingStakeId, setClaimingStakeId] = useState<bigint | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
 
@@ -85,12 +86,14 @@ export default function StakingPage() {
         return;
       }
 
-      if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
-        setStakeInfos([]);
-        return;
-      }
-
       try {
+        setStakeInfosError(false);
+
+        if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+          setStakeInfos([]);
+          return;
+        }
+
         const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
         if (!publicClient) return;
 
@@ -139,6 +142,10 @@ export default function StakingPage() {
         );
 
         setStakeInfos(results.filter(Boolean) as RawStakeInfo[]);
+      } catch (error) {
+        console.error("Failed to fetch stake infos:", error);
+        // Preserve any previously loaded stakeInfos so the UI never lies with a false \"no stake\" state.
+        setStakeInfosError(true);
       } finally {
         setIsLoadingStakeInfos(false);
       }
@@ -345,8 +352,13 @@ export default function StakingPage() {
           {readEnabled && isLoading && (
             <p className="text-sm text-white/70">Loading staked NFTs...</p>
           )}
-          {readEnabled && !isLoading && stakedPositions.length === 0 && (
-            <p className="text-sm text-white/70">You have no staked NFTs yet. Use the Stake NFT button above to get started.</p>
+          {readEnabled && !isLoading && stakeInfosError && stakedPositions.length === 0 && (
+            <p className="text-sm text-red-400">Failed to load your staked NFTs. Please try again in a moment.</p>
+          )}
+          {readEnabled && !isLoading && !stakeInfosError && stakedPositions.length === 0 && (
+            <p className="text-sm text-white/70">
+              You have no staked NFTs yet. Use the Stake NFT button above to get started.
+            </p>
           )}
           {readEnabled && !isLoading && (() => {
             if (!stakedPositions || !Array.isArray(stakedPositions) || stakedPositions.length === 0) {

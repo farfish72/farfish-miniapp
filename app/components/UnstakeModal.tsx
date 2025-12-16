@@ -40,6 +40,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [positions, setPositions] = useState<StakedPosition[]>([]);
   const [isLoadingPositions, setIsLoadingPositions] = useState(false);
+  const [positionsError, setPositionsError] = useState(false);
 
   const expectedChainId = getExpectedChainId();
   const isBaseNetwork = chainId === expectedChainId;
@@ -62,12 +63,14 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
         return;
       }
 
-      if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
-        setPositions([]);
-        return;
-      }
-
       try {
+        setPositionsError(false);
+
+        if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+          setPositions([]);
+          return;
+        }
+
         const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
         if (!publicClient) return;
 
@@ -121,10 +124,14 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
         );
 
         // Filter out already unstaked positions - only show active stakes
-        const activePositions = results.filter((pos): pos is StakedPosition => 
+        const activePositions = results.filter((pos): pos is StakedPosition =>
           Boolean(pos) && !pos.unstaked
         );
         setPositions(activePositions);
+      } catch (error) {
+        console.error("Failed to fetch stake infos for UnstakeModal:", error);
+        // Preserve any previously loaded positions so we never misreport \"no positions\" on error.
+        setPositionsError(true);
       } finally {
         setIsLoadingPositions(false);
       }
@@ -163,6 +170,15 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
       setToast({ type: "success", message: "NFT unstaked successfully!" });
       refetchStakeIds();
       setTimeout(() => {
+        // Broadcast a global staking update so other views (Profile, Chest, Stake) can refetch getUserStakeIds.
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("farfish:staking-updated", {
+              detail: { type: "unstake", txHash },
+            }),
+          );
+        }
+
         onSuccess?.();
         onClose();
       }, 2000);
@@ -262,6 +278,10 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
             <p className="text-sm text-white/70">Loading staked positions...</p>
           </div>
+        ) : positionsError && positions.length === 0 ? (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <p className="text-sm text-red-200">Failed to load your staked positions. Please try again.</p>
+          </div>
         ) : positions.length === 0 ? (
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
             <p className="text-sm text-white/70">You have no staked positions to unstake.</p>
@@ -272,7 +292,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialPositi
               <label className="block text-sm font-medium mb-2">Select Staked Position</label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {positions.map((position) => {
-                  const isSelected = selectedPosition?.tokenId === position.tokenId;
+                  // Selection is by stakeId (lifecycle identifier), not tokenId.
+                  const isSelected = selectedPosition?.stakeId === position.stakeId;
                   const name = getNameFromTokenId(position.tokenId) ?? "FarFISH";
                   return (
                     <button

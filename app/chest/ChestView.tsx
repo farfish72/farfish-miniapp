@@ -80,6 +80,7 @@ export default function ChestView() {
     unlockTimestamp: bigint;
   }>>([]);
   const [isLoadingStakingPositions, setIsLoadingStakingPositions] = useState(false);
+  const [stakingPositionsError, setStakingPositionsError] = useState(false);
 
   // Read daily chest claim status
   const readDailyChest = useReadContract({
@@ -133,17 +134,20 @@ export default function ChestView() {
     const fetchStakeInfos = async () => {
       if (!readEnabled) {
         setStakingPositions([]);
-        setIsLoadingStakingPositions(false);
-        return;
-      }
-
-      if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
-        setStakingPositions([]);
+        setStakingPositionsError(false);
         setIsLoadingStakingPositions(false);
         return;
       }
 
       try {
+        setStakingPositionsError(false);
+
+        if (!stakeIds || !Array.isArray(stakeIds) || stakeIds.length === 0) {
+          setStakingPositions([]);
+          setIsLoadingStakingPositions(false);
+          return;
+        }
+
         const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
         if (!publicClient) return;
 
@@ -206,7 +210,8 @@ export default function ChestView() {
         }>);
       } catch (error) {
         console.error("Failed to fetch stake infos:", error);
-        setStakingPositions([]);
+        // Preserve any previously loaded positions so we never misreport \"no positions\" on transient error.
+        setStakingPositionsError(true);
       } finally {
         setIsLoadingStakingPositions(false);
       }
@@ -530,7 +535,12 @@ export default function ChestView() {
 
   // Silver Chest card state - fully lock button during any pending state
   const silverCanClaim = silverChestData?.canClaim ?? false;
-  const silverHasStaked = silverChestData?.hasStaked ?? false;
+  // Derive hasStaked strictly from on-chain staking state (getUserStakeIds + getStakeInfo),
+  // not from local UI assumptions or token ownership. stakeId=0 is included naturally here.
+  const silverHasStaked = useMemo(
+    () => stakingPositions.some((p) => !p.unstaked),
+    [stakingPositions],
+  );
   const silverTimeUntilClaim = silverChestData?.timeUntilClaim ?? BigInt(0);
   const silverButtonDisabled = !isConnected || !isBaseNetwork || !silverHasStaked || !silverCanClaim || isWriteSilverPending || isSilverTxConfirming;
   const silverButtonLabel = isWriteSilverPending || isSilverTxConfirming
@@ -540,7 +550,12 @@ export default function ChestView() {
     : silverCanClaim
     ? "Open now (6 FRH)"
     : `Next claim in: ${formatTimeUntilClaim(silverTimeUntilClaim)}`;
-  const silverProgress = silverHasStaked && silverCanClaim ? 100 : silverHasStaked ? Math.max(0, 100 - Math.round((Number(silverTimeUntilClaim) / 86400) * 100)) : 0;
+  const silverProgress =
+    silverHasStaked && silverCanClaim
+      ? 100
+      : silverHasStaked
+      ? Math.max(0, 100 - Math.round((Number(silverTimeUntilClaim) / 86400) * 100))
+      : 0;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -672,9 +687,17 @@ export default function ChestView() {
             <p className="text-sm text-white/70">Loading staking positions...</p>
           )}
 
-          {!isLoadingStakingPositions && stakingPositions.length === 0 && (
+          {!isLoadingStakingPositions && stakingPositionsError && stakingPositions.length === 0 && (
             <div className="mt-4">
-              <p className="text-sm text-white/70 mb-3">You have no staked NFTs. Visit the Stake page to begin earning rewards.</p>
+              <p className="text-sm text-red-400 mb-1">Failed to load your staking positions. Please try again.</p>
+            </div>
+          )}
+
+          {!isLoadingStakingPositions && !stakingPositionsError && stakingPositions.length === 0 && (
+            <div className="mt-4">
+              <p className="text-sm text-white/70 mb-3">
+                You have no staked NFTs. Visit the Stake page to begin earning rewards.
+              </p>
               <Link
                 href="/stake"
                 className="inline-block text-sm text-[#00d4c4] hover:underline"
