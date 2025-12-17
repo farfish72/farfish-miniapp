@@ -84,11 +84,6 @@ export default function StakingPage() {
     });
   };
 
-  /* ---------------- helpers ---------------- */
-  const formatUnlockDate = (timestamp: bigint) => {
-    const date = new Date(Number(timestamp) * 1000);
-    return date.toLocaleString();
-  };
 
   /* ---------------- render ---------------- */
   return (
@@ -121,6 +116,11 @@ export default function StakingPage() {
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="font-semibold text-lg mb-4">My Staked NFTs</h3>
 
+          {/* Static informational text */}
+          <p className="mb-4 text-sm text-white/80">
+            When your claim period ends, you can automatically click the Claim button to claim your staking reward.
+          </p>
+
           {!readEnabled && <p>Connect wallet.</p>}
           {isLoading && <p>Loading…</p>}
           {isError && <p className="text-red-400">Failed to load stakes.</p>}
@@ -131,82 +131,40 @@ export default function StakingPage() {
 
           {readEnabled &&
             !isLoading &&
-            stakes.map((s) => {
-              // Error handling: If getStakeInfo failed, show Loading status
-              if (s.error === true) {
+            stakes
+              .filter((s) => s.error !== true)
+              .map((s) => {
+                // Claim button eligibility: ENABLED only if contract allows claiming
+                // unlockTimestamp > 0 AND unlockTimestamp <= block.timestamp AND claimed === false AND unstaked === false
+                const canClaim =
+                  s.unlockTimestamp > BigInt(0) &&
+                  blockTs !== null &&
+                  s.unlockTimestamp <= blockTs &&
+                  s.claimed === false &&
+                  s.unstaked === false;
+
+                const isButtonEnabled = canClaim && !isPending && !confirming;
+
                 return (
                   <div
                     key={s.stakeId.toString()}
-                    className="rounded-xl border border-white/10 bg-white/5 p-4 mb-3"
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 mb-3"
                   >
                     <p className="font-semibold">Stake #{s.stakeId.toString()}</p>
-                    <p>Status: Loading</p>
+                    <button
+                      disabled={!isButtonEnabled}
+                      onClick={() => handleClaim(s.stakeId)}
+                      className={`px-4 py-2 rounded-lg ${
+                        isButtonEnabled
+                          ? "bg-[#00d4c4] text-black"
+                          : "bg-white/10 text-white/40"
+                      }`}
+                    >
+                      Claim
+                    </button>
                   </div>
                 );
-              }
-
-              // Status rules (STRICT ORDER - DO NOT CHANGE)
-              let status: string;
-              let showUnlockDate: boolean = false;
-              let showClaimButton: boolean = true;
-
-              if (s.unstaked === true) {
-                status = "Unstaked";
-                showClaimButton = false; // Hide button if unstaked
-              } else if (s.claimed === true) {
-                status = "Claimed";
-              } else if (s.unlockTimestamp === BigInt(0)) {
-                status = "Locked";
-              } else if (blockTs === null) {
-                // Block timestamp not loaded yet: treat as Locked
-                status = "Locked";
-              } else if (s.unlockTimestamp > blockTs) {
-                status = "Locked";
-                showUnlockDate = true;
-              } else {
-                status = "Ready";
-              }
-
-              // Claim button rules (STRICT)
-              // ENABLED only if: unlockTimestamp > 0 AND unlockTimestamp <= block.timestamp AND claimed === false AND unstaked === false
-              const canClaim =
-                s.unlockTimestamp > BigInt(0) &&
-                blockTs !== null &&
-                s.unlockTimestamp <= blockTs &&
-                s.claimed === false &&
-                s.unstaked === false;
-
-              const isButtonEnabled = canClaim && !isPending && !confirming;
-
-              return (
-                <div
-                  key={s.stakeId.toString()}
-                  className="rounded-xl border border-white/10 bg-white/5 p-4 mb-3"
-                >
-                  <p className="font-semibold">Stake #{s.stakeId.toString()}</p>
-                  <p>Status: {status}</p>
-                  {showUnlockDate && (
-                    <p>Unlocks at: {formatUnlockDate(s.unlockTimestamp)}</p>
-                  )}
-
-                  {showClaimButton && (
-                    <div className="mt-3 text-right">
-                      <button
-                        disabled={!isButtonEnabled}
-                        onClick={() => handleClaim(s.stakeId)}
-                        className={`px-4 py-2 rounded-lg ${
-                          isButtonEnabled
-                            ? "bg-[#00d4c4] text-black"
-                            : "bg-white/10 text-white/40"
-                        }`}
-                      >
-                        Claim
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+              })}
 
           {writeError && (
             <p className="text-red-400 text-sm mt-2">
