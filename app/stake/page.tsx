@@ -1,345 +1,216 @@
-// app/stake/page.tsx
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header";
-import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useBlockNumber } from "wagmi";
-import { formatUnits } from "viem";
 import StakeModal from "../components/StakeModal";
 import UnstakeModal from "../components/UnstakeModal";
 import StakeTable from "../components/StakeTable";
+
+import {
+  useAccount,
+  useChainId,
+  usePublicClient,
+  useBlockNumber,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+
+import { formatUnits } from "viem";
+import { base } from "viem/chains";
 import useUserStakes from "../hooks/useUserStakes";
 import { STAKING_CONTRACT_ADDRESS } from "../constants";
 import stakeAbi from "../abi/stake.json";
 
 const BASE_CHAIN_ID = 8453;
 
-const getExpectedChainId = () => {
-  return process.env.NEXT_PUBLIC_CHAIN_ID ? Number(process.env.NEXT_PUBLIC_CHAIN_ID) : BASE_CHAIN_ID;
-};
+const getExpectedChainId = () =>
+  process.env.NEXT_PUBLIC_CHAIN_ID
+    ? Number(process.env.NEXT_PUBLIC_CHAIN_ID)
+    : BASE_CHAIN_ID;
 
 export default function StakingPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [isStakeModalOpen, setIsStakeModalOpen] = useState(false);
-  const [isUnstakeModalOpen, setIsUnstakeModalOpen] = useState(false);
-  const [selectedStakeIdForUnstake, setSelectedStakeIdForUnstake] = useState<bigint | null>(null);
-  const [claimingStakeId, setClaimingStakeId] = useState<bigint | null>(null);
-  const [claimError, setClaimError] = useState<string | null>(null);
+  const publicClient = usePublicClient();
 
   const expectedChainId = getExpectedChainId();
-  const isBaseNetwork = chainId === expectedChainId;
-  const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
+  const readEnabled =
+    Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS) &&
+    chainId === expectedChainId;
 
-  // Get current block timestamp for contract state comparison
-  const publicClient = usePublicClient();
+  /* ---------------- block timestamp ---------------- */
   const { data: blockNumber } = useBlockNumber({ watch: true });
-  const [currentBlockTimestamp, setCurrentBlockTimestamp] = useState<bigint | null>(null);
+  const [blockTs, setBlockTs] = useState<bigint | null>(null);
 
-  // Fetch current block timestamp
   useEffect(() => {
-    if (!publicClient || !blockNumber || !readEnabled) return;
-    
-    const fetchBlockTimestamp = async () => {
-      try {
-        const block = await publicClient.getBlock({ blockNumber });
-        if (block && block.timestamp) {
-          setCurrentBlockTimestamp(BigInt(block.timestamp));
-        }
-      } catch (error) {
-        console.error("Error fetching block timestamp:", error);
-      }
-    };
-    
-    fetchBlockTimestamp();
-  }, [publicClient, blockNumber, readEnabled]);
+    if (!publicClient || !blockNumber) return;
+    publicClient.getBlock({ blockNumber }).then((b) => {
+      if (b?.timestamp) setBlockTs(BigInt(b.timestamp));
+    });
+  }, [publicClient, blockNumber]);
 
-  // Canonical stake lifecycle data – single source of truth.
-  const { stakes, activeStakes, isLoading: isLoadingStakes, isError: stakesError, refetch } = useUserStakes();
+  /* ---------------- staking data ---------------- */
+  const { activeStakes, isLoading, isError, refetch } = useUserStakes();
 
-  // Format rewards using formatUnits (function with guards)
-  const formatRewards = (rewards: bigint | undefined): string => {
-    // Explicitly check bigint value - do NOT use truthy checks
-    // Compare with BigInt(0) explicitly (not 0n for ES compatibility)
-    if (rewards === undefined || rewards === null || rewards === BigInt(0)) {
-      return "0";
-    }
-    
-    // Only format if rewards > BigInt(0)
-    if (rewards <= BigInt(0)) {
-      return "0";
-    }
-    
-    try {
-      // Use formatUnits with 18 decimals
-      const formatted = formatUnits(rewards, 18);
-      // Convert to number for toLocaleString, then back to string
-      const num = parseFloat(formatted);
-      if (!Number.isFinite(num)) return "0";
-      return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    } catch (error) {
-      console.error("Error formatting rewards:", error);
-      return "0";
-    }
+  /* ---------------- modals ---------------- */
+  const [isStakeModalOpen, setIsStakeModalOpen] = useState(false);
+  const [isUnstakeModalOpen, setIsUnstakeModalOpen] = useState(false);
+
+  /* ---------------- claim tx ---------------- */
+  const {
+    writeContract,
+    data: txHash,
+    isPending,
+    error: writeError,
+  } = useWriteContract();
+
+  const { isLoading: confirming, isSuccess } =
+    useWaitForTransactionReceipt({
+      hash: txHash,
+    });
+
+  useEffect(() => {
+    if (isSuccess) refetch();
+  }, [isSuccess, refetch]);
+
+  const handleClaim = (stakeId: bigint) => {
+    if (!readEnabled || !address) return;
+    writeContract({
+      address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+      abi: stakeAbi,
+      functionName: "claim",
+      args: [stakeId],
+      account: address as `0x${string}`, // ✅ wagmi v2 REQUIRED
+      chain: base,
+    });
+  };
+
+  /* ---------------- helpers ---------------- */
+  const formatReward = (v: bigint) => {
+    if (v === BigInt(0)) return "0";
+    return Number(formatUnits(v, 18)).toLocaleString(undefined, {
+      maximumFractionDigits: 2,
+    });
   };
 
   const totalRewards = useMemo(() => {
-    return activeStakes.reduce((sum, pos) => {
-      // Skip error stakes and claimed stakes
-      if (pos.error || pos.claimed) return sum;
-      if (pos.rewardAmount > BigInt(0)) {
-        return sum + pos.rewardAmount;
-      }
+    return activeStakes.reduce((sum, s) => {
+      if (!s.claimed && s.rewardAmount > BigInt(0)) return sum + s.rewardAmount;
       return sum;
     }, BigInt(0));
   }, [activeStakes]);
 
-  const isLoading = isLoadingStakes;
-
-  const handleStakeSuccess = () => {
-    refetch();
-  };
-
-  const handleUnstakeSuccess = () => {
-    refetch();
-  };
-
-  // Claim reward
-  const { writeContract: writeClaim, data: claimTxHash, isPending: isClaimPending, error: claimWriteError } = useWriteContract();
-  const { isLoading: isClaimConfirming, isSuccess: isClaimSuccess } = useWaitForTransactionReceipt({
-    hash: claimTxHash,
-  });
-
-  useEffect(() => {
-    if (claimWriteError) {
-      setClaimError(claimWriteError.message || String(claimWriteError));
-    }
-  }, [claimWriteError]);
-
-  useEffect(() => {
-    if (isClaimSuccess) {
-      setClaimingStakeId(null);
-      setClaimError(null);
-      // Refresh canonical staking state after a successful claim.
-      refetch();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("farfish:staking-updated", {
-            detail: { type: "claim", txHash: claimTxHash },
-          }),
-        );
-      }
-    }
-  }, [isClaimSuccess, claimTxHash, refetch]);
-
-  const handleClaim = (stakeId: bigint) => {
-    if (!readEnabled || isClaimPending) return;
-    setClaimError(null);
-    setClaimingStakeId(stakeId);
-    try {
-      writeClaim({
-        address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-        abi: stakeAbi as any,
-        functionName: "claim",
-        args: [stakeId],
-      } as any);
-    } catch (error: any) {
-      setClaimError(error?.message || String(error));
-      setClaimingStakeId(null);
-    }
-  };
-
+  /* ---------------- render ---------------- */
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <Header title="Stake" />
 
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
-        {/* Action Buttons */}
+        {/* Actions */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h2 className="text-xl font-bold mb-4">Stake Your NFTs</h2>
           <div className="grid grid-cols-2 gap-3">
             <button
-              type="button"
               onClick={() => setIsStakeModalOpen(true)}
-              className="w-full bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg transition hover:opacity-90"
+              className="bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg"
             >
               Stake NFT
             </button>
             <button
-              type="button"
               onClick={() => setIsUnstakeModalOpen(true)}
-              className="w-full bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20 transition hover:bg-white/15"
+              className="bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20"
             >
               Unstake NFT
             </button>
           </div>
         </section>
 
-        {/* Master Reward Table */}
         <StakeTable />
 
-        {/* My Staked NFTs Section */}
+        {/* My Stakes */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex justify-between mb-4">
             <h3 className="font-semibold text-lg">My Staked NFTs</h3>
-            {readEnabled && !isLoading && totalRewards > BigInt(0) && (
-              <div className="text-sm text-white/70">
-                Total Rewards: <span className="font-semibold text-[#00d4c4]">
-                  {formatRewards(totalRewards)} FRH
+            {totalRewards > BigInt(0) && (
+              <div className="text-sm">
+                Total Rewards:{" "}
+                <span className="text-[#00d4c4] font-semibold">
+                  {formatReward(totalRewards)} FRH
                 </span>
               </div>
             )}
           </div>
-          {!readEnabled && (
-            <p className="text-sm text-white/70">Connect wallet to load staked NFTs.</p>
-          )}
-          {readEnabled && isLoading && (
-            <p className="text-sm text-white/70">Loading staked NFTs...</p>
-          )}
-            {readEnabled && !isLoading && stakesError && activeStakes.length === 0 && (
-            <p className="text-sm text-red-400">Failed to load your staked NFTs. Please try again in a moment.</p>
-          )}
-          {readEnabled && !isLoading && !stakesError && activeStakes.length === 0 && (
-            <p className="text-sm text-white/70">
-              You have no staked NFTs yet. Use the Stake NFT button above to get started.
-            </p>
-          )}
-          {readEnabled && !isLoading && activeStakes.length > 0 && (
-            <div className="space-y-3">
-              {activeStakes.map((position) => {
-                // If error === true: Show error message, do NOT show fake values
-                if (position.error) {
-                  return (
-                    <div
-                      key={position.stakeId.toString()}
-                      className="rounded-xl border border-white/10 bg-white/5 p-4"
-                    >
-                      <p className="text-sm font-semibold">
-                        Stake #{position.stakeId.toString()}
-                      </p>
-                      <p className="text-xs text-red-400 mt-2">
-                        Failed to load stake info
-                      </p>
-                    </div>
-                  );
-                }
 
-                // Simple display of ABI values
-                const lockDuration = position.lockDuration;
-                const unlockTimestamp = position.unlockTimestamp;
-                const rewardAmount = position.rewardAmount;
-                const claimed = position.claimed;
-                const unstaked = position.unstaked;
+          {!readEnabled && <p>Connect wallet.</p>}
+          {isLoading && <p>Loading…</p>}
+          {isError && <p className="text-red-400">Failed to load stakes.</p>}
 
-                // Lock Duration: Simple days conversion
-                const lockDurationDisplay = lockDuration === BigInt(0)
+          {readEnabled &&
+            !isLoading &&
+            activeStakes.map((s) => {
+              const lockDays =
+                s.lockDuration === BigInt(0)
                   ? "No lock"
-                  : `${Math.floor(Number(lockDuration) / 86400)} days`;
+                  : `${Math.floor(
+                      Number(s.lockDuration.toString()) / 86400,
+                    )} days`;
 
-                // Status: Locked if unlockTimestamp > current block.timestamp, Unlocked otherwise
-                const isLocked = currentBlockTimestamp !== null &&
-                  unlockTimestamp !== BigInt(0) &&
-                  unlockTimestamp > currentBlockTimestamp;
-                const lockStatus = isLocked ? "Locked" : "Unlocked";
+              const isLocked =
+                blockTs !== null &&
+                s.unlockTimestamp !== BigInt(0) &&
+                s.unlockTimestamp > blockTs;
 
-                // Unlock date display
-                const unlockDateDisplay = unlockTimestamp > BigInt(0)
-                  ? new Date(Number(unlockTimestamp) * 1000).toLocaleString()
-                  : null;
+              const canClaim =
+                blockTs !== null &&
+                s.unlockTimestamp !== BigInt(0) &&
+                s.unlockTimestamp <= blockTs &&
+                !s.claimed &&
+                !s.unstaked;
 
-                // Claim button: Enabled ONLY if:
-                //   unlockTimestamp <= block.timestamp
-                //   AND claimed === false
-                //   AND unstaked === false
-                const canClaim = currentBlockTimestamp !== null &&
-                  unlockTimestamp !== BigInt(0) &&
-                  unlockTimestamp <= currentBlockTimestamp &&
-                  claimed === false &&
-                  unstaked === false;
+              return (
+                <div
+                  key={s.stakeId.toString()}
+                  className="rounded-xl border border-white/10 bg-white/5 p-4 mb-3"
+                >
+                  <p className="font-semibold">Stake #{s.stakeId.toString()}</p>
+                  <p>Reward: {formatReward(s.rewardAmount)} FRH</p>
+                  <p>Lock Duration: {lockDays}</p>
+                  <p>Status: {isLocked ? "Locked" : "Unlocked"}</p>
 
-                const isDisabled = !canClaim || isClaimPending || isClaimConfirming;
-
-                // Claim button label
-                let claimButtonLabel: string;
-                if (claimingStakeId === position.stakeId && (isClaimPending || isClaimConfirming)) {
-                  claimButtonLabel = "Claiming...";
-                } else if (claimed) {
-                  claimButtonLabel = "Claimed";
-                } else if (unstaked) {
-                  claimButtonLabel = "Unstaked";
-                } else if (!canClaim) {
-                  claimButtonLabel = isLocked ? "Locked" : "Not Available";
-                } else {
-                  claimButtonLabel = "Claim";
-                }
-
-                return (
-                  <div
-                    key={position.stakeId.toString()}
-                    className="rounded-xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <div className="space-y-2 mb-4">
-                      <p className="text-sm font-semibold">
-                        Stake #{position.stakeId.toString()}
-                      </p>
-                      <p className="text-xs text-white/70">
-                        Reward:{" "}
-                        <span className="font-semibold text-[#00d4c4]">
-                          {formatRewards(rewardAmount)} FRH
-                        </span>
-                      </p>
-                      <p className="text-xs text-white/70">
-                        Lock Duration: {lockDurationDisplay}
-                      </p>
-                      <p className="text-xs text-white/70">
-                        Status: {lockStatus}
-                      </p>
-                      {unlockDateDisplay !== null && (
-                        <p className="text-xs text-white/70">
-                          Unlocks at: {unlockDateDisplay}
-                        </p>
-                      )}
-                      {claimError && claimingStakeId === position.stakeId && (
-                        <p className="text-xs text-red-400 mt-2">Claim failed: {claimError}</p>
-                      )}
-                    </div>
-                    
-                    <div className="pt-3 border-t border-white/10 flex justify-end">
-                      <button
-                        type="button"
-                        disabled={isDisabled}
-                        onClick={() => handleClaim(position.stakeId)}
-                        className={`rounded-lg py-2 px-4 text-sm font-semibold transition ${
-                          !isDisabled
-                            ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
-                            : "bg-white/10 text-white/40 cursor-not-allowed"
-                        }`}
-                      >
-                        {claimButtonLabel}
-                      </button>
-                    </div>
+                  <div className="mt-3 text-right">
+                    <button
+                      disabled={!canClaim || isPending || confirming}
+                      onClick={() => handleClaim(s.stakeId)}
+                      className={`px-4 py-2 rounded-lg ${
+                        canClaim
+                          ? "bg-[#00d4c4] text-black"
+                          : "bg-white/10 text-white/40"
+                      }`}
+                    >
+                      {canClaim ? "Claim" : "Not Available"}
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
+
+          {writeError && (
+            <p className="text-red-400 text-sm mt-2">
+              {writeError.message}
+            </p>
           )}
         </section>
       </div>
 
-      {/* Modals */}
       <StakeModal
         isOpen={isStakeModalOpen}
         onClose={() => setIsStakeModalOpen(false)}
-        onSuccess={handleStakeSuccess}
+        onSuccess={refetch}
       />
       <UnstakeModal
         isOpen={isUnstakeModalOpen}
-        onClose={() => {
-          setIsUnstakeModalOpen(false);
-          setSelectedStakeIdForUnstake(null);
-        }}
-        onSuccess={handleUnstakeSuccess}
-        initialStakeId={selectedStakeIdForUnstake}
+        onClose={() => setIsUnstakeModalOpen(false)}
+        onSuccess={refetch}
       />
     </div>
   );
