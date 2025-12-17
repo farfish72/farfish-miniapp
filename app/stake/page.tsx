@@ -3,7 +3,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import Header from "../components/Header";
-import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useBlockNumber } from "wagmi";
 import { formatUnits } from "viem";
 import StakeModal from "../components/StakeModal";
 import UnstakeModal from "../components/UnstakeModal";
@@ -30,6 +30,29 @@ export default function StakingPage() {
   const expectedChainId = getExpectedChainId();
   const isBaseNetwork = chainId === expectedChainId;
   const readEnabled = Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork);
+
+  // Get current block timestamp for contract state comparison
+  const publicClient = usePublicClient();
+  const { data: blockNumber } = useBlockNumber({ watch: true });
+  const [currentBlockTimestamp, setCurrentBlockTimestamp] = useState<bigint | null>(null);
+
+  // Fetch current block timestamp
+  useEffect(() => {
+    if (!publicClient || !blockNumber || !readEnabled) return;
+    
+    const fetchBlockTimestamp = async () => {
+      try {
+        const block = await publicClient.getBlock({ blockNumber });
+        if (block && block.timestamp) {
+          setCurrentBlockTimestamp(BigInt(block.timestamp));
+        }
+      } catch (error) {
+        console.error("Error fetching block timestamp:", error);
+      }
+    };
+    
+    fetchBlockTimestamp();
+  }, [publicClient, blockNumber, readEnabled]);
 
   // Canonical stake lifecycle data – single source of truth.
   const { stakes, activeStakes, isLoading: isLoadingStakes, isError: stakesError, refetch } = useUserStakes();
@@ -192,26 +215,64 @@ export default function StakingPage() {
                 {activeStakes.map((position) => {
                   if (!position) return null;
 
-                  // Let the contract decide eligibility; we only prevent duplicate
-                  // clicks while a tx is in-flight or after a claim is marked claimed.
-                  const isDisabled = position.claimed || isClaimPending || isClaimConfirming;
-                  
-                  // Handle lockDuration: explicitly compare bigint with > BigInt(0), convert to number only after checking
+                  // CONTRACT STATE - Single source of truth
                   const lockDuration = position.lockDuration;
-                  const lockDays = lockDuration > BigInt(0) ? Number(lockDuration) / 86400 : 0;
-                  const lockDurationDisplay = lockDuration > BigInt(0) ? `${lockDays} days` : "No lock";
-                  
-                  // Handle unlockTimestamp: explicitly compare bigint with > BigInt(0), convert to number only after checking
                   const unlockTimestamp = position.unlockTimestamp;
-                  const unlockDate = unlockTimestamp > BigInt(0) 
-                    ? new Date(Number(unlockTimestamp) * 1000).toLocaleString()
-                    : "Unlocked";
-                  
-                  // Handle rewardAmount: explicitly compare bigint with > BigInt(0)
                   const rewardAmount = position.rewardAmount;
-                  const rewardDisplay = rewardAmount > BigInt(0) 
-                    ? formatRewards(rewardAmount) 
+                  const claimed = position.claimed;
+                  const unstaked = position.unstaked;
+
+                  // LOCK STATUS - Compare unlockTimestamp with current block time
+                  // If unlockTimestamp > current block time: LOCKED
+                  // If unlockTimestamp <= current block time OR unlockTimestamp === 0: UNLOCKED
+                  const isLocked = currentBlockTimestamp !== null && 
+                    unlockTimestamp !== BigInt(0) && 
+                    unlockTimestamp > currentBlockTimestamp;
+                  
+                  const lockStatus = isLocked ? "Locked" : "Unlocked";
+                  
+                  // UNLOCK TIMESTAMP DISPLAY
+                  const unlockDateDisplay = unlockTimestamp > BigInt(0)
+                    ? new Date(Number(unlockTimestamp) * 1000).toLocaleString()
+                    : "N/A";
+
+                  // LOCK DURATION DISPLAY
+                  const lockDurationDisplay = lockDuration > BigInt(0)
+                    ? `${Number(lockDuration) / 86400} days`
+                    : "No lock";
+
+                  // REWARD DISPLAY - Only show on-chain rewardAmount
+                  const rewardDisplay = rewardAmount > BigInt(0)
+                    ? formatRewards(rewardAmount)
                     : "0";
+
+                  // CLAIM BUTTON STATE - Contract-driven logic
+                  // Enable ONLY IF:
+                  //   unlockTimestamp !== 0 AND
+                  //   unlockTimestamp <= current block time AND
+                  //   claimed === false AND
+                  //   unstaked === false
+                  const canClaim = currentBlockTimestamp !== null &&
+                    unlockTimestamp !== BigInt(0) &&
+                    unlockTimestamp <= currentBlockTimestamp &&
+                    claimed === false &&
+                    unstaked === false;
+
+                  const isDisabled = !canClaim || isClaimPending || isClaimConfirming;
+                  
+                  // CLAIM BUTTON LABEL
+                  let claimButtonLabel = "Claim";
+                  if (claimingStakeId === position.stakeId && (isClaimPending || isClaimConfirming)) {
+                    claimButtonLabel = "Claiming...";
+                  } else if (claimed) {
+                    claimButtonLabel = "Claimed";
+                  } else if (isLocked) {
+                    claimButtonLabel = "Locked";
+                  } else if (unstaked) {
+                    claimButtonLabel = "Unstaked";
+                  } else if (unlockTimestamp === BigInt(0)) {
+                    claimButtonLabel = "Not Available";
+                  }
 
                   return (
                     <div
@@ -233,8 +294,13 @@ export default function StakingPage() {
                           Lock Duration: {lockDurationDisplay}
                         </p>
                         <p className="text-xs text-white/70">
-                          Unlock Timestamp: {unlockDate}
+                          Status: {lockStatus}
                         </p>
+                        {isLocked && unlockTimestamp > BigInt(0) && (
+                          <p className="text-xs text-white/70">
+                            Unlocks at: {unlockDateDisplay}
+                          </p>
+                        )}
                         {claimError && claimingStakeId === position.stakeId && (
                           <p className="text-xs text-red-400 mt-2">Claim failed: {claimError}</p>
                         )}
@@ -252,11 +318,7 @@ export default function StakingPage() {
                               : "bg-white/10 text-white/40 cursor-not-allowed"
                           }`}
                         >
-                          {claimingStakeId === position.stakeId && (isClaimPending || isClaimConfirming)
-                            ? "Claiming..."
-                            : position.claimed
-                            ? "Claimed"
-                            : "Claim"}
+                          {claimButtonLabel}
                         </button>
                       </div>
                     </div>
