@@ -167,7 +167,13 @@
     "type": "function"
   },
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "stakeId",
+        "type": "uint256"
+      }
+    ],
     "name": "claimSilverChest",
     "outputs": [],
     "stateMutability": "nonpayable",

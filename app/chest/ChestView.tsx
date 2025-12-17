@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, useBlockNumber, usePublicClient } from "wagmi";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ChestCard from "../components/ChestCard";
@@ -44,26 +44,14 @@ export default function ChestView() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const router = useRouter();
-  const publicClient = usePublicClient();
   const isBaseNetwork = chainId === BASE_CHAIN_ID;
   useFarcasterEnvironment("ChestView");
 
   const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
 
-  // Block timestamp tracking for unlockTimestamp comparison
-  const { data: blockNumber } = useBlockNumber({ watch: true });
-  const [blockTs, setBlockTs] = useState<bigint | null>(null);
-
-  useEffect(() => {
-    if (!publicClient || !blockNumber) return;
-    publicClient.getBlock({ blockNumber }).then((b) => {
-      if (b?.timestamp) setBlockTs(BigInt(b.timestamp));
-    });
-  }, [publicClient, blockNumber]);
-
-  // Canonical stake lifecycle data – used to get all stakeIds for Stake Chest (Silver)
-  const { stakes, isLoading: isLoadingStakes, refetch: refetchStakes } = useUserStakes();
+  // Canonical stake lifecycle data – used for global staking updates.
+  const { refetch: refetchStakes } = useUserStakes();
 
   // Read daily chest claim status
   const readDailyChest = useReadContract({
@@ -80,19 +68,47 @@ export default function ChestView() {
     },
   } as any);
 
+  // Read silver chest claim status
+  const readSilverChest = useReadContract({
+    address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
+    abi: claimControllerAbi as any,
+    functionName: "canClaimSilverChest",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: Boolean(isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork),
+      // Removed aggressive polling to avoid stacked calls; refetch on demand
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+    },
+  } as any);
+
+  // Read user stakeIds directly from staking contract for Silver Chest lock/unlock & claim
+  const readStakeIds = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
+    abi: stakeAbi as any,
+    functionName: "getUserStakeIds",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled: Boolean(isConnected && address && STAKING_CONTRACT_ADDRESS && isBaseNetwork),
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: false,
+    },
+  } as any);
 
   // Write contract hooks
   const { writeContract: writeDailyClaim, data: dailyTxHash, isPending: isWriteDailyPending, error: writeDailyError } = useWriteContract();
-  const { writeContract: writeStakeClaim, data: stakeClaimTxHash, isPending: isWriteStakeClaimPending, error: writeStakeClaimError } = useWriteContract();
+  const { writeContract: writeSilverClaim, data: silverTxHash, isPending: isWriteSilverPending, error: writeSilverError } = useWriteContract();
 
   // Wait for daily claim transaction
   const { isLoading: isDailyTxConfirming, isSuccess: isDailyTxSuccess } = useWaitForTransactionReceipt({
     hash: dailyTxHash,
   });
 
-  // Wait for stake claim transaction (per stakeId)
-  const { isLoading: isStakeClaimTxConfirming, isSuccess: isStakeClaimTxSuccess } = useWaitForTransactionReceipt({
-    hash: stakeClaimTxHash,
+  // Wait for silver claim transaction
+  const { isLoading: isSilverTxConfirming, isSuccess: isSilverTxSuccess } = useWaitForTransactionReceipt({
+    hash: silverTxHash,
   });
 
   // Parse daily chest data
@@ -105,11 +121,30 @@ export default function ChestView() {
     };
   }, [readDailyChest.data]);
 
+  // Parse silver chest data
+  const silverChestData = useMemo(() => {
+    if (!readSilverChest.data || !Array.isArray(readSilverChest.data)) return null;
+    const [canClaim, timeUntilClaim, hasStaked] = readSilverChest.data;
+    return {
+      canClaim: Boolean(canClaim),
+      timeUntilClaim: typeof timeUntilClaim === "bigint" ? timeUntilClaim : BigInt(timeUntilClaim || 0),
+      hasStaked: Boolean(hasStaked),
+    };
+  }, [readSilverChest.data]);
+
+  // Normalize stakeIds from staking contract
+  const stakeIds: bigint[] = useMemo(() => {
+    if (!readStakeIds.data || !Array.isArray(readStakeIds.data)) return [];
+    return readStakeIds.data as bigint[];
+  }, [readStakeIds.data]);
+
   // Refetch all chest data
   const refetchAllChestData = useCallback(() => {
     (readDailyChest as any)?.refetch?.();
+    (readSilverChest as any)?.refetch?.();
+    (readStakeIds as any)?.refetch?.();
     refetchStakes();
-  }, [readDailyChest, refetchStakes]);
+  }, [readDailyChest, readSilverChest, readStakeIds, refetchStakes]);
 
   // Also listen for global staking updates so chest eligibility and staking-derived rewards
   // stay in sync with on-chain state even after stake/unstake on the Stake page.
@@ -143,17 +178,17 @@ export default function ChestView() {
     }
   }, [isDailyTxSuccess, dailyTxHash, refetchAllChestData, router]);
 
-  // Handle stake claim transaction success
+  // Handle silver claim transaction success
   useEffect(() => {
-    if (isStakeClaimTxSuccess && stakeClaimTxHash) {
-      setToast({ type: "success", message: "Rewards claimed" });
+    if (isSilverTxSuccess && silverTxHash) {
+      setToast({ type: "success", message: "6 FRH claimed" });
       // Immediate refetch for instant UI update
       setTimeout(() => {
         refetchAllChestData();
         router.refresh();
       }, 100);
     }
-  }, [isStakeClaimTxSuccess, stakeClaimTxHash, refetchAllChestData, router]);
+  }, [isSilverTxSuccess, silverTxHash, refetchAllChestData, router]);
 
 
   // Handle write errors - clear states on error
@@ -172,18 +207,18 @@ export default function ChestView() {
   }, [writeDailyError, refetchAllChestData]);
 
   useEffect(() => {
-    if (writeStakeClaimError) {
-      const errorMsg = writeStakeClaimError.message || String(writeStakeClaimError);
+    if (writeSilverError) {
+      const errorMsg = writeSilverError.message || String(writeSilverError);
       if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
         setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
-        console.error("Stake claim error:", writeStakeClaimError);
+        console.error("Silver claim error:", writeSilverError);
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
       // Refetch to ensure state is correct after error
       setTimeout(() => refetchAllChestData(), 500);
     }
-  }, [writeStakeClaimError, refetchAllChestData]);
+  }, [writeSilverError, refetchAllChestData]);
 
 
   // Clear states on unmount
@@ -247,9 +282,9 @@ export default function ChestView() {
     }
   }, [isConnected, address, isBaseNetwork, dailyChestData, isWriteDailyPending, isDailyTxConfirming, writeDailyClaim]);
 
-  const handleStakeClaim = useCallback((stakeId: bigint) => {
+  const handleSilverClaim = useCallback(() => {
     // Prevent double-claim: check if already pending
-    if (isWriteStakeClaimPending || isStakeClaimTxConfirming) {
+    if (isWriteSilverPending || isSilverTxConfirming) {
       return;
     }
 
@@ -263,25 +298,71 @@ export default function ChestView() {
       return;
     }
 
-    if (!STAKING_CONTRACT_ADDRESS) {
-      setToast({ type: "error", message: "Staking contract not configured" });
+    if (!CLAIM_CONTROLLER_ADDRESS) {
+      setToast({ type: "error", message: "Claim controller not configured" });
       return;
     }
 
-    // Contract-authoritative: let the contract revert if conditions aren't met
+    // Lock / unlock based solely on on-chain stakeIds length
+    if (!silverChestData?.canClaim) {
+      return;
+    }
+
+    if (!Array.isArray(stakeIds) || stakeIds.length === 0) {
+      return;
+    }
+
+    let selectedStakeId: bigint | null = null;
+
+    if (stakeIds.length === 1) {
+      selectedStakeId = stakeIds[0];
+    } else {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const availableIds = stakeIds.map((id) => id.toString()).join(", ");
+      const input = window.prompt(
+        `You have multiple staked NFTs.\n\nEnter the Stake ID to claim with:\nAvailable Stake IDs: ${availableIds}`,
+      );
+
+      if (!input) {
+        return;
+      }
+
+      const trimmed = input.trim();
+      const matched = stakeIds.find((id) => id.toString() === trimmed);
+
+      if (!matched) {
+        setToast({ type: "error", message: "Invalid Stake ID selected." });
+        return;
+      }
+
+      selectedStakeId = matched;
+    }
+
+    if (selectedStakeId === null) {
+      return;
+    }
+
     try {
-      writeStakeClaim({
-        address: STAKING_CONTRACT_ADDRESS as `0x${string}`,
-        abi: stakeAbi as any,
-        functionName: "claim",
-        args: [stakeId],
+      writeSilverClaim({
+        address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
+        abi: claimControllerAbi as any,
+        functionName: "claimSilverChest",
+        args: [selectedStakeId],
       } as any);
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
-      setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
-      console.error("Stake claim error:", error);
+      if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
+        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+        console.error("Silver claim error:", error);
+      } else {
+        setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
+      }
     }
-  }, [isConnected, address, isBaseNetwork, isWriteStakeClaimPending, isStakeClaimTxConfirming, writeStakeClaim]);
+  }, [isConnected, address, isBaseNetwork, silverChestData, stakeIds, isWriteSilverPending, isSilverTxConfirming, writeSilverClaim]);
+
 
   // Daily Bronze card state - fully lock button during any pending state
   const dailyCanClaim = dailyChestData?.canClaim ?? false;
@@ -294,20 +375,34 @@ export default function ChestView() {
     : `Next claim in: ${formatTimeUntilClaim(dailyTimeUntilClaim)}`;
   const dailyProgress = dailyCanClaim ? 100 : Math.max(0, 100 - Math.round((Number(dailyTimeUntilClaim) / 86400) * 100));
 
-  // Helper function to check if a stakeId is eligible to claim
-  // Contract-authoritative: only check unstaked, claimed, and unlockTimestamp
-  // Don't calculate eligibility - let contract revert if clicked early
-  const isStakeEligibleToClaim = useCallback((stake: ReturnType<typeof useUserStakes>["stakes"][number]): boolean => {
-    if (!stake) return false;
-    // Button enabled ONLY if: unstaked === false, claimed === false, block.timestamp >= unlockTimestamp
-    return (
-      stake.unstaked === false &&
-      stake.claimed === false &&
-      blockTs !== null &&
-      stake.unlockTimestamp > BigInt(0) &&
-      stake.unlockTimestamp <= blockTs
-    );
-  }, [blockTs]);
+  // Silver Chest card state - fully lock button during any pending state
+  const silverCanClaim = silverChestData?.canClaim ?? false;
+  // Use stakeIds.length to control Stake Chest unlock state
+  const silverHasStakeIds = Array.isArray(stakeIds) && stakeIds.length >= 1;
+  const silverTimeUntilClaim = silverChestData?.timeUntilClaim ?? BigInt(0);
+  const silverButtonDisabled =
+    !isConnected ||
+    !isBaseNetwork ||
+    !silverHasStakeIds ||
+    !silverCanClaim ||
+    isWriteSilverPending ||
+    isSilverTxConfirming;
+  const silverButtonLabel = isWriteSilverPending || isSilverTxConfirming
+    ? "Claiming..."
+    : !isConnected
+    ? "Connect wallet"
+    : !silverHasStakeIds
+    ? "Stake at least 1 NFT to unlock."
+    : silverCanClaim
+    ? "Open now (6 FRH)"
+    : `Next claim in: ${formatTimeUntilClaim(silverTimeUntilClaim)}`;
+  const silverProgress =
+    silverHasStakeIds && silverCanClaim
+      ? 100
+      : silverHasStakeIds
+      ? Math.max(0, 100 - Math.round((Number(silverTimeUntilClaim) / 86400) * 100))
+      : 0;
+  const silverBadge = !silverHasStakeIds ? "Locked" : silverCanClaim ? "Ready" : "Cooling";
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -354,93 +449,19 @@ export default function ChestView() {
           </div>
         )}
 
-        {/* Stake Chest (Silver) */}
-        {!isConnected ? null : (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-2xl font-semibold">Stake Chest (Silver)</h3>
-                <p className="text-sm text-white/70 mt-1">{infoCopy.silver}</p>
-              </div>
-              <button
-                type="button"
-                className="shrink-0 rounded-lg border border-white/10 bg-transparent px-3 py-1 text-xs text-white/70 hover:bg-white/5 transition"
-                onClick={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
-              >
-                Info
-              </button>
-            </div>
-
-            {isLoadingStakes ? (
-              <div className="mt-4 text-sm text-white/70">Loading stakes...</div>
-            ) : !Array.isArray(stakes) || stakes.length === 0 ? (
-              <div className="mt-4">
-                <Link
-                  href="/stake"
-                  className="w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-3 font-semibold text-black text-center block"
-                >
-                  Stake NFTs to unlock
-                </Link>
-              </div>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {stakes.map((stake) => {
-                  const isEligible = isStakeEligibleToClaim(stake);
-                  const isPending = isWriteStakeClaimPending || isStakeClaimTxConfirming;
-                  const isButtonEnabled = isEligible && !isPending && isConnected && isBaseNetwork;
-
-                  return (
-                    <div
-                      key={stake.stakeId.toString()}
-                      className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4"
-                    >
-                      <div>
-                        <p className="font-semibold">Stake #{stake.stakeId.toString()}</p>
-                        {stake.unstaked && (
-                          <p className="text-xs text-white/50 mt-1">Unstaked</p>
-                        )}
-                        {stake.claimed && (
-                          <p className="text-xs text-white/50 mt-1">Claimed</p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        disabled={!isButtonEnabled}
-                        onClick={() => handleStakeClaim(stake.stakeId)}
-                        className={`px-4 py-2 rounded-lg font-semibold transition ${
-                          isButtonEnabled
-                            ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
-                            : "bg-white/10 text-white/40 cursor-not-allowed"
-                        }`}
-                      >
-                        {isPending ? "Claiming..." : "Claim"}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Pending state and tx link for stake claims */}
-        {(isWriteStakeClaimPending || isStakeClaimTxConfirming) && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <p className="text-sm text-white/70">
-              {isStakeClaimTxConfirming ? "Confirming transaction..." : "Transaction pending..."}
-            </p>
-            {stakeClaimTxHash && (
-              <a
-                href={`${BASESCAN_URL}/${stakeClaimTxHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-[#00d4c4] hover:underline mt-2 block"
-              >
-                View on BaseScan
-              </a>
-            )}
-          </div>
-        )}
+        {/* Stake Chest (Silver) – always visible */}
+        <ChestCard
+          title="Stake Chest (Silver)"
+          description={infoCopy.silver}
+          badge={silverBadge}
+          progress={silverProgress}
+          variant="silver"
+          actionLabel={silverButtonLabel}
+          actionDisabled={silverButtonDisabled}
+          onAction={handleSilverClaim}
+          infoLabel="Info"
+          onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
+        />
 
         {/* Activity Rewards — monthly airdrop (read-only if no claim function) */}
         <ChestCard
