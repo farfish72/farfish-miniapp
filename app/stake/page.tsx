@@ -15,7 +15,6 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 
-import { formatUnits } from "viem";
 import { base } from "viem/chains";
 import useUserStakes from "../hooks/useUserStakes";
 import { STAKING_CONTRACT_ADDRESS } from "../constants";
@@ -86,19 +85,10 @@ export default function StakingPage() {
   };
 
   /* ---------------- helpers ---------------- */
-  const formatReward = (v: bigint) => {
-    if (v === BigInt(0)) return "0";
-    return Number(formatUnits(v, 18)).toLocaleString(undefined, {
-      maximumFractionDigits: 2,
-    });
+  const formatUnlockDate = (timestamp: bigint) => {
+    const date = new Date(Number(timestamp) * 1000);
+    return date.toLocaleString();
   };
-
-  const totalRewards = useMemo(() => {
-    return activeStakes.reduce((sum, s) => {
-      if (!s.claimed && s.rewardAmount > BigInt(0)) return sum + s.rewardAmount;
-      return sum;
-    }, BigInt(0));
-  }, [activeStakes]);
 
   /* ---------------- render ---------------- */
   return (
@@ -129,43 +119,56 @@ export default function StakingPage() {
 
         {/* My Stakes */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <div className="flex justify-between mb-4">
-            <h3 className="font-semibold text-lg">My Staked NFTs</h3>
-            {totalRewards > BigInt(0) && (
-              <div className="text-sm">
-                Total Rewards:{" "}
-                <span className="text-[#00d4c4] font-semibold">
-                  {formatReward(totalRewards)} FRH
-                </span>
-              </div>
-            )}
-          </div>
+          <h3 className="font-semibold text-lg mb-4">My Staked NFTs</h3>
 
           {!readEnabled && <p>Connect wallet.</p>}
           {isLoading && <p>Loading…</p>}
           {isError && <p className="text-red-400">Failed to load stakes.</p>}
 
+          {readEnabled && !isLoading && activeStakes.length === 0 && (
+            <p>No staked NFTs.</p>
+          )}
+
           {readEnabled &&
             !isLoading &&
             activeStakes.map((s) => {
-              const lockDays =
-                s.lockDuration === BigInt(0)
-                  ? "No lock"
-                  : `${Math.floor(
-                      Number(s.lockDuration.toString()) / 86400,
-                    )} days`;
+              // Status logic (EXACT ORDER - DO NOT CHANGE)
+              let status: string;
+              let buttonLabel: string;
+              let buttonDisabled: boolean;
+              let showUnlockDate: boolean = false;
 
-              const isLocked =
+              if (s.claimed === true) {
+                status = "Claimed";
+                buttonLabel = "Claimed";
+                buttonDisabled = true;
+              } else if (s.unstaked === true) {
+                status = "Unstaked";
+                buttonLabel = "Unstaked";
+                buttonDisabled = true;
+              } else if (
                 blockTs !== null &&
-                s.unlockTimestamp !== BigInt(0) &&
-                s.unlockTimestamp > blockTs;
+                s.unlockTimestamp > blockTs
+              ) {
+                status = "Locked";
+                buttonLabel = "Locked";
+                buttonDisabled = true;
+                showUnlockDate = true;
+              } else {
+                status = "Ready";
+                buttonLabel = "Claim";
+                buttonDisabled = false;
+              }
 
+              // Claim button rule: Enable ONLY IF unlockTimestamp <= block.timestamp AND claimed === false AND unstaked === false
               const canClaim =
                 blockTs !== null &&
-                s.unlockTimestamp !== BigInt(0) &&
                 s.unlockTimestamp <= blockTs &&
-                !s.claimed &&
-                !s.unstaked;
+                s.claimed === false &&
+                s.unstaked === false;
+
+              // Button is enabled only if status logic says so AND strict rule passes AND not pending
+              const isButtonEnabled = !buttonDisabled && canClaim && !isPending && !confirming;
 
               return (
                 <div
@@ -173,21 +176,22 @@ export default function StakingPage() {
                   className="rounded-xl border border-white/10 bg-white/5 p-4 mb-3"
                 >
                   <p className="font-semibold">Stake #{s.stakeId.toString()}</p>
-                  <p>Reward: {formatReward(s.rewardAmount)} FRH</p>
-                  <p>Lock Duration: {lockDays}</p>
-                  <p>Status: {isLocked ? "Locked" : "Unlocked"}</p>
+                  <p>Status: {status}</p>
+                  {showUnlockDate && (
+                    <p>Unlocks at: {formatUnlockDate(s.unlockTimestamp)}</p>
+                  )}
 
                   <div className="mt-3 text-right">
                     <button
-                      disabled={!canClaim || isPending || confirming}
+                      disabled={!isButtonEnabled}
                       onClick={() => handleClaim(s.stakeId)}
                       className={`px-4 py-2 rounded-lg ${
-                        canClaim
+                        isButtonEnabled
                           ? "bg-[#00d4c4] text-black"
                           : "bg-white/10 text-white/40"
                       }`}
                     >
-                      {canClaim ? "Claim" : "Not Available"}
+                      {buttonLabel}
                     </button>
                   </div>
                 </div>
