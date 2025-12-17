@@ -85,10 +85,9 @@ export default function StakingPage() {
 
   const totalRewards = useMemo(() => {
     return activeStakes.reduce((sum, pos) => {
-      if (pos.claimed) return sum;
-      // Show all unclaimed rewards - contract decides eligibility
-      // Explicitly check bigint value - do NOT use truthy checks
-      if (pos.rewardAmount && pos.rewardAmount > BigInt(0)) {
+      // Skip error stakes and claimed stakes
+      if (pos.error || pos.claimed) return sum;
+      if (pos.rewardAmount > BigInt(0)) {
         return sum + pos.rewardAmount;
       }
       return sum;
@@ -205,185 +204,125 @@ export default function StakingPage() {
               You have no staked NFTs yet. Use the Stake NFT button above to get started.
             </p>
           )}
-          {readEnabled && !isLoading && (() => {
-            if (!activeStakes || !Array.isArray(activeStakes) || activeStakes.length === 0) {
-              return null;
-            }
-            
-            return (
-              <div className="space-y-3">
-                {activeStakes.map((position) => {
-                  if (!position) return null;
-
-                  // CONTRACT STATE - Single source of truth from ABI
-                  // ABI indices: [0]staker, [1]tokenId, [2]amount, [3]stakeTimestamp,
-                  //              [4]lockDuration, [5]unlockTimestamp, [6]rewardAmount,
-                  //              [7]claimed, [8]unstaked
-                  // Values are already correctly mapped in useUserStakes hook
-                  const lockDuration = position.lockDuration; // ABI index [4]
-                  const unlockTimestamp = position.unlockTimestamp; // ABI index [5]
-                  const rewardAmount = position.rewardAmount; // ABI index [6]
-                  const claimed = position.claimed; // ABI index [7]
-                  const unstaked = position.unstaked; // ABI index [8]
-
-                  // ATOMIC RENDERING CHECK - Treat getStakeInfo as atomic tuple
-                  // If ANY field is undefined, the entire stake card MUST be in "Loading" state
-                  const isDataComplete = 
-                    lockDuration !== undefined && lockDuration !== null &&
-                    unlockTimestamp !== undefined && unlockTimestamp !== null &&
-                    rewardAmount !== undefined && rewardAmount !== null &&
-                    claimed !== undefined && claimed !== null &&
-                    unstaked !== undefined && unstaked !== null;
-
-                  // LOADING STATE - Show only stake ID and loading message
-                  if (!isDataComplete) {
-                    return (
-                      <div
-                        key={position.stakeId.toString()}
-                        className="rounded-xl border border-white/10 bg-white/5 p-4"
-                      >
-                        <div className="space-y-2">
-                          <p className="text-sm font-semibold">
-                            Stake #{position.stakeId.toString()}
-                          </p>
-                          <p className="text-xs text-white/70">
-                            Loading stake info…
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // ALL DATA AVAILABLE - Now compute display values
-                  // LOCK STATUS - Compare unlockTimestamp (ABI [5]) with current block time
-                  // If unlockTimestamp > current block time: LOCKED
-                  // If unlockTimestamp <= current block time OR unlockTimestamp === 0: UNLOCKED
-                  let lockStatus: string;
-                  if (currentBlockTimestamp === null) {
-                    lockStatus = "Loading...";
-                  } else if (unlockTimestamp === BigInt(0)) {
-                    lockStatus = "Unlocked";
-                  } else if (unlockTimestamp > currentBlockTimestamp) {
-                    lockStatus = "Locked";
-                  } else {
-                    lockStatus = "Unlocked";
-                  }
-                  
-                  const isLocked = currentBlockTimestamp !== null && 
-                    unlockTimestamp !== BigInt(0) && 
-                    unlockTimestamp > currentBlockTimestamp;
-
-                  // UNLOCK TIMESTAMP DISPLAY - Only show if unlockTimestamp (ABI [5]) > 0
-                  const unlockDateDisplay = unlockTimestamp > BigInt(0)
-                    ? new Date(Number(unlockTimestamp) * 1000).toLocaleString()
-                    : null;
-
-                  // LOCK DURATION DISPLAY - Read from ABI [4]
-                  // Treat lockDuration as BigInt at all times
-                  // NEVER divide or convert until confirmed defined
-                  let lockDurationDisplay: string;
-                  if (lockDuration === BigInt(0)) {
-                    lockDurationDisplay = "No lock";
-                  } else if (lockDuration > BigInt(0)) {
-                    // Convert safely: Number(lockDuration) / 86400, then Math.floor for integer days
-                    // NEVER do: Number(lockDuration / 86400) - division before conversion causes NaN
-                    const days = Math.floor(Number(lockDuration) / 86400);
-                    lockDurationDisplay = `${days} days`;
-                  } else {
-                    // Fallback for any edge case
-                    lockDurationDisplay = "No lock";
-                  }
-
-                  // REWARD DISPLAY - Read EXACT value from ABI [6]
-                  // Display the on-chain rewardAmount value, never assume or default
-                  const rewardDisplay = formatRewards(rewardAmount);
-
-                  // CLAIM BUTTON STATE - Contract-driven logic (must match contract rules)
-                  // Enable ONLY IF ALL conditions are true:
-                  //   1. unlockTimestamp (ABI [5]) !== 0
-                  //   2. unlockTimestamp <= current block time
-                  //   3. claimed (ABI [7]) === false
-                  //   4. unstaked (ABI [8]) === false
-                  // Do NOT enable if block timestamp is not loaded yet
-                  const canClaim = currentBlockTimestamp !== null &&
-                    unlockTimestamp !== BigInt(0) &&
-                    unlockTimestamp <= currentBlockTimestamp &&
-                    claimed === false &&
-                    unstaked === false;
-
-                  const isDisabled = !canClaim || isClaimPending || isClaimConfirming;
-                  
-                  // CLAIM BUTTON LABEL - Based strictly on contract state
-                  let claimButtonLabel: string;
-                  if (claimingStakeId === position.stakeId && (isClaimPending || isClaimConfirming)) {
-                    claimButtonLabel = "Claiming...";
-                  } else if (claimed) {
-                    claimButtonLabel = "Claimed";
-                  } else if (unstaked) {
-                    claimButtonLabel = "Unstaked";
-                  } else if (currentBlockTimestamp === null) {
-                    claimButtonLabel = "Loading...";
-                  } else if (unlockTimestamp === BigInt(0)) {
-                    claimButtonLabel = "Not Available";
-                  } else if (isLocked) {
-                    claimButtonLabel = "Locked";
-                  } else {
-                    claimButtonLabel = "Claim";
-                  }
-
+          {readEnabled && !isLoading && activeStakes.length > 0 && (
+            <div className="space-y-3">
+              {activeStakes.map((position) => {
+                // If error === true: Show error message, do NOT show fake values
+                if (position.error) {
                   return (
                     <div
                       key={position.stakeId.toString()}
                       className="rounded-xl border border-white/10 bg-white/5 p-4"
                     >
-                      {/* Info Section - Grouped Together */}
-                      <div className="space-y-2 mb-4">
-                        <p className="text-sm font-semibold">
-                          Stake #{position.stakeId.toString()}
-                        </p>
-                        <p className="text-xs text-white/70">
-                          Reward:{" "}
-                          <span className="font-semibold text-[#00d4c4]">
-                            {rewardDisplay} FRH
-                          </span>
-                        </p>
-                        <p className="text-xs text-white/70">
-                          Lock Duration: {lockDurationDisplay}
-                        </p>
-                        <p className="text-xs text-white/70">
-                          Status: {lockStatus}
-                        </p>
-                        {unlockDateDisplay !== null && (
-                          <p className="text-xs text-white/70">
-                            Unlocks at: {unlockDateDisplay}
-                          </p>
-                        )}
-                        {claimError && claimingStakeId === position.stakeId && (
-                          <p className="text-xs text-red-400 mt-2">Claim failed: {claimError}</p>
-                        )}
-                      </div>
-                      
-                      {/* Action Section - Visually Separated */}
-                      <div className="pt-3 border-t border-white/10 flex justify-end">
-                        <button
-                          type="button"
-                          disabled={isDisabled}
-                          onClick={() => handleClaim(position.stakeId)}
-                          className={`rounded-lg py-2 px-4 text-sm font-semibold transition ${
-                            !isDisabled
-                              ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
-                              : "bg-white/10 text-white/40 cursor-not-allowed"
-                          }`}
-                        >
-                          {claimButtonLabel}
-                        </button>
-                      </div>
+                      <p className="text-sm font-semibold">
+                        Stake #{position.stakeId.toString()}
+                      </p>
+                      <p className="text-xs text-red-400 mt-2">
+                        Failed to load stake info
+                      </p>
                     </div>
                   );
-                })}
-              </div>
-            );
-          })()}
+                }
+
+                // Simple display of ABI values
+                const lockDuration = position.lockDuration;
+                const unlockTimestamp = position.unlockTimestamp;
+                const rewardAmount = position.rewardAmount;
+                const claimed = position.claimed;
+                const unstaked = position.unstaked;
+
+                // Lock Duration: Simple days conversion
+                const lockDurationDisplay = lockDuration === BigInt(0)
+                  ? "No lock"
+                  : `${Math.floor(Number(lockDuration) / 86400)} days`;
+
+                // Status: Locked if unlockTimestamp > current block.timestamp, Unlocked otherwise
+                const isLocked = currentBlockTimestamp !== null &&
+                  unlockTimestamp !== BigInt(0) &&
+                  unlockTimestamp > currentBlockTimestamp;
+                const lockStatus = isLocked ? "Locked" : "Unlocked";
+
+                // Unlock date display
+                const unlockDateDisplay = unlockTimestamp > BigInt(0)
+                  ? new Date(Number(unlockTimestamp) * 1000).toLocaleString()
+                  : null;
+
+                // Claim button: Enabled ONLY if:
+                //   unlockTimestamp <= block.timestamp
+                //   AND claimed === false
+                //   AND unstaked === false
+                const canClaim = currentBlockTimestamp !== null &&
+                  unlockTimestamp !== BigInt(0) &&
+                  unlockTimestamp <= currentBlockTimestamp &&
+                  claimed === false &&
+                  unstaked === false;
+
+                const isDisabled = !canClaim || isClaimPending || isClaimConfirming;
+
+                // Claim button label
+                let claimButtonLabel: string;
+                if (claimingStakeId === position.stakeId && (isClaimPending || isClaimConfirming)) {
+                  claimButtonLabel = "Claiming...";
+                } else if (claimed) {
+                  claimButtonLabel = "Claimed";
+                } else if (unstaked) {
+                  claimButtonLabel = "Unstaked";
+                } else if (!canClaim) {
+                  claimButtonLabel = isLocked ? "Locked" : "Not Available";
+                } else {
+                  claimButtonLabel = "Claim";
+                }
+
+                return (
+                  <div
+                    key={position.stakeId.toString()}
+                    className="rounded-xl border border-white/10 bg-white/5 p-4"
+                  >
+                    <div className="space-y-2 mb-4">
+                      <p className="text-sm font-semibold">
+                        Stake #{position.stakeId.toString()}
+                      </p>
+                      <p className="text-xs text-white/70">
+                        Reward:{" "}
+                        <span className="font-semibold text-[#00d4c4]">
+                          {formatRewards(rewardAmount)} FRH
+                        </span>
+                      </p>
+                      <p className="text-xs text-white/70">
+                        Lock Duration: {lockDurationDisplay}
+                      </p>
+                      <p className="text-xs text-white/70">
+                        Status: {lockStatus}
+                      </p>
+                      {unlockDateDisplay !== null && (
+                        <p className="text-xs text-white/70">
+                          Unlocks at: {unlockDateDisplay}
+                        </p>
+                      )}
+                      {claimError && claimingStakeId === position.stakeId && (
+                        <p className="text-xs text-red-400 mt-2">Claim failed: {claimError}</p>
+                      )}
+                    </div>
+                    
+                    <div className="pt-3 border-t border-white/10 flex justify-end">
+                      <button
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => handleClaim(position.stakeId)}
+                        className={`rounded-lg py-2 px-4 text-sm font-semibold transition ${
+                          !isDisabled
+                            ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+                            : "bg-white/10 text-white/40 cursor-not-allowed"
+                        }`}
+                      >
+                        {claimButtonLabel}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
 

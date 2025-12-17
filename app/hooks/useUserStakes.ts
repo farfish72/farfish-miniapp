@@ -19,6 +19,7 @@ export type UserStake = {
   unlockTimestamp: bigint;
   claimed: boolean;
   unstaked: boolean;
+  error?: boolean;
 };
 
 export default function useUserStakes() {
@@ -68,6 +69,9 @@ export default function useUserStakes() {
         setIsLoadingStakes(true);
         setIsErrorStakes(false);
 
+        // Fetch getStakeInfo for EACH stakeId
+        // NEVER return null, NEVER drop a stakeId
+        // If getStakeInfo fails, return { stakeId, error: true }
         const results = await Promise.all(
           (stakeIds as bigint[]).map(async (stakeId) => {
             try {
@@ -78,6 +82,10 @@ export default function useUserStakes() {
                 args: [stakeId],
               });
 
+              // Return RAW ABI values only
+              // ABI indices: [0]staker, [1]tokenId, [2]amount, [3]stakeTimestamp,
+              //              [4]lockDuration, [5]unlockTimestamp, [6]rewardAmount,
+              //              [7]claimed, [8]unstaked
               const info = data as any[];
 
               return {
@@ -89,12 +97,24 @@ export default function useUserStakes() {
                 unstaked: Boolean(info[8]),
               } as UserStake;
             } catch {
-              return null;
+              // If getStakeInfo fails, return error flag
+              // NEVER return null, NEVER drop stakeId
+              return {
+                stakeId,
+                rewardAmount: BigInt(0),
+                lockDuration: BigInt(0),
+                unlockTimestamp: BigInt(0),
+                claimed: false,
+                unstaked: false,
+                error: true,
+              } as UserStake;
             }
           }),
         );
 
-        setStakes(results.filter(Boolean) as UserStake[]);
+        // Ensure stakes.length === stakeIds.length ALWAYS
+        // Order of stakes matches order of stakeIds
+        setStakes(results);
       } catch {
         setIsErrorStakes(true);
       } finally {
