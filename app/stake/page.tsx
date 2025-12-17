@@ -49,7 +49,7 @@ export default function StakingPage() {
   }, [publicClient, blockNumber]);
 
   /* ---------------- staking data ---------------- */
-  const { activeStakes, isLoading, isError, refetch } = useUserStakes();
+  const { stakes, isLoading, isError, refetch } = useUserStakes();
 
   /* ---------------- modals ---------------- */
   const [isStakeModalOpen, setIsStakeModalOpen] = useState(false);
@@ -125,50 +125,58 @@ export default function StakingPage() {
           {isLoading && <p>Loading…</p>}
           {isError && <p className="text-red-400">Failed to load stakes.</p>}
 
-          {readEnabled && !isLoading && activeStakes.length === 0 && (
+          {readEnabled && !isLoading && stakes.length === 0 && (
             <p>No staked NFTs.</p>
           )}
 
           {readEnabled &&
             !isLoading &&
-            activeStakes.map((s) => {
-              // Status logic (EXACT ORDER - DO NOT CHANGE)
-              let status: string;
-              let buttonLabel: string;
-              let buttonDisabled: boolean;
-              let showUnlockDate: boolean = false;
+            stakes.map((s) => {
+              // Error handling: If getStakeInfo failed, show Loading status
+              if (s.error === true) {
+                return (
+                  <div
+                    key={s.stakeId.toString()}
+                    className="rounded-xl border border-white/10 bg-white/5 p-4 mb-3"
+                  >
+                    <p className="font-semibold">Stake #{s.stakeId.toString()}</p>
+                    <p>Status: Loading</p>
+                  </div>
+                );
+              }
 
-              if (s.claimed === true) {
-                status = "Claimed";
-                buttonLabel = "Claimed";
-                buttonDisabled = true;
-              } else if (s.unstaked === true) {
+              // Status rules (STRICT ORDER - DO NOT CHANGE)
+              let status: string;
+              let showUnlockDate: boolean = false;
+              let showClaimButton: boolean = true;
+
+              if (s.unstaked === true) {
                 status = "Unstaked";
-                buttonLabel = "Unstaked";
-                buttonDisabled = true;
-              } else if (
-                blockTs !== null &&
-                s.unlockTimestamp > blockTs
-              ) {
+                showClaimButton = false; // Hide button if unstaked
+              } else if (s.claimed === true) {
+                status = "Claimed";
+              } else if (s.unlockTimestamp === BigInt(0)) {
                 status = "Locked";
-                buttonLabel = "Locked";
-                buttonDisabled = true;
+              } else if (blockTs === null) {
+                // Block timestamp not loaded yet: treat as Locked
+                status = "Locked";
+              } else if (s.unlockTimestamp > blockTs) {
+                status = "Locked";
                 showUnlockDate = true;
               } else {
                 status = "Ready";
-                buttonLabel = "Claim";
-                buttonDisabled = false;
               }
 
-              // Claim button rule: Enable ONLY IF unlockTimestamp <= block.timestamp AND claimed === false AND unstaked === false
+              // Claim button rules (STRICT)
+              // ENABLED only if: unlockTimestamp > 0 AND unlockTimestamp <= block.timestamp AND claimed === false AND unstaked === false
               const canClaim =
+                s.unlockTimestamp > BigInt(0) &&
                 blockTs !== null &&
                 s.unlockTimestamp <= blockTs &&
                 s.claimed === false &&
                 s.unstaked === false;
 
-              // Button is enabled only if status logic says so AND strict rule passes AND not pending
-              const isButtonEnabled = !buttonDisabled && canClaim && !isPending && !confirming;
+              const isButtonEnabled = canClaim && !isPending && !confirming;
 
               return (
                 <div
@@ -181,19 +189,21 @@ export default function StakingPage() {
                     <p>Unlocks at: {formatUnlockDate(s.unlockTimestamp)}</p>
                   )}
 
-                  <div className="mt-3 text-right">
-                    <button
-                      disabled={!isButtonEnabled}
-                      onClick={() => handleClaim(s.stakeId)}
-                      className={`px-4 py-2 rounded-lg ${
-                        isButtonEnabled
-                          ? "bg-[#00d4c4] text-black"
-                          : "bg-white/10 text-white/40"
-                      }`}
-                    >
-                      {buttonLabel}
-                    </button>
-                  </div>
+                  {showClaimButton && (
+                    <div className="mt-3 text-right">
+                      <button
+                        disabled={!isButtonEnabled}
+                        onClick={() => handleClaim(s.stakeId)}
+                        className={`px-4 py-2 rounded-lg ${
+                          isButtonEnabled
+                            ? "bg-[#00d4c4] text-black"
+                            : "bg-white/10 text-white/40"
+                        }`}
+                      >
+                        Claim
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
