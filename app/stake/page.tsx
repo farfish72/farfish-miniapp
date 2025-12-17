@@ -251,11 +251,22 @@ export default function StakingPage() {
                     : null;
 
                   // LOCK DURATION DISPLAY - Read from ABI [4]
-                  // If lockDuration === 0: show "No lock"
-                  // If lockDuration > 0: show duration in days
-                  const lockDurationDisplay = lockDuration === BigInt(0)
-                    ? "No lock"
-                    : `${Number(lockDuration) / 86400} days`;
+                  // Treat lockDuration as BigInt at all times
+                  // NEVER divide or convert until confirmed defined
+                  let lockDurationDisplay: string;
+                  if (lockDuration === undefined || lockDuration === null) {
+                    lockDurationDisplay = "Loading…";
+                  } else if (lockDuration === BigInt(0)) {
+                    lockDurationDisplay = "No lock";
+                  } else if (lockDuration > BigInt(0)) {
+                    // Convert safely: Number(lockDuration) / 86400, then Math.floor for integer days
+                    // NEVER do: Number(lockDuration / 86400) - division before conversion causes NaN
+                    const days = Math.floor(Number(lockDuration) / 86400);
+                    lockDurationDisplay = `${days} days`;
+                  } else {
+                    // Fallback for any edge case
+                    lockDurationDisplay = "No lock";
+                  }
 
                   // REWARD DISPLAY - Read EXACT value from ABI [6]
                   // Display the on-chain rewardAmount value, never assume or default
