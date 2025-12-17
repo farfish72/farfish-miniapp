@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useAccount,
   useChainId,
@@ -13,7 +14,7 @@ import Link from "next/link";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { CLAIM_CONTROLLER_ADDRESS } from "../constants";
+import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
 import claimControllerAbi from "../abi/claimController.json";
 import useUserStakes from "../hooks/useUserStakes";
 
@@ -26,6 +27,29 @@ const infoCopy = {
     "Stake at least 1 NFT to unlock. Active stakers can claim 6 FRH per day.",
   activity:
     "Monthly Activity Bonus! Accumulate tokens by completing quests or referrals. This reward pool unlocks on the 1st of every month. Don't forget to claim your hard-earned tokens!",
+};
+
+const invalidateChestAndStakeQueries = (queryClient: ReturnType<typeof useQueryClient>) => {
+  queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey as any;
+      if (!Array.isArray(key) || key[0] !== "readContract") return false;
+      const params = key[1] as any;
+      const fn = params?.functionName;
+      const address = params?.address as string | undefined;
+      if (!fn || !address) return false;
+
+      const isChestFn =
+        address === CLAIM_CONTROLLER_ADDRESS &&
+        (fn === "canClaimDailyChest" || fn === "canClaimSilverChest");
+
+      const isStakeFn =
+        address === STAKING_CONTRACT_ADDRESS &&
+        (fn === "getUserStakeIds" || fn === "getStakeInfo");
+
+      return isChestFn || isStakeFn;
+    },
+  });
 };
 
 // Convert seconds to human-readable time string
@@ -52,6 +76,7 @@ export default function ChestPage() {
   const chainId = useChainId();
   const isFarcaster = useFarcasterEnvironment("Chest page");
   const isBaseNetwork = chainId === BASE_CHAIN_ID;
+  const queryClient = useQueryClient();
 
   const [infoModal, setInfoModal] = useState<{
     title: string;
@@ -155,21 +180,17 @@ export default function ChestPage() {
   useEffect(() => {
     if (isDailyTxSuccess && dailyTxHash) {
       setToast({ type: "success", message: "3 FRH claimed" });
-      setTimeout(() => {
-        (readDailyChest as any)?.refetch?.();
-      }, 100);
+      invalidateChestAndStakeQueries(queryClient);
     }
-  }, [isDailyTxSuccess, dailyTxHash, readDailyChest]);
+  }, [isDailyTxSuccess, dailyTxHash, queryClient]);
 
   // Handle silver claim transaction success – local-only updates
   useEffect(() => {
     if (isSilverTxSuccess && silverTxHash) {
       setToast({ type: "success", message: "6 FRH claimed" });
-      setTimeout(() => {
-        (readSilverChest as any)?.refetch?.();
-      }, 100);
+      invalidateChestAndStakeQueries(queryClient);
     }
-  }, [isSilverTxSuccess, silverTxHash, readSilverChest]);
+  }, [isSilverTxSuccess, silverTxHash, queryClient]);
 
   // Handle write errors - clear states on error
   useEffect(() => {
