@@ -226,10 +226,38 @@ export default function StakingPage() {
                   const claimed = position.claimed; // ABI index [7]
                   const unstaked = position.unstaked; // ABI index [8]
 
+                  // ATOMIC RENDERING CHECK - Treat getStakeInfo as atomic tuple
+                  // If ANY field is undefined, the entire stake card MUST be in "Loading" state
+                  const isDataComplete = 
+                    lockDuration !== undefined && lockDuration !== null &&
+                    unlockTimestamp !== undefined && unlockTimestamp !== null &&
+                    rewardAmount !== undefined && rewardAmount !== null &&
+                    claimed !== undefined && claimed !== null &&
+                    unstaked !== undefined && unstaked !== null;
+
+                  // LOADING STATE - Show only stake ID and loading message
+                  if (!isDataComplete) {
+                    return (
+                      <div
+                        key={position.stakeId.toString()}
+                        className="rounded-xl border border-white/10 bg-white/5 p-4"
+                      >
+                        <div className="space-y-2">
+                          <p className="text-sm font-semibold">
+                            Stake #{position.stakeId.toString()}
+                          </p>
+                          <p className="text-xs text-white/70">
+                            Loading stake info…
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // ALL DATA AVAILABLE - Now compute display values
                   // LOCK STATUS - Compare unlockTimestamp (ABI [5]) with current block time
                   // If unlockTimestamp > current block time: LOCKED
                   // If unlockTimestamp <= current block time OR unlockTimestamp === 0: UNLOCKED
-                  // Do NOT assume status until block timestamp is loaded
                   let lockStatus: string;
                   if (currentBlockTimestamp === null) {
                     lockStatus = "Loading...";
@@ -254,9 +282,7 @@ export default function StakingPage() {
                   // Treat lockDuration as BigInt at all times
                   // NEVER divide or convert until confirmed defined
                   let lockDurationDisplay: string;
-                  if (lockDuration === undefined || lockDuration === null) {
-                    lockDurationDisplay = "Loading…";
-                  } else if (lockDuration === BigInt(0)) {
+                  if (lockDuration === BigInt(0)) {
                     lockDurationDisplay = "No lock";
                   } else if (lockDuration > BigInt(0)) {
                     // Convert safely: Number(lockDuration) / 86400, then Math.floor for integer days
