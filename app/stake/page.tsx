@@ -215,43 +215,59 @@ export default function StakingPage() {
                 {activeStakes.map((position) => {
                   if (!position) return null;
 
-                  // CONTRACT STATE - Single source of truth
-                  const lockDuration = position.lockDuration;
-                  const unlockTimestamp = position.unlockTimestamp;
-                  const rewardAmount = position.rewardAmount;
-                  const claimed = position.claimed;
-                  const unstaked = position.unstaked;
+                  // CONTRACT STATE - Single source of truth from ABI
+                  // ABI indices: [0]staker, [1]tokenId, [2]amount, [3]stakeTimestamp,
+                  //              [4]lockDuration, [5]unlockTimestamp, [6]rewardAmount,
+                  //              [7]claimed, [8]unstaked
+                  // Values are already correctly mapped in useUserStakes hook
+                  const lockDuration = position.lockDuration; // ABI index [4]
+                  const unlockTimestamp = position.unlockTimestamp; // ABI index [5]
+                  const rewardAmount = position.rewardAmount; // ABI index [6]
+                  const claimed = position.claimed; // ABI index [7]
+                  const unstaked = position.unstaked; // ABI index [8]
 
-                  // LOCK STATUS - Compare unlockTimestamp with current block time
+                  // LOCK STATUS - Compare unlockTimestamp (ABI [5]) with current block time
                   // If unlockTimestamp > current block time: LOCKED
                   // If unlockTimestamp <= current block time OR unlockTimestamp === 0: UNLOCKED
+                  // Do NOT assume status until block timestamp is loaded
+                  let lockStatus: string;
+                  if (currentBlockTimestamp === null) {
+                    lockStatus = "Loading...";
+                  } else if (unlockTimestamp === BigInt(0)) {
+                    lockStatus = "Unlocked";
+                  } else if (unlockTimestamp > currentBlockTimestamp) {
+                    lockStatus = "Locked";
+                  } else {
+                    lockStatus = "Unlocked";
+                  }
+                  
                   const isLocked = currentBlockTimestamp !== null && 
                     unlockTimestamp !== BigInt(0) && 
                     unlockTimestamp > currentBlockTimestamp;
-                  
-                  const lockStatus = isLocked ? "Locked" : "Unlocked";
-                  
-                  // UNLOCK TIMESTAMP DISPLAY
+
+                  // UNLOCK TIMESTAMP DISPLAY - Only show if unlockTimestamp (ABI [5]) > 0
                   const unlockDateDisplay = unlockTimestamp > BigInt(0)
                     ? new Date(Number(unlockTimestamp) * 1000).toLocaleString()
-                    : "N/A";
+                    : null;
 
-                  // LOCK DURATION DISPLAY
-                  const lockDurationDisplay = lockDuration > BigInt(0)
-                    ? `${Number(lockDuration) / 86400} days`
-                    : "No lock";
+                  // LOCK DURATION DISPLAY - Read from ABI [4]
+                  // If lockDuration === 0: show "No lock"
+                  // If lockDuration > 0: show duration in days
+                  const lockDurationDisplay = lockDuration === BigInt(0)
+                    ? "No lock"
+                    : `${Number(lockDuration) / 86400} days`;
 
-                  // REWARD DISPLAY - Only show on-chain rewardAmount
-                  const rewardDisplay = rewardAmount > BigInt(0)
-                    ? formatRewards(rewardAmount)
-                    : "0";
+                  // REWARD DISPLAY - Read EXACT value from ABI [6]
+                  // Display the on-chain rewardAmount value, never assume or default
+                  const rewardDisplay = formatRewards(rewardAmount);
 
-                  // CLAIM BUTTON STATE - Contract-driven logic
-                  // Enable ONLY IF:
-                  //   unlockTimestamp !== 0 AND
-                  //   unlockTimestamp <= current block time AND
-                  //   claimed === false AND
-                  //   unstaked === false
+                  // CLAIM BUTTON STATE - Contract-driven logic (must match contract rules)
+                  // Enable ONLY IF ALL conditions are true:
+                  //   1. unlockTimestamp (ABI [5]) !== 0
+                  //   2. unlockTimestamp <= current block time
+                  //   3. claimed (ABI [7]) === false
+                  //   4. unstaked (ABI [8]) === false
+                  // Do NOT enable if block timestamp is not loaded yet
                   const canClaim = currentBlockTimestamp !== null &&
                     unlockTimestamp !== BigInt(0) &&
                     unlockTimestamp <= currentBlockTimestamp &&
@@ -260,18 +276,22 @@ export default function StakingPage() {
 
                   const isDisabled = !canClaim || isClaimPending || isClaimConfirming;
                   
-                  // CLAIM BUTTON LABEL
-                  let claimButtonLabel = "Claim";
+                  // CLAIM BUTTON LABEL - Based strictly on contract state
+                  let claimButtonLabel: string;
                   if (claimingStakeId === position.stakeId && (isClaimPending || isClaimConfirming)) {
                     claimButtonLabel = "Claiming...";
                   } else if (claimed) {
                     claimButtonLabel = "Claimed";
-                  } else if (isLocked) {
-                    claimButtonLabel = "Locked";
                   } else if (unstaked) {
                     claimButtonLabel = "Unstaked";
+                  } else if (currentBlockTimestamp === null) {
+                    claimButtonLabel = "Loading...";
                   } else if (unlockTimestamp === BigInt(0)) {
                     claimButtonLabel = "Not Available";
+                  } else if (isLocked) {
+                    claimButtonLabel = "Locked";
+                  } else {
+                    claimButtonLabel = "Claim";
                   }
 
                   return (
@@ -296,7 +316,7 @@ export default function StakingPage() {
                         <p className="text-xs text-white/70">
                           Status: {lockStatus}
                         </p>
-                        {isLocked && unlockTimestamp > BigInt(0) && (
+                        {unlockDateDisplay !== null && (
                           <p className="text-xs text-white/70">
                             Unlocks at: {unlockDateDisplay}
                           </p>
