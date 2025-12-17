@@ -148,6 +148,17 @@ export default function ChestView() {
   useEffect(() => {
     if (isDailyTxSuccess && dailyTxHash) {
       setToast({ type: "success", message: "3 FRH claimed" });
+      // Broadcast a global update so other views (Stake, Profile, Chest)
+      // can refetch any on-chain state that depends on chest activity
+      // (e.g. streaks, reward cooldowns). This reuses the same mechanism
+      // already used after stake/unstake actions.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("farfish:staking-updated", {
+            detail: { type: "chest-daily-claim", txHash: dailyTxHash },
+          }),
+        );
+      }
       // Immediate refetch for instant UI update
       setTimeout(() => {
         refetchAllChestData();
@@ -160,6 +171,17 @@ export default function ChestView() {
   useEffect(() => {
     if (isSilverTxSuccess && silverTxHash) {
       setToast({ type: "success", message: "6 FRH claimed" });
+      // Broadcast a global update so other views (Stake, Profile, Chest)
+      // can refetch any on-chain state that depends on chest activity
+      // (e.g. streaks, reward cooldowns). This reuses the same mechanism
+      // already used after stake/unstake actions.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("farfish:staking-updated", {
+            detail: { type: "chest-silver-claim", txHash: silverTxHash },
+          }),
+        );
+      }
       // Immediate refetch for instant UI update
       setTimeout(() => {
         refetchAllChestData();
