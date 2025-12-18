@@ -10,7 +10,6 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import Link from "next/link";
 import ChestCard from "../components/ChestCard";
 import Header from "../components/Header";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
@@ -498,42 +497,20 @@ export default function ChestPage() {
           </div>
         )}
 
-        {/* Stake Chest (Silver) - Eligibility comes ONLY from canClaimSilverChest contract call */}
-        {!silverHasStaked ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <h3 className="text-2xl font-semibold">Stake Chest (Silver)</h3>
-            <p className="text-sm text-white/70 mt-1">{infoCopy.silver}</p>
-            <div className="mt-4">
-              <Link
-                href="/stake"
-                className="w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-3 font-semibold text-black text-center block"
-              >
-                Stake NFTs to unlock
-              </Link>
-            </div>
-            <button
-              type="button"
-              className="w-full rounded-lg border border-white/10 bg-transparent py-3 text-sm text-white/70 hover:bg-white/5 transition mt-3"
-              onClick={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
-            >
-              Info
-            </button>
-          </div>
-        ) : (
-          <ChestCard
-            title="Stake Chest (Silver)"
-            description={infoCopy.silver}
-            badge={silverCanClaim ? "Ready" : "Cooling"}
-            progress={silverProgress}
-            variant="silver"
-            actionLabel={silverButtonLabel}
-            actionDisabled={silverButtonDisabled}
-            onAction={handleSilverClaim}
-            infoLabel="Info"
-            onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
-            totalClaimed={totalSilverClaimed}
-          />
-        )}
+        {/* Stake Chest (Silver) — always visible, state communicated via button */}
+        <ChestCard
+          title="Stake Chest (Silver)"
+          description={infoCopy.silver}
+          badge={silverCanClaim ? "Ready" : "Cooling"}
+          progress={silverProgress}
+          variant="silver"
+          actionLabel={silverButtonLabel}
+          actionDisabled={silverButtonDisabled}
+          onAction={handleSilverClaim}
+          infoLabel="Info"
+          onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
+          totalClaimed={totalSilverClaimed}
+        />
 
         {/* Pending state and tx link for silver */}
         {(isWriteSilverPending || isSilverTxConfirming) && (
