@@ -419,10 +419,7 @@ export default function ChestPage() {
   // Silver Chest card state - fully lock button during any pending state
   // Eligibility comes ONLY from canClaimSilverChest contract call
   const silverCanClaim = silverChestData?.canClaim ?? false;
-  // For UI visibility, treat any cooldown or claimable state as "has staked"
-  const silverHasStaked =
-    silverChestData?.canClaim === true ||
-    (silverChestData?.timeUntilClaim ?? BigInt(0)) > BigInt(0);
+  const silverHasStaked = silverChestData?.hasStaked ?? false;
   const silverTimeUntilClaim = silverChestData?.timeUntilClaim ?? BigInt(0);
   const silverButtonDisabled =
     !isConnected ||
