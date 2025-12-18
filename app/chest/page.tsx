@@ -85,10 +85,6 @@ export default function ChestPage() {
     message: string;
   } | null>(null);
 
-  // Local counters for total claimed (UI display only)
-  const [totalDailyClaimed, setTotalDailyClaimed] = useState(0);
-  const [totalSilverClaimed, setTotalSilverClaimed] = useState(0);
-
   // Read daily chest claim status
   const readDailyChest = useReadContract({
     address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
@@ -179,7 +175,6 @@ export default function ChestPage() {
   useEffect(() => {
     if (isDailyTxSuccess && dailyTxHash) {
       setToast({ type: "success", message: "3 FRH claimed" });
-      setTotalDailyClaimed((prev) => prev + 3);
       invalidateChestAndStakeQueries(queryClient);
     }
   }, [isDailyTxSuccess, dailyTxHash, queryClient]);
@@ -188,7 +183,6 @@ export default function ChestPage() {
   useEffect(() => {
     if (isSilverTxSuccess && silverTxHash) {
       setToast({ type: "success", message: "6 FRH claimed" });
-      setTotalSilverClaimed((prev) => prev + 6);
       invalidateChestAndStakeQueries(queryClient);
     }
   }, [isSilverTxSuccess, silverTxHash, queryClient]);
@@ -470,7 +464,6 @@ export default function ChestPage() {
           onAction={handleDailyClaim}
           infoLabel="Info"
           onInfo={() => openModal("Daily Bronze Chest", infoCopy.bronze)}
-          totalClaimed={totalDailyClaimed}
         />
 
         {/* Pending state and tx link for daily */}
@@ -506,7 +499,6 @@ export default function ChestPage() {
           onAction={handleSilverClaim}
           infoLabel="Info"
           onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
-          totalClaimed={totalSilverClaimed}
         />
 
         {/* Pending state and tx link for silver */}

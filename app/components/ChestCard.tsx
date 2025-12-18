@@ -10,7 +10,6 @@ type Props = {
   onAction?: () => void;
   infoLabel?: string;
   onInfo?: () => void;
-  totalClaimed?: number; // Total FRH claimed (display only)
 };
 
 export default function ChestCard({
@@ -24,7 +23,6 @@ export default function ChestCard({
   onAction,
   infoLabel,
   onInfo,
-  totalClaimed,
 }: Props) {
   // small color accents per variant (only subtle)
   const accent =
@@ -45,11 +43,6 @@ export default function ChestCard({
           <h3 className="text-2xl font-semibold">{title}</h3>
           {description && (
             <p className="text-sm text-white/70 mt-1">{description}</p>
-          )}
-          {typeof totalClaimed === "number" && (
-            <p className="text-sm text-white/70 mt-1">
-              Total claimed: {totalClaimed} FRH
-            </p>
           )}
         </div>
 
