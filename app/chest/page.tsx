@@ -85,6 +85,16 @@ export default function ChestPage() {
     message: string;
   } | null>(null);
 
+  // Listen for global staking updates (from Stake page/modal)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      invalidateChestAndStakeQueries(queryClient);
+    };
+    window.addEventListener("farfish:staking-updated", handler);
+    return () => window.removeEventListener("farfish:staking-updated", handler);
+  }, [queryClient]);
+
   // Read daily chest claim status
   const readDailyChest = useReadContract({
     address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
@@ -98,6 +108,7 @@ export default function ChestPage() {
       refetchOnMount: true,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
+      gcTime: 0,
     },
   } as any);
 
@@ -114,6 +125,7 @@ export default function ChestPage() {
       refetchOnMount: true,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
+      gcTime: 0,
     },
   } as any);
 
