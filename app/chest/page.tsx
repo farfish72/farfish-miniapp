@@ -16,7 +16,6 @@ import Header from "../components/Header";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
 import claimControllerAbi from "../abi/claimController.json";
-import useUserStakes from "../hooks/useUserStakes";
 
 const BASE_CHAIN_ID = 8453;
 const BASESCAN_URL = "https://basescan.org/tx";
@@ -87,8 +86,9 @@ export default function ChestPage() {
     message: string;
   } | null>(null);
 
-  // Canonical stake lifecycle data – used only to check if user has staked NFTs for Stake Chest unlock.
-  const { activeStakes, isLoading: isLoadingStakes } = useUserStakes();
+  // Local counters for total claimed (UI display only)
+  const [totalDailyClaimed, setTotalDailyClaimed] = useState(0);
+  const [totalSilverClaimed, setTotalSilverClaimed] = useState(0);
 
   // Read daily chest claim status
   const readDailyChest = useReadContract({
@@ -180,6 +180,7 @@ export default function ChestPage() {
   useEffect(() => {
     if (isDailyTxSuccess && dailyTxHash) {
       setToast({ type: "success", message: "3 FRH claimed" });
+      setTotalDailyClaimed((prev) => prev + 3);
       invalidateChestAndStakeQueries(queryClient);
     }
   }, [isDailyTxSuccess, dailyTxHash, queryClient]);
@@ -188,6 +189,7 @@ export default function ChestPage() {
   useEffect(() => {
     if (isSilverTxSuccess && silverTxHash) {
       setToast({ type: "success", message: "6 FRH claimed" });
+      setTotalSilverClaimed((prev) => prev + 6);
       invalidateChestAndStakeQueries(queryClient);
     }
   }, [isSilverTxSuccess, silverTxHash, queryClient]);
@@ -353,7 +355,7 @@ export default function ChestPage() {
       return;
     }
 
-    if (!silverChestData?.canClaim || !silverChestData?.hasStaked) {
+    if (!silverChestData?.canClaim) {
       return;
     }
 
@@ -416,10 +418,9 @@ export default function ChestPage() {
       );
 
   // Silver Chest card state - fully lock button during any pending state
+  // Eligibility comes ONLY from canClaimSilverChest contract call
   const silverCanClaim = silverChestData?.canClaim ?? false;
-  // Use activeStakes.length to control Stake Chest unlock state
-  const silverHasStaked =
-    Array.isArray(activeStakes) && activeStakes.length >= 1;
+  const silverHasStaked = silverChestData?.hasStaked ?? false;
   const silverTimeUntilClaim = silverChestData?.timeUntilClaim ?? BigInt(0);
   const silverButtonDisabled =
     !isConnected ||
@@ -470,6 +471,7 @@ export default function ChestPage() {
           onAction={handleDailyClaim}
           infoLabel="Info"
           onInfo={() => openModal("Daily Bronze Chest", infoCopy.bronze)}
+          totalClaimed={totalDailyClaimed}
         />
 
         {/* Pending state and tx link for daily */}
@@ -493,8 +495,8 @@ export default function ChestPage() {
           </div>
         )}
 
-        {/* Stake Chest (Silver) */}
-        {!Array.isArray(activeStakes) || activeStakes.length === 0 ? (
+        {/* Stake Chest (Silver) - Eligibility comes ONLY from canClaimSilverChest contract call */}
+        {!silverHasStaked ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <h3 className="text-2xl font-semibold">Stake Chest (Silver)</h3>
             <p className="text-sm text-white/70 mt-1">{infoCopy.silver}</p>
@@ -514,7 +516,7 @@ export default function ChestPage() {
               Info
             </button>
           </div>
-        ) : Array.isArray(activeStakes) && activeStakes.length >= 1 ? (
+        ) : (
           <ChestCard
             title="Stake Chest (Silver)"
             description={infoCopy.silver}
@@ -526,8 +528,9 @@ export default function ChestPage() {
             onAction={handleSilverClaim}
             infoLabel="Info"
             onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
+            totalClaimed={totalSilverClaimed}
           />
-        ) : null}
+        )}
 
         {/* Pending state and tx link for silver */}
         {(isWriteSilverPending || isSilverTxConfirming) && (
