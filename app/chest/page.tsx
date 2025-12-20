@@ -8,6 +8,8 @@ import {
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
+  type UseReadContractParameters,
+  type UseWriteContractParameters,
 } from "wagmi";
 import { base } from "viem/chains";
 
@@ -19,17 +21,18 @@ import claimControllerAbi from "../abi/claimController.json";
 import silverChestAbi from "../abi/SilverChestClaimController.json";
 import stakeAbi from "../abi/stake.json";
 
-import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
+import {
+  CLAIM_CONTROLLER_ADDRESS,
+  STAKING_CONTRACT_ADDRESS,
+} from "../constants";
 
 const SILVER_CHEST_CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_SILVER_CLAIM_CONTRACT_ADDRESS as `0x${string}`;
 
-const BASESCAN_URL = "https://basescan.org/tx";
-
 /* ---------------- helpers ---------------- */
 const formatTime = (seconds: bigint | number): string => {
   const s = typeof seconds === "bigint" ? Number(seconds) : seconds;
-  if (s <= 0) return "0m";
+  if (!s || s <= 0) return "0m";
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -41,9 +44,13 @@ export default function ChestPage() {
   const chainId = useChainId();
   const publicClient = usePublicClient();
   const isBase = chainId === base.id;
+
   useFarcasterEnvironment("Chest");
 
-  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   /* =========================================================
      DAILY BRONZE — OLD CLAIM CONTROLLER (UNCHANGED)
@@ -79,17 +86,17 @@ export default function ChestPage() {
 
     claimDaily({
       address: CLAIM_CONTROLLER_ADDRESS,
-      abi: claimControllerAbi as any,
+      abi: claimControllerAbi,
       functionName: "claimDailyChest",
       args: [],
-    } as any);
+      account: address,
+      chain: base,
+    });
   }, [daily, dailyPending, dailyConfirming, claimDaily, address]);
 
   /* =========================================================
-     SILVER CHEST — STAKEID BASED (CORRECT)
+     SILVER CHEST — STAKEID BASED (FINAL & CORRECT)
      ========================================================= */
-
-  // 1. read eligibility + cooldown (contract handles logic)
   const { data: canClaimSilver } = useReadContract({
     address: SILVER_CHEST_CONTRACT_ADDRESS,
     abi: silverChestAbi,
@@ -106,7 +113,6 @@ export default function ChestPage() {
     query: { enabled: Boolean(isConnected && address && isBase) },
   });
 
-  // 2. write
   const {
     writeContract: claimSilver,
     data: silverTx,
@@ -117,34 +123,35 @@ export default function ChestPage() {
     hash: silverTx,
   });
 
-  // 3. claim handler — stakeId REQUIRED
   const handleSilverClaim = useCallback(async () => {
     if (!canClaimSilver || silverPending || silverConfirming || !address) return;
 
     try {
-      // get user's stakeIds
       const stakeIds = (await publicClient.readContract({
         address: STAKING_CONTRACT_ADDRESS,
-        abi: stakeAbi as any,
+        abi: stakeAbi,
         functionName: "getUserStakeIds",
         args: [address],
-        account: address
-      } as any)) as bigint[];
+        account: address,
+        authorizationList: [],
+      })) as bigint[];
 
       if (!stakeIds || stakeIds.length === 0) {
         setToast({ type: "error", message: "No active stake found" });
         return;
       }
 
-      // use first stakeId, contract validates rest
+      // Claim with first stakeId (contract enforces 1/day per user)
       claimSilver({
         address: SILVER_CHEST_CONTRACT_ADDRESS,
-        abi: silverChestAbi as any,
+        abi: silverChestAbi,
         functionName: "claim",
         args: [stakeIds[0]],
-      } as any);
-    } catch (e) {
-      console.error(e);
+        account: address,
+        chain: base,
+      });
+    } catch (err) {
+      console.error(err);
       setToast({ type: "error", message: "Silver claim failed" });
     }
   }, [
@@ -213,20 +220,18 @@ export default function ChestPage() {
           onAction={handleSilverClaim}
         />
 
-        {/* ACTIVITY REWARDS (MONTHLY) */}
+        {/* ACTIVITY (READ ONLY) */}
         <ChestCard
           title="Activity Rewards (Monthly)"
-          description="Earn rewards based on your monthly activity."
-          variant="default"
+          description="Monthly rewards based on activity."
           badge="Coming Soon"
-          actionLabel="Claim Rewards"
-          actionDisabled={true}
+          actionLabel="Not available"
+          actionDisabled
           onAction={() => {}}
         />
 
         {toast && (
-          <div className="fixed bottom-4 left-4 right-4 z-50 rounded-lg border p-3 text-xs font-semibold
-            bg-emerald-500/10 border-emerald-500/20 text-emerald-200">
+          <div className="fixed bottom-4 left-4 right-4 z-50 rounded-lg border p-3 text-xs font-semibold bg-emerald-500/10 border-emerald-500/20 text-emerald-200">
             {toast.message}
           </div>
         )}
