@@ -213,6 +213,7 @@ export default function ChestPage() {
           actionDisabled={
             !isConnected ||
             !isBase ||
+            canClaimSilver === false ||
             silverPending ||
             silverConfirming
           }
