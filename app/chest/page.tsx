@@ -1,584 +1,236 @@
-// app/chest/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   useAccount,
   useChainId,
+  usePublicClient,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import ChestCard from "../components/ChestCard";
-import Header from "../components/Header";
-import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
-import claimControllerAbi from "../abi/claimController.json";
+import { base } from "viem/chains";
 
-const BASE_CHAIN_ID = 8453;
+import Header from "../components/Header";
+import ChestCard from "../components/ChestCard";
+import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
+
+import claimControllerAbi from "../abi/claimController.json";
+import silverChestAbi from "../abi/SilverChestClaimController.json";
+import stakeAbi from "../abi/stake.json";
+
+import { CLAIM_CONTROLLER_ADDRESS, STAKING_CONTRACT_ADDRESS } from "../constants";
+
+const SILVER_CHEST_CONTRACT_ADDRESS =
+  process.env.NEXT_PUBLIC_SILVER_CLAIM_CONTRACT_ADDRESS as `0x${string}`;
+
 const BASESCAN_URL = "https://basescan.org/tx";
 
-const infoCopy = {
-  bronze: "Claim 3 FRH token every 24 hours.",
-  silver:
-    "Stake at least 1 NFT to unlock. Active stakers can claim 6 FRH per day.",
-  activity:
-    "Monthly Activity Bonus! Accumulate tokens by completing quests or referrals. This reward pool unlocks on the 1st of every month. Don't forget to claim your hard-earned tokens!",
+/* ---------------- helpers ---------------- */
+const formatTime = (seconds: bigint | number): string => {
+  const s = typeof seconds === "bigint" ? Number(seconds) : seconds;
+  if (s <= 0) return "0m";
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 };
 
-const invalidateChestAndStakeQueries = (queryClient: ReturnType<typeof useQueryClient>) => {
-  queryClient.invalidateQueries({
-    predicate: (query) => {
-      const key = query.queryKey as any;
-      if (!Array.isArray(key) || key[0] !== "readContract") return false;
-      const params = key[1] as any;
-      const fn = params?.functionName;
-      const address = params?.address as string | undefined;
-      if (!fn || !address) return false;
-
-      const isChestFn =
-        address === CLAIM_CONTROLLER_ADDRESS &&
-        (fn === "canClaimDailyChest" || fn === "canClaimSilverChest");
-
-      const isStakeFn =
-        address === STAKING_CONTRACT_ADDRESS &&
-        (fn === "getUserStakeIds" || fn === "getStakeInfo");
-
-      return isChestFn || isStakeFn;
-    },
-  });
-};
-
-// Convert seconds to human-readable time string
-const formatTimeUntilClaim = (seconds: bigint | number): string => {
-  const secs = typeof seconds === "bigint" ? Number(seconds) : seconds;
-  if (secs <= 0) return "0m";
-
-  const totalSeconds = Math.ceil(secs);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secsRemaining = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${secsRemaining}s`;
-  } else {
-    return `${secsRemaining}s`;
-  }
-};
-
+/* ---------------- page ---------------- */
 export default function ChestPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const isFarcaster = useFarcasterEnvironment("Chest page");
-  const isBaseNetwork = chainId === BASE_CHAIN_ID;
-  const queryClient = useQueryClient();
+  const publicClient = usePublicClient();
+  const isBase = chainId === base.id;
+  useFarcasterEnvironment("Chest");
 
-  const [infoModal, setInfoModal] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
-  const [toast, setToast] = useState<{
-    type: "error" | "success";
-    message: string;
-  } | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  // Listen for global staking updates (from Stake page/modal)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handler = () => {
-      invalidateChestAndStakeQueries(queryClient);
-    };
-    window.addEventListener("farfish:staking-updated", handler);
-    return () => window.removeEventListener("farfish:staking-updated", handler);
-  }, [queryClient]);
-
-  // Read daily chest claim status
-  const readDailyChest = useReadContract({
-    address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
-    abi: claimControllerAbi as any,
+  /* =========================================================
+     DAILY BRONZE — OLD CLAIM CONTROLLER (UNCHANGED)
+     ========================================================= */
+  const { data: dailyData } = useReadContract({
+    address: CLAIM_CONTROLLER_ADDRESS,
+    abi: claimControllerAbi,
     functionName: "canClaimDailyChest",
     args: address ? [address] : undefined,
-    query: {
-      enabled: Boolean(
-        isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork,
-      ),
-      refetchOnMount: true,
-      refetchOnReconnect: true,
-      refetchOnWindowFocus: true,
-      gcTime: 0,
-    },
-  } as any);
+    query: { enabled: Boolean(isConnected && address && isBase) },
+  });
 
-  // Read silver chest claim status
-  const readSilverChest = useReadContract({
-    address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
-    abi: claimControllerAbi as any,
-    functionName: "canClaimSilverChest",
-    args: address ? [address] : undefined,
-    query: {
-      enabled: Boolean(
-        isConnected && address && CLAIM_CONTROLLER_ADDRESS && isBaseNetwork,
-      ),
-      refetchOnMount: true,
-      refetchOnReconnect: true,
-      refetchOnWindowFocus: true,
-      gcTime: 0,
-    },
-  } as any);
+  const daily = useMemo(() => {
+    if (!dailyData || !Array.isArray(dailyData)) return null;
+    return {
+      canClaim: Boolean(dailyData[0]),
+      timeLeft: BigInt(dailyData[1]),
+    };
+  }, [dailyData]);
 
-  // Write contract hooks
   const {
-    writeContract: writeDailyClaim,
-    data: dailyTxHash,
-    isPending: isWriteDailyPending,
-    error: writeDailyError,
-  } = useWriteContract();
-  const {
-    writeContract: writeSilverClaim,
-    data: silverTxHash,
-    isPending: isWriteSilverPending,
-    error: writeSilverError,
+    writeContract: claimDaily,
+    data: dailyTx,
+    isPending: dailyPending,
   } = useWriteContract();
 
-  // Wait for daily claim transaction
-  const { isLoading: isDailyTxConfirming, isSuccess: isDailyTxSuccess } =
-    useWaitForTransactionReceipt({
-      hash: dailyTxHash,
-    });
-
-  // Wait for silver claim transaction
-  const { isLoading: isSilverTxConfirming, isSuccess: isSilverTxSuccess } =
-    useWaitForTransactionReceipt({
-      hash: silverTxHash,
-    });
-
-  // Parse daily chest data
-  const dailyChestData = useMemo(() => {
-    if (!readDailyChest.data || !Array.isArray(readDailyChest.data)) return null;
-    const [canClaim, timeUntilClaim] = readDailyChest.data;
-    return {
-      canClaim: Boolean(canClaim),
-      timeUntilClaim:
-        typeof timeUntilClaim === "bigint"
-          ? timeUntilClaim
-          : BigInt(timeUntilClaim || 0),
-    };
-  }, [readDailyChest.data]);
-
-  // Parse silver chest data
-  const silverChestData = useMemo(() => {
-    if (!readSilverChest.data || !Array.isArray(readSilverChest.data))
-      return null;
-    const [canClaim, timeUntilClaim, hasStaked] = readSilverChest.data;
-    return {
-      canClaim: Boolean(canClaim),
-      timeUntilClaim:
-        typeof timeUntilClaim === "bigint"
-          ? timeUntilClaim
-          : BigInt(timeUntilClaim || 0),
-      hasStaked: Boolean(hasStaked),
-    };
-  }, [readSilverChest.data]);
-
-  // Handle daily claim transaction success – local-only updates
-  useEffect(() => {
-    if (isDailyTxSuccess && dailyTxHash) {
-      setToast({ type: "success", message: "3 FRH claimed" });
-      invalidateChestAndStakeQueries(queryClient);
-    }
-  }, [isDailyTxSuccess, dailyTxHash, queryClient]);
-
-  // Handle silver claim transaction success – local-only updates
-  useEffect(() => {
-    if (isSilverTxSuccess && silverTxHash) {
-      setToast({ type: "success", message: "6 FRH claimed" });
-      invalidateChestAndStakeQueries(queryClient);
-    }
-  }, [isSilverTxSuccess, silverTxHash, queryClient]);
-
-  // Handle write errors - clear states on error
-  useEffect(() => {
-    if (writeDailyError) {
-      const errorMsg = writeDailyError.message || String(writeDailyError);
-      if (
-        errorMsg.includes("mint") ||
-        errorMsg.includes("Mint") ||
-        errorMsg.includes("revert")
-      ) {
-        setToast({
-          type: "error",
-          message: "Rewards temporarily unavailable — contact support.",
-        });
-        console.error("Daily claim error:", writeDailyError);
-      } else {
-        setToast({
-          type: "error",
-          message: `Transaction failed: ${errorMsg}`,
-        });
-      }
-      setTimeout(() => (readDailyChest as any)?.refetch?.(), 500);
-    }
-  }, [writeDailyError, readDailyChest]);
-
-  useEffect(() => {
-    if (writeSilverError) {
-      const errorMsg = writeSilverError.message || String(writeSilverError);
-      if (
-        errorMsg.includes("mint") ||
-        errorMsg.includes("Mint") ||
-        errorMsg.includes("revert")
-      ) {
-        setToast({
-          type: "error",
-          message: "Rewards temporarily unavailable — contact support.",
-        });
-        console.error("Silver claim error:", writeSilverError);
-      } else {
-        setToast({
-          type: "error",
-          message: `Transaction failed: ${errorMsg}`,
-        });
-      }
-      setTimeout(() => (readSilverChest as any)?.refetch?.(), 500);
-    }
-  }, [writeSilverError, readSilverChest]);
-
-  // Clear states on unmount
-  useEffect(() => {
-    return () => {
-      setToast(null);
-    };
-  }, []);
-
-  // Auto-dismiss toast
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  // Preserve Farcaster miniapp environment logging without blocking
-  useEffect(() => {
-    if (!isFarcaster) return;
-    if (typeof window !== "undefined" && window.top !== window.self) {
-      console.log("Staying in Farcaster browser");
-    }
-  }, [isFarcaster]);
-
-  const openModal = (title: string, description: string) => {
-    setInfoModal({ title, description });
-  };
+  const { isLoading: dailyConfirming } = useWaitForTransactionReceipt({
+    hash: dailyTx,
+  });
 
   const handleDailyClaim = useCallback(() => {
-    // Prevent double-claim: check if already pending
-    if (isWriteDailyPending || isDailyTxConfirming) {
-      return;
-    }
+    if (!daily?.canClaim || dailyPending || dailyConfirming || !address) return;
 
-    if (!isConnected || !address) {
-      setToast({ type: "error", message: "Please connect your wallet" });
-      return;
-    }
+    claimDaily({
+      address: CLAIM_CONTROLLER_ADDRESS,
+      abi: claimControllerAbi as any,
+      functionName: "claimDailyChest",
+      args: [],
+    } as any);
+  }, [daily, dailyPending, dailyConfirming, claimDaily, address]);
 
-    if (!isBaseNetwork) {
-      setToast({ type: "error", message: "Please switch to Base network" });
-      return;
-    }
+  /* =========================================================
+     SILVER CHEST — STAKEID BASED (CORRECT)
+     ========================================================= */
 
-    if (!CLAIM_CONTROLLER_ADDRESS) {
-      setToast({
-        type: "error",
-        message: "Claim controller not configured",
-      });
-      return;
-    }
+  // 1. read eligibility + cooldown (contract handles logic)
+  const { data: canClaimSilver } = useReadContract({
+    address: SILVER_CHEST_CONTRACT_ADDRESS,
+    abi: silverChestAbi,
+    functionName: "canClaim",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(isConnected && address && isBase) },
+  });
 
-    if (!dailyChestData?.canClaim) {
-      return;
-    }
+  const { data: nextSilverTime } = useReadContract({
+    address: SILVER_CHEST_CONTRACT_ADDRESS,
+    abi: silverChestAbi,
+    functionName: "nextClaimTime",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(isConnected && address && isBase) },
+  });
 
-    try {
-      writeDailyClaim({
-        address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
-        abi: claimControllerAbi as any,
-        functionName: "claimDailyChest",
-        args: [],
-      } as any);
-    } catch (error: any) {
-      const errorMsg = error?.message || String(error);
-      if (
-        errorMsg.includes("mint") ||
-        errorMsg.includes("Mint") ||
-        errorMsg.includes("revert")
-      ) {
-        setToast({
-          type: "error",
-          message: "Rewards temporarily unavailable — contact support.",
-        });
-        console.error("Daily claim error:", error);
-      } else {
-        setToast({
-          type: "error",
-          message: `Transaction failed: ${errorMsg}`,
-        });
-      }
-    }
-  }, [
-    isConnected,
-    address,
-    isBaseNetwork,
-    dailyChestData,
-    isWriteDailyPending,
-    isDailyTxConfirming,
-    writeDailyClaim,
-  ]);
+  // 2. write
+  const {
+    writeContract: claimSilver,
+    data: silverTx,
+    isPending: silverPending,
+  } = useWriteContract();
 
-  const handleSilverClaim = useCallback(() => {
-    // Prevent double-claim: check if already pending
-    if (isWriteSilverPending || isSilverTxConfirming) {
-      return;
-    }
+  const { isLoading: silverConfirming } = useWaitForTransactionReceipt({
+    hash: silverTx,
+  });
 
-    if (!isConnected || !address) {
-      setToast({ type: "error", message: "Please connect your wallet" });
-      return;
-    }
-
-    if (!isBaseNetwork) {
-      setToast({ type: "error", message: "Please switch to Base network" });
-      return;
-    }
-
-    if (!CLAIM_CONTROLLER_ADDRESS) {
-      setToast({
-        type: "error",
-        message: "Claim controller not configured",
-      });
-      return;
-    }
-
-    if (!silverChestData?.canClaim) {
-      return;
-    }
+  // 3. claim handler — stakeId REQUIRED
+  const handleSilverClaim = useCallback(async () => {
+    if (!canClaimSilver || silverPending || silverConfirming || !address) return;
 
     try {
-      writeSilverClaim({
-        address: CLAIM_CONTROLLER_ADDRESS as `0x${string}`,
-        abi: claimControllerAbi as any,
-        functionName: "claimSilverChest",
-        args: [],
-      } as any);
-    } catch (error: any) {
-      const errorMsg = error?.message || String(error);
-      if (
-        errorMsg.includes("mint") ||
-        errorMsg.includes("Mint") ||
-        errorMsg.includes("revert")
-      ) {
-        setToast({
-          type: "error",
-          message: "Rewards temporarily unavailable — contact support.",
-        });
-        console.error("Silver claim error:", error);
-      } else {
-        setToast({
-          type: "error",
-          message: `Transaction failed: ${errorMsg}`,
-        });
+      // get user's stakeIds
+      const stakeIds = (await publicClient.readContract({
+        address: STAKING_CONTRACT_ADDRESS,
+        abi: stakeAbi as any,
+        functionName: "getUserStakeIds",
+        args: [address],
+        account: address
+      } as any)) as bigint[];
+
+      if (!stakeIds || stakeIds.length === 0) {
+        setToast({ type: "error", message: "No active stake found" });
+        return;
       }
+
+      // use first stakeId, contract validates rest
+      claimSilver({
+        address: SILVER_CHEST_CONTRACT_ADDRESS,
+        abi: silverChestAbi as any,
+        functionName: "claim",
+        args: [stakeIds[0]],
+      } as any);
+    } catch (e) {
+      console.error(e);
+      setToast({ type: "error", message: "Silver claim failed" });
     }
   }, [
-    isConnected,
+    canClaimSilver,
+    silverPending,
+    silverConfirming,
     address,
-    isBaseNetwork,
-    silverChestData,
-    isWriteSilverPending,
-    isSilverTxConfirming,
-    writeSilverClaim,
+    claimSilver,
+    publicClient,
   ]);
 
-  // Daily Bronze card state - fully lock button during any pending state
-  const dailyCanClaim = dailyChestData?.canClaim ?? false;
-  const dailyTimeUntilClaim = dailyChestData?.timeUntilClaim ?? BigInt(0);
-  const dailyButtonDisabled =
-    !isConnected ||
-    !isBaseNetwork ||
-    !dailyCanClaim ||
-    isWriteDailyPending ||
-    isDailyTxConfirming;
-  const dailyButtonLabel =
-    isWriteDailyPending || isDailyTxConfirming
-      ? "Claiming..."
-      : dailyCanClaim
-      ? "Open now (3 FRH)"
-      : `Next claim in: ${formatTimeUntilClaim(dailyTimeUntilClaim)}`;
-  const dailyProgress = dailyCanClaim
-    ? 100
-    : Math.max(
-        0,
-        100 - Math.round((Number(dailyTimeUntilClaim) / 86400) * 100),
-      );
+  /* =========================================================
+     TOASTS
+     ========================================================= */
+  useEffect(() => {
+    if (dailyTx) setToast({ type: "success", message: "3 FRH claimed" });
+    if (silverTx) setToast({ type: "success", message: "6 FRH claimed" });
+  }, [dailyTx, silverTx]);
 
-  // Silver Chest card state - fully lock button during any pending state
-  // Eligibility comes ONLY from canClaimSilverChest contract call
-  const silverCanClaim = silverChestData?.canClaim ?? false;
-  const silverHasStaked = silverChestData?.hasStaked ?? false;
-  const silverTimeUntilClaim = silverChestData?.timeUntilClaim ?? BigInt(0);
-  const silverButtonDisabled =
-    !isConnected ||
-    !isBaseNetwork ||
-    !silverHasStaked ||
-    !silverCanClaim ||
-    isWriteSilverPending ||
-    isSilverTxConfirming;
-  const silverButtonLabel =
-    isWriteSilverPending || isSilverTxConfirming
-      ? "Claiming..."
-      : !silverHasStaked
-      ? "Stake NFTs to unlock"
-      : silverCanClaim
-      ? "Open now (6 FRH)"
-      : `Next claim in: ${formatTimeUntilClaim(silverTimeUntilClaim)}`;
-  const silverProgress =
-    silverHasStaked && silverCanClaim
-      ? 100
-      : silverHasStaked
-      ? Math.max(
-          0,
-          100 - Math.round((Number(silverTimeUntilClaim) / 86400) * 100),
-        )
-      : 0;
-
+  /* ========================================================= */
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1">
       <Header title="Chest" />
 
-      <div className="mt-4 space-y-4 flex-1 flex flex-col">
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <p className="text-sm text-white/70">
-            Rewards refresh daily and monthly based on the FarFISH economy
-            rules. Stay active, stake NFTs, and never miss a claim window.
-          </p>
-        </section>
-
-        {/* Daily Bronze Chest */}
+      <div className="mt-4 space-y-4 flex-1">
+        {/* DAILY BRONZE */}
         <ChestCard
           title="Daily Bronze Chest"
-          description={infoCopy.bronze}
-          badge={dailyCanClaim ? "Ready" : "Cooling"}
-          progress={dailyProgress}
+          description="Claim 3 FRH every 24 hours."
           variant="bronze"
-          actionLabel={dailyButtonLabel}
-          actionDisabled={dailyButtonDisabled}
+          badge={daily?.canClaim ? "Ready" : "Cooling"}
+          progress={daily?.canClaim ? 100 : 0}
+          actionLabel={
+            daily?.canClaim
+              ? "Open now (3 FRH)"
+              : `Next claim in: ${formatTime(daily?.timeLeft ?? 0n)}`
+          }
+          actionDisabled={
+            !isConnected ||
+            !isBase ||
+            !daily?.canClaim ||
+            dailyPending ||
+            dailyConfirming
+          }
           onAction={handleDailyClaim}
-          infoLabel="Info"
-          onInfo={() => openModal("Daily Bronze Chest", infoCopy.bronze)}
         />
 
-        {/* Pending state and tx link for daily */}
-        {(isWriteDailyPending || isDailyTxConfirming) && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <p className="text-sm text-white/70">
-              {isDailyTxConfirming
-                ? "Confirming transaction..."
-                : "Transaction pending..."}
-            </p>
-            {dailyTxHash && (
-              <a
-                href={`${BASESCAN_URL}/${dailyTxHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-[#00d4c4] hover:underline mt-2 block"
-              >
-                View on BaseScan
-              </a>
-            )}
-          </div>
-        )}
-
-        {/* Stake Chest (Silver) — always visible, state communicated via button */}
+        {/* SILVER CHEST */}
         <ChestCard
-          title="Stake Chest (Silver)"
-          description={infoCopy.silver}
-          badge={silverCanClaim ? "Ready" : "Cooling"}
-          progress={silverProgress}
+          title="Silver Chest"
+          description="Active stakers can claim 6 FRH daily."
           variant="silver"
-          actionLabel={silverButtonLabel}
-          actionDisabled={silverButtonDisabled}
+          badge={canClaimSilver ? "Ready" : "Cooling"}
+          actionLabel={
+            canClaimSilver
+              ? "Claim 6 FRH"
+              : `Next claim in: ${formatTime((nextSilverTime as bigint) ?? 0n)}`
+          }
+          actionDisabled={
+            !isConnected ||
+            !isBase ||
+            !canClaimSilver ||
+            silverPending ||
+            silverConfirming
+          }
           onAction={handleSilverClaim}
-          infoLabel="Info"
-          onInfo={() => openModal("Stake Chest (Silver)", infoCopy.silver)}
         />
 
-        {/* Pending state and tx link for silver */}
-        {(isWriteSilverPending || isSilverTxConfirming) && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <p className="text-sm text-white/70">
-              {isSilverTxConfirming
-                ? "Confirming transaction..."
-                : "Transaction pending..."}
-            </p>
-            {silverTxHash && (
-              <a
-                href={`${BASESCAN_URL}/${silverTxHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-[#00d4c4] hover:underline mt-2 block"
-              >
-                View on BaseScan
-              </a>
-            )}
-          </div>
-        )}
-
-        {/* Activity Rewards — monthly airdrop (read-only if no claim function) */}
+        {/* ACTIVITY REWARDS (MONTHLY) */}
         <ChestCard
           title="Activity Rewards (Monthly)"
-          description={infoCopy.activity}
-          badge="Monthly"
-          progress={0}
-          actionLabel="Check eligibility on 1st"
+          description="Earn rewards based on your monthly activity."
+          variant="default"
+          badge="Coming Soon"
+          actionLabel="Claim Rewards"
           actionDisabled={true}
-          infoLabel="Info"
-          onInfo={() =>
-            openModal("Activity Rewards (Monthly)", infoCopy.activity)
-          }
+          onAction={() => {}}
         />
 
-        {/* Toast notification */}
         {toast && (
-          <div
-            className={`fixed bottom-4 left-4 right-4 z-50 text-xs font-semibold rounded-lg border p-3 ${
-              toast.type === "success"
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-200"
-                : "bg-red-500/10 border-red-500/20 text-red-200"
-            }`}
-          >
+          <div className="fixed bottom-4 left-4 right-4 z-50 rounded-lg border p-3 text-xs font-semibold
+            bg-emerald-500/10 border-emerald-500/20 text-emerald-200">
             {toast.message}
           </div>
         )}
       </div>
-
-      {infoModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-12 sm:items-center">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#050e18] p-5 shadow-2xl">
-            <h4 className="text-lg font-semibold">{infoModal.title}</h4>
-            <p className="mt-2 text-sm text-white/70">
-              {infoModal.description}
-            </p>
-            <button
-              type="button"
-              className="mt-4 w-full rounded-lg bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] py-3 text-sm font-semibold text-black"
-              onClick={() => setInfoModal(null)}
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

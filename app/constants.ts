@@ -2,9 +2,9 @@ export const FARCASTER_PROFILE_URL = "https://farcaster.xyz/farf";
 export const X_PROFILE_URL = "https://x.com/farfishon";
 // THIRDWEB REMOVED — replaced with wagmi later
 export const NFT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS ?? "";
-export const STAKING_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_STAKING_CONTRACT_ADDRESS ?? "";
+export const STAKING_CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_STAKING_CONTRACT_ADDRESS ?? "") as `0x${string}`;
 export const ERC20_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_ERC20_TOKEN_ADDRESS ?? "";
-export const CLAIM_CONTROLLER_ADDRESS = process.env.NEXT_PUBLIC_CLAIM_CONTROLLER_ADDRESS ?? "";
+export const CLAIM_CONTROLLER_ADDRESS = (process.env.NEXT_PUBLIC_CLAIM_CONTROLLER_ADDRESS ?? "") as `0x${string}`;
 
 const REFERRAL_TOKEN_MULTIPLIERS: Record<number, number> = {
   0: 1,
