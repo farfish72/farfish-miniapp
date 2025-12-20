@@ -8,8 +8,6 @@ import {
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
-  type UseReadContractParameters,
-  type UseWriteContractParameters,
 } from "wagmi";
 import { base } from "viem/chains";
 
@@ -53,7 +51,7 @@ export default function ChestPage() {
   } | null>(null);
 
   /* =========================================================
-     DAILY BRONZE — OLD CLAIM CONTROLLER (UNCHANGED)
+     DAILY BRONZE
      ========================================================= */
   const { data: dailyData } = useReadContract({
     address: CLAIM_CONTROLLER_ADDRESS,
@@ -95,7 +93,7 @@ export default function ChestPage() {
   }, [daily, dailyPending, dailyConfirming, claimDaily, address]);
 
   /* =========================================================
-     SILVER CHEST — STAKEID BASED (FINAL & CORRECT)
+     SILVER CHEST (FIXED)
      ========================================================= */
   const { data: canClaimSilver } = useReadContract({
     address: SILVER_CHEST_CONTRACT_ADDRESS,
@@ -124,7 +122,7 @@ export default function ChestPage() {
   });
 
   const handleSilverClaim = useCallback(async () => {
-    if (!canClaimSilver || silverPending || silverConfirming || !address) return;
+    if (silverPending || silverConfirming || !address) return;
 
     try {
       const stakeIds = (await publicClient.readContract({
@@ -132,16 +130,13 @@ export default function ChestPage() {
         abi: stakeAbi,
         functionName: "getUserStakeIds",
         args: [address],
-        account: address,
-        authorizationList: [],
-      })) as bigint[];
+      } as any)) as bigint[];
 
       if (!stakeIds || stakeIds.length === 0) {
         setToast({ type: "error", message: "No active stake found" });
         return;
       }
 
-      // Claim with first stakeId (contract enforces 1/day per user)
       claimSilver({
         address: SILVER_CHEST_CONTRACT_ADDRESS,
         abi: silverChestAbi,
@@ -154,14 +149,7 @@ export default function ChestPage() {
       console.error(err);
       setToast({ type: "error", message: "Silver claim failed" });
     }
-  }, [
-    canClaimSilver,
-    silverPending,
-    silverConfirming,
-    address,
-    claimSilver,
-    publicClient,
-  ]);
+  }, [silverPending, silverConfirming, address, claimSilver, publicClient]);
 
   /* =========================================================
      TOASTS
@@ -220,7 +208,7 @@ export default function ChestPage() {
           onAction={handleSilverClaim}
         />
 
-        {/* ACTIVITY (READ ONLY) */}
+        {/* ACTIVITY */}
         <ChestCard
           title="Activity Rewards (Monthly)"
           description="Monthly rewards based on activity."
