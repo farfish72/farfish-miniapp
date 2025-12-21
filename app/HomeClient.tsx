@@ -717,76 +717,9 @@ export default function HomeClient() {
     <div className="flex flex-col flex-1 min-h-0">
       <Header title="Home" />
 
-      <div className="mt-4 flex-1 flex flex-col px-4">
-        {/* COMPARISON CARDS */}
-        <div className="mb-6 w-full">
-          <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Choose Your Place</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {/* BASIC CARD */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 relative h-full">
-              <div className="flex items-center gap-1 sm:gap-2 text-white/70 mb-2 sm:mb-3">
-                <span className="text-xs sm:text-sm">Casual users</span>
-              </div>
-              <h3 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 md:mb-4">Basic</h3>
-              <ul className="space-y-1.5 sm:space-y-2 md:space-y-3 text-xs sm:text-sm text-white/80">
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>Earn 3 FRH per day</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>No multiplier</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>No staking rewards</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>Standard access</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* PREMIUM CARD */}
-            <div className="bg-white/10 border border-[#00d4c4]/30 rounded-xl p-4 relative h-full">
-              {/* Power Pick Badge */}
-              <div className="absolute -top-2 sm:-top-3 right-2 sm:right-4 bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] text-[8px] sm:text-[10px] font-bold text-black px-2 sm:px-3 py-0.5 sm:py-1 rounded-full">
-                Power Pick
-              </div>
-              
-              <div className="flex items-center gap-1 sm:gap-2 text-[#00d4c4] mb-2 sm:mb-3">
-                <span className="text-xs sm:text-sm font-medium">Core users</span>
-              </div>
-              <h3 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 md:mb-4">Premium</h3>
-              <ul className="space-y-1.5 sm:space-y-2 md:space-y-3 text-xs sm:text-sm">
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>Earn 9 FRH per day</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>Rewards multiplier unlocked</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>Staking rewards enabled</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>Monthly airdrop access</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>•</span>
-                  <span>Priority ecosystem access</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
+      <div className="mt-4 flex-1 flex flex-col">
         {/* MINT CARD */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4 w-full">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
@@ -900,43 +833,12 @@ export default function HomeClient() {
 
         {/* WHY MINT */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-          <h3 className="font-bold mb-3">Why mint a FarFISH?</h3>
-          <ul className="text-sm text-white/80 space-y-3">
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🎮</span>
-              <div>
-                <div className="font-medium">Upcoming Games & Play-to-Earn Mechanics</div>
-                <div className="text-white/60">FarFISH NFTs will be used inside future in-app games where ownership unlocks gameplay advantages.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🧩</span>
-              <div>
-                <div className="font-medium">NFT-Based Progression System</div>
-                <div className="text-white/60">Your NFT is a permanent on-chain asset designed to evolve with future features.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🌊</span>
-              <div>
-                <div className="font-medium">Built for Farcaster & Base</div>
-                <div className="text-white/60">Designed specifically for social + on-chain interaction inside the Base ecosystem.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">⏳</span>
-              <div>
-                <div className="font-medium">Long-Term Utility, Not Just Art</div>
-                <div className="text-white/60">Minting is about access, progression, and participation — not visuals.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🏆</span>
-              <div>
-                <div className="font-medium">Early Holders Go First</div>
-                <div className="text-white/60">NFT holders get early access to new features, games, and experiments.</div>
-              </div>
-            </li>
+          <h3 className="font-bold mb-2">Why mint a FarFISH?</h3>
+          <ul className="text-sm text-white/70 space-y-1 pl-4">
+            <li>• Multiple NFT tiers with different utility</li>
+            <li>• Limited supply and long-term scarcity</li>
+            <li>• Designed to support growth on the Base ecosystem</li>
+            <li>• Earn staking rewards over time (30 / 90 / 180 / 360 days)</li>
           </ul>
         </div>
 
