@@ -852,14 +852,16 @@ https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish🔥
                   <div className="flex flex-col space-y-2">
                     <button
                       onClick={() => {
-                        const text = `I just unlocked Early Access for FarFISH 🐟
+                        const text = 
+`I just unlocked Early Access for FarFISH 🐟
 
 FarFISH is a daily reward ecosystem on Base.
 Earn daily FRH rewards, unlock 5× earnings with NFT staking,
 climb the leaderboard, access referrals, and monthly airdrops.
 
 Early access is live 👇
-https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish🔥`;
+https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish`.trim();
+
                         window.open(
                           `https://farcaster.xyz/~/compose?text=${encodeURIComponent(text)}`,
                           "_blank"
