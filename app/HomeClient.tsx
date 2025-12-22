@@ -109,6 +109,8 @@ export default function HomeClient() {
   const [claimInfo, setClaimInfo] = useState<Map<number, TokenClaimInfo>>(new Map());
   const [loadingClaimConditions, setLoadingClaimConditions] = useState(false);
   const [justMinted, setJustMinted] = useState(false);
+  const [earlyUnlocked, setEarlyUnlocked] = useState(false);
+  const [showEarlyPanel, setShowEarlyPanel] = useState(false);
 
   const {
     writeContract: writeMint,
@@ -395,6 +397,14 @@ export default function HomeClient() {
       console.error("Failed to check mint status:", error);
     }
   }, [address]);
+
+  // Load early access state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('earlyAccessUnlocked');
+    if (saved === 'true') {
+      setEarlyUnlocked(true);
+    }
+  }, []);
 
   // Fetch supply info and claim conditions on mount and when contract address changes
   useEffect(() => {
@@ -718,8 +728,55 @@ export default function HomeClient() {
       <Header title="Home" />
 
       <div className="mt-4 flex-1 flex flex-col">
+        {/* COMPARISON – SINGLE MAIN CONTAINER */}
+<div className="w-full mb-6">
+  <h2 className="text-xl font-bold mb-4">Choose Your Place</h2>
+
+  {/* ONE MAIN BOX */}
+  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+    <div className="grid grid-cols-2 gap-4">
+
+      {/* LEFT – BASIC */}
+      <div className="bg-black/20 border border-white/10 rounded-xl p-4">
+        <div className="text-white/70 text-xs mb-2">Casual users</div>
+
+        <h3 className="text-lg font-bold mb-3">Basic</h3>
+
+        <ul className="space-y-2 text-sm text-white/80">
+          <li>• Earn 3 FRH per day</li>
+          <li>• No multiplier</li>
+          <li>• No staking rewards</li>
+          <li>• Standard access</li>
+        </ul>
+      </div>
+
+      {/* RIGHT – PREMIUM */}
+      <div className="relative">
+        <div className="bg-black/30 border border-[#00d4c4]/30 rounded-xl p-4 h-full">
+          <div className="text-[#00d4c4] text-xs mb-2">Core users</div>
+
+          <h3 className="text-lg font-bold mb-3">Premium</h3>
+
+          <ul className="space-y-2 text-sm">
+            <li>• Earn 9 FRH per day</li>
+            <li>• Rewards multiplier unlocked</li>
+            <li>• Staking rewards enabled</li>
+            <li>• Monthly airdrop access</li>
+            <li>• Priority ecosystem access</li>
+          </ul>
+        </div>
+
+        {/* POWER PICK – OUTSIDE PREMIUM */}
+        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] text-xs font-bold text-black px-3 py-1 rounded-full">
+          Power Pick
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
         {/* MINT CARD */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4 w-full">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
@@ -773,12 +830,58 @@ export default function HomeClient() {
             <div className="w-full mt-4">
               <button
                 type="button"
-                onClick={handleMint}
-                disabled={primaryButtonDisabled}
+                onClick={earlyUnlocked ? handleMint : () => setShowEarlyPanel(true)}
+                disabled={earlyUnlocked && (isConnecting || isMinting || isMintPending || isMintConfirming || !NFT_CONTRACT_ADDRESS || hasMinted || loadingSupplies || loadingClaimConditions || representativePrice === null)}
                 className={primaryButtonClasses}
               >
-                {primaryButtonLabel}
+                {earlyUnlocked ? "Mint" : "Unlock Early Access"}
               </button>
+              
+              {showEarlyPanel && !earlyUnlocked && (
+                <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg">
+                  <div className="whitespace-pre-line text-sm mb-4">
+                    I just unlocked Early Access for FarFISH 🐟
+
+FarFISH is a daily reward ecosystem on Base.
+Earn daily FRH rewards, unlock 5× earnings with NFT staking,
+climb the leaderboard, access referrals, and monthly airdrops.
+
+Early access is live 👇
+https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish🔥
+                  </div>
+                  <div className="flex flex-col space-y-2">
+                    <button
+                      onClick={() => {
+                        const text = `I just unlocked Early Access for FarFISH 🐟
+
+FarFISH is a daily reward ecosystem on Base.
+Earn daily FRH rewards, unlock 5× earnings with NFT staking,
+climb the leaderboard, access referrals, and monthly airdrops.
+
+Early access is live 👇
+https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish🔥`;
+                        window.open(
+                          `https://farcaster.xyz/~/compose?text=${encodeURIComponent(text)}`,
+                          "_blank"
+                        );
+                      }}
+                      className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition"
+                    >
+                      Share on Farcaster
+                    </button>
+                    <button
+                      onClick={() => {
+                        localStorage.setItem("earlyAccessUnlocked", "true");
+                        setEarlyUnlocked(true);
+                        setShowEarlyPanel(false);
+                      }}
+                      className="w-full py-2 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-semibold rounded-lg"
+                    >
+                      Verify
+                    </button>
+                  </div>
+                </div>
+              )}
               {lastMintedDisplay && (
                 <p className="mt-2 text-xs text-green-400">
                   Minted: {lastMintedDisplay}
@@ -833,12 +936,43 @@ export default function HomeClient() {
 
         {/* WHY MINT */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-          <h3 className="font-bold mb-2">Why mint a FarFISH?</h3>
-          <ul className="text-sm text-white/70 space-y-1 pl-4">
-            <li>• Multiple NFT tiers with different utility</li>
-            <li>• Limited supply and long-term scarcity</li>
-            <li>• Designed to support growth on the Base ecosystem</li>
-            <li>• Earn staking rewards over time (30 / 90 / 180 / 360 days)</li>
+          <h3 className="font-bold mb-3">Why mint a FarFISH?</h3>
+          <ul className="text-sm text-white/80 space-y-3">
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5">🎮</span>
+              <div>
+                <div className="font-medium">Upcoming Games & Play-to-Earn Mechanics</div>
+                <div className="text-white/60">FarFISH NFTs will be used inside future in-app games where ownership unlocks gameplay advantages.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5">🧩</span>
+              <div>
+                <div className="font-medium">NFT-Based Progression System</div>
+                <div className="text-white/60">Your NFT is a permanent on-chain asset designed to evolve with future features.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5">🌊</span>
+              <div>
+                <div className="font-medium">Built for Farcaster & Base</div>
+                <div className="text-white/60">Designed specifically for social + on-chain interaction inside the Base ecosystem.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5">⏳</span>
+              <div>
+                <div className="font-medium">Long-Term Utility, Not Just Art</div>
+                <div className="text-white/60">Minting is about access, progression, and participation — not visuals.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-0.5">🏆</span>
+              <div>
+                <div className="font-medium">Early Holders Go First</div>
+                <div className="text-white/60">NFT holders get early access to new features, games, and experiments.</div>
+              </div>
+            </li>
           </ul>
         </div>
 

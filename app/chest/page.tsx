@@ -191,7 +191,7 @@ export default function ChestPage() {
 
         {/* ACTIVITY (READ ONLY) */}
         <ChestCard
-          title="Activity Rewards (Monthly)"
+          title="Activity Rewards (Airdrop and referral)"
           description="Monthly rewards based on activity."
           badge="Coming Soon"
           actionLabel="Not available"
