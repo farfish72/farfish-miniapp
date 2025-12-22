@@ -12,6 +12,7 @@ import Header from "./components/Header";
 import useFarcasterGate from "./hooks/useFarcasterGate";
 import useFarcasterEnvironment from "./hooks/useFarcasterEnvironment";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { sdk } from "@farcaster/miniapp-sdk";
 import {
   useAccount,
   useConnect,
@@ -596,14 +597,22 @@ export default function HomeClient() {
     }
   }, [address, isConnected, hasMinted, supplyInfo, claimInfo, writeMint, handleConnect]);
 
-  const handleShare = useCallback(() => {
-    if (!isConnected || !address) {
-      return;
-    }
+  const handleShareFarcaster = useCallback(() => {
+    const text = [
+      "I just unlocked Early Access for FarFISH 🐟",
+      "",
+      "FarFISH is a daily reward ecosystem on Base.",
+      "Earn daily FRH rewards, unlock 5× earnings with NFT staking,",
+      "climb the leaderboard, access referrals, and monthly airdrops.",
+      "",
+      "Early access is live 👇",
+      "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish"
+    ].join("\n");
 
-    // Redirect to Profile page and auto-scroll to Refer & Earn section
-    window.location.href = "/profile#refer-earn";
-  }, [isConnected, address]);
+    sdk.actions.openUrl({
+      url: "https://farcaster.xyz/~/compose?text=" + encodeURIComponent(text)
+    });
+  }, []);
 
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {
@@ -841,33 +850,18 @@ export default function HomeClient() {
                 <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg">
                   <div className="whitespace-pre-line text-sm mb-4">
                     I just unlocked Early Access for FarFISH 🐟
-
-FarFISH is a daily reward ecosystem on Base.
-Earn daily FRH rewards, unlock 5× earnings with NFT staking,
-climb the leaderboard, access referrals, and monthly airdrops.
-
-Early access is live 👇
-https://farcaster.xyz/miniapps/
-DfVmB6jF12Ca/farfish
+                    
+                    FarFISH is a daily reward ecosystem on Base.
+                    Earn daily FRH rewards, unlock 5× earnings with NFT staking,
+                    climb the leaderboard, access referrals, and monthly airdrops.
+                    
+                    Early access is live 👇
+                    https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish
                   </div>
                   <div className="flex flex-col space-y-2">
                     <button
                       onClick={() => {
-                        const text = [
-                        "I just unlocked Early Access for FarFISH 🐟",
-                        "",
-                        "FarFISH is a daily reward ecosystem on Base.",
-                        "Earn daily FRH rewards, unlock 5× earnings with NFT staking,",
-                        "climb the leaderboard, access referrals, and monthly airdrops.",
-                        "",
-                        "Early access is live 👇",
-                        "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish"
-                      ].join("\n");
-
-                      window.open(
-                        "https://farcaster.xyz/~/compose?text=" + encodeURIComponent(text),
-                        "_blank"
-                      );
+                        handleShareFarcaster();
                       }}
                       className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition"
                     >
@@ -911,7 +905,7 @@ DfVmB6jF12Ca/farfish
           <div className="space-y-2 mt-4">
             <button
               type="button"
-              onClick={handleShare}
+              onClick={handleShareFarcaster}
               disabled={!isConnected || !address}
               className="w-full bg-white/10 text-white py-3 rounded-lg text-sm transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
