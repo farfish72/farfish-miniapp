@@ -854,21 +854,20 @@ DfVmB6jF12Ca/farfish
                     <button
                       onClick={() => {
                         const text = [
-                          "I just unlocked Early Access for FarFISH 🐟",
-                          "",
-                          "FarFISH is a daily reward ecosystem on Base.",
-                          "Earn daily FRH rewards, unlock 5× earnings with NFT staking,",
-                          "climb the leaderboard, access referrals, and monthly airdrops.",
-                          "",
-                          "Early access is live 👇",
-                          "https://farcaster.xyz/miniapps",
-                          "/DfVmB6jF12Ca/farfish"
-                        ].join("\\n");
+                        "I just unlocked Early Access for FarFISH 🐟",
+                        "",
+                        "FarFISH is a daily reward ecosystem on Base.",
+                        "Earn daily FRH rewards, unlock 5× earnings with NFT staking,",
+                        "climb the leaderboard, access referrals, and monthly airdrops.",
+                        "",
+                        "Early access is live 👇",
+                        "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish"
+                      ].join("\n");
 
-                        window.open(
-                          "https://farcaster.xyz/~/compose?text=" + encodeURIComponent(text),
-                          "_blank"
-                        );
+                      window.open(
+                        "https://farcaster.xyz/~/compose?text=" + encodeURIComponent(text),
+                        "_blank"
+                      );
                       }}
                       className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition"
                     >
