@@ -921,7 +921,7 @@ export default function HomeClient() {
                   <div className="whitespace-pre-line text-sm mb-4">
                     {EARLY_ACCESS_SHARE_TEXT}
                     {"\n"}
-                    {EARLY_ACCESS_SHARE_URL}
+                    <span className="break-words">{EARLY_ACCESS_SHARE_URL}</span>
                   </div>
                   <div className="flex flex-col space-y-2">
                     <button
