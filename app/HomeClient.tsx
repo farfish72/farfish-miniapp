@@ -938,7 +938,7 @@ export default function HomeClient() {
                         }
                       }}
                       className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition"
-                      disabled={canVerify}
+                      disabled={false}
                     >
                       {canVerify ? 'Sharing...' : 'Share on Farcaster'}
                     </button>
