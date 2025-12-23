@@ -11,7 +11,8 @@ import Image from "next/image";
 import Header from "./components/Header";
 import useFarcasterGate from "./hooks/useFarcasterGate";
 import useFarcasterEnvironment from "./hooks/useFarcasterEnvironment";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sdk } from "@farcaster/miniapp-sdk";
 import {
   useAccount,
   useConnect,
@@ -92,6 +93,18 @@ function pickWeightedTokenId(candidates: SupplyInfo[]): number {
 
 const TOKEN_IDS = Array.from({ length: 16 }, (_, i) => i); // 0-15
 
+const EARLY_ACCESS_SHARE_TEXT = [
+  "I just unlocked Early Access for FarFISH 🐟",
+  "",
+  "FarFISH is a daily reward ecosystem on Base.",
+  "Earn daily FRH rewards, unlock 5× earnings with NFT staking,",
+  "climb the leaderboard access, referrals and monthly airdrops.",
+  "",
+  "Early access is live 👇",
+].join("\n");
+
+const EARLY_ACCESS_SHARE_URL = "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish";
+
 export default function HomeClient() {
   const { blocked, message } = useFarcasterGate();
   const { address, isConnected } = useAccount();
@@ -111,6 +124,48 @@ export default function HomeClient() {
   const [justMinted, setJustMinted] = useState(false);
   const [earlyUnlocked, setEarlyUnlocked] = useState(false);
   const [showEarlyPanel, setShowEarlyPanel] = useState(false);
+  const [canVerify, setCanVerify] = useState(false);
+  const verifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clear timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (verifyTimeoutRef.current) {
+        clearTimeout(verifyTimeoutRef.current);
+        verifyTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  // Clear timeout when panel is closed
+  const handleClosePanel = useCallback(() => {
+    if (verifyTimeoutRef.current) {
+      clearTimeout(verifyTimeoutRef.current);
+      verifyTimeoutRef.current = null;
+    }
+    setShowEarlyPanel(false);
+    setCanVerify(false);
+  }, []);
+
+  // Clear timeout when verifying
+  const handleVerify = useCallback(() => {
+    if (verifyTimeoutRef.current) {
+      clearTimeout(verifyTimeoutRef.current);
+      verifyTimeoutRef.current = null;
+    }
+    localStorage.setItem("earlyAccessUnlocked", "true");
+    setEarlyUnlocked(true);
+    setShowEarlyPanel(false);
+    setCanVerify(false);
+  }, []);
+
+  // Load early access state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('earlyAccessUnlocked');
+    if (saved === 'true') {
+      setEarlyUnlocked(true);
+    }
+  }, []);
 
   const {
     writeContract: writeMint,
@@ -596,15 +651,6 @@ export default function HomeClient() {
     }
   }, [address, isConnected, hasMinted, supplyInfo, claimInfo, writeMint, handleConnect]);
 
-  const handleShare = useCallback(() => {
-    if (!isConnected || !address) {
-      return;
-    }
-
-    // Redirect to Profile page and auto-scroll to Refer & Earn section
-    window.location.href = "/profile#refer-earn";
-  }, [isConnected, address]);
-
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {
     return supplyInfo.reduce((sum, info) => sum + Number(info.totalSupply), 0);
@@ -830,7 +876,10 @@ export default function HomeClient() {
             <div className="w-full mt-4">
               <button
                 type="button"
-                onClick={earlyUnlocked ? handleMint : () => setShowEarlyPanel(true)}
+                onClick={earlyUnlocked ? handleMint : () => {
+                  setShowEarlyPanel(true);
+                  setCanVerify(false);
+                }}
                 disabled={earlyUnlocked && (isConnecting || isMinting || isMintPending || isMintConfirming || !NFT_CONTRACT_ADDRESS || hasMinted || loadingSupplies || loadingClaimConditions || representativePrice === null)}
                 className={primaryButtonClasses}
               >
@@ -838,51 +887,56 @@ export default function HomeClient() {
               </button>
               
               {showEarlyPanel && !earlyUnlocked && (
-                <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg">
+                <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg relative">
+                  <button 
+                    onClick={handleClosePanel}
+                    className="absolute top-2 right-2 text-white/50 hover:text-white"
+                  >
+                    ×
+                  </button>
                   <div className="whitespace-pre-line text-sm mb-4">
-                    I just unlocked Early Access for FarFISH 🐟
-
-FarFISH is a daily reward ecosystem on Base.
-Earn daily FRH rewards, unlock 5× earnings with NFT staking,
-climb the leaderboard, access referrals, and monthly airdrops.
-
-Early access is live 👇
-https://farcaster.xyz/miniapps/
-DfVmB6jF12Ca/farfish
+                    {EARLY_ACCESS_SHARE_TEXT}
+                    {"\n"}
+                    {EARLY_ACCESS_SHARE_URL}
                   </div>
                   <div className="flex flex-col space-y-2">
                     <button
-                      onClick={() => {
-                        const text = [
-                        "I just unlocked Early Access for FarFISH 🐟",
-                        "",
-                        "FarFISH is a daily reward ecosystem on Base.",
-                        "Earn daily FRH rewards, unlock 5× earnings with NFT staking,",
-                        "climb the leaderboard, access referrals, and monthly airdrops.",
-                        "",
-                        "Early access is live 👇",
-                        "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish"
-                      ].join("\n");
-
-                      window.open(
-                        "https://farcaster.xyz/~/compose?text=" + encodeURIComponent(text),
-                        "_blank"
-                      );
+                      onClick={async () => {
+                        try {
+                          // Clear any existing timeout
+                          if (verifyTimeoutRef.current) {
+                            clearTimeout(verifyTimeoutRef.current);
+                            verifyTimeoutRef.current = null;
+                          }
+                          
+                          setCanVerify(false);
+                          await sdk.actions.composeCast({
+                            text: EARLY_ACCESS_SHARE_TEXT,
+                            embeds: [EARLY_ACCESS_SHARE_URL],
+                            close: false,
+                          });
+                          
+                          // Set new timeout
+                          verifyTimeoutRef.current = setTimeout(() => {
+                            setCanVerify(true);
+                          }, 20000);
+                        } catch (err) {
+                          console.error("Failed to open Farcaster composer", err);
+                        }
                       }}
                       className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition"
+                      disabled={canVerify}
                     >
-                      Share on Farcaster
+                      {canVerify ? 'Sharing...' : 'Share on Farcaster'}
                     </button>
-                    <button
-                      onClick={() => {
-                        localStorage.setItem("earlyAccessUnlocked", "true");
-                        setEarlyUnlocked(true);
-                        setShowEarlyPanel(false);
-                      }}
-                      className="w-full py-2 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-semibold rounded-lg"
-                    >
-                      Verify
-                    </button>
+                    {canVerify && (
+                      <button
+                        onClick={handleVerify}
+                        className="w-full py-2 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-semibold rounded-lg"
+                      >
+                        Verify
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -911,11 +965,14 @@ DfVmB6jF12Ca/farfish
           <div className="space-y-2 mt-4">
             <button
               type="button"
-              onClick={handleShare}
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href);
+                setToast({ type: "success", message: "Link copied to clipboard!" });
+              }}
               disabled={!isConnected || !address}
               className="w-full bg-white/10 text-white py-3 rounded-lg text-sm transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Share
+              Copy Link
             </button>
             {/* PRICE TEXT */}
             <p className="text-xs text-white/70 text-center mt-2">
