@@ -178,6 +178,7 @@ export default function HomeClient() {
     localStorage.removeItem("earlyAccessShareTime");
     setEarlyUnlocked(true);
     setShowEarlyPanel(false);
+    setCanVerify(false);
   }, []);
 
   // Clear timeout when panel is closed
@@ -920,7 +921,7 @@ export default function HomeClient() {
                   <div className="whitespace-pre-line text-sm mb-4">
                     {EARLY_ACCESS_SHARE_TEXT}
                     {"\n"}
-                    <span className="break-words">{EARLY_ACCESS_SHARE_URL}</span>
+                    {EARLY_ACCESS_SHARE_URL}
                   </div>
                   <div className="flex flex-col space-y-2">
                     <button
@@ -938,7 +939,7 @@ export default function HomeClient() {
                         }
                       }}
                       className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition"
-                      disabled={false}
+                      disabled={canVerify}
                     >
                       {canVerify ? 'Sharing...' : 'Share on Farcaster'}
                     </button>
