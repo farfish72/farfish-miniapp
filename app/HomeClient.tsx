@@ -980,13 +980,13 @@ export default function HomeClient() {
             <button
               type="button"
               onClick={() => {
-                navigator.clipboard.writeText(window.location.href);
-                setToast({ type: "success", message: "Link copied to clipboard!" });
+                navigator.clipboard.writeText("https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish");
+                setToast({ type: "success", message: "Farcaster link copied!" });
               }}
               disabled={!isConnected || !address}
               className="w-full bg-white/10 text-white py-3 rounded-lg text-sm transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Copy Link
+              Share
             </button>
             {/* PRICE TEXT */}
             <p className="text-xs text-white/70 text-center mt-2">
