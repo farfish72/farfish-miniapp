@@ -178,7 +178,6 @@ export default function HomeClient() {
     localStorage.removeItem("earlyAccessShareTime");
     setEarlyUnlocked(true);
     setShowEarlyPanel(false);
-    setCanVerify(false);
   }, []);
 
   // Clear timeout when panel is closed
