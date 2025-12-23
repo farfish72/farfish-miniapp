@@ -132,9 +132,53 @@ export default function HomeClient() {
     return () => {
       if (verifyTimeoutRef.current) {
         clearTimeout(verifyTimeoutRef.current);
-        verifyTimeoutRef.current = null;
       }
     };
+  }, []);
+
+  // Handle verify timing when panel is shown
+  useEffect(() => {
+    if (!showEarlyPanel || earlyUnlocked) return;
+
+    const checkVerify = () => {
+      const t = localStorage.getItem("earlyAccessShareTime");
+      if (!t) return false;
+      return Date.now() - Number(t) >= 20000;
+    };
+
+    if (checkVerify()) {
+      setCanVerify(true);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (checkVerify()) {
+        setCanVerify(true);
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [showEarlyPanel, earlyUnlocked]);
+
+  // Reset canVerify when panel is shown
+  useEffect(() => {
+    if (showEarlyPanel) {
+      setCanVerify(false);
+    }
+  }, [showEarlyPanel]);
+
+  // Clear timeout when verifying
+  const handleVerify = useCallback(() => {
+    if (verifyTimeoutRef.current) {
+      clearTimeout(verifyTimeoutRef.current);
+      verifyTimeoutRef.current = null;
+    }
+    localStorage.setItem("earlyAccessUnlocked", "true");
+    localStorage.removeItem("earlyAccessShareTime");
+    setEarlyUnlocked(true);
+    setShowEarlyPanel(false);
+    setCanVerify(false);
   }, []);
 
   // Clear timeout when panel is closed
@@ -145,26 +189,6 @@ export default function HomeClient() {
     }
     setShowEarlyPanel(false);
     setCanVerify(false);
-  }, []);
-
-  // Clear timeout when verifying
-  const handleVerify = useCallback(() => {
-    if (verifyTimeoutRef.current) {
-      clearTimeout(verifyTimeoutRef.current);
-      verifyTimeoutRef.current = null;
-    }
-    localStorage.setItem("earlyAccessUnlocked", "true");
-    setEarlyUnlocked(true);
-    setShowEarlyPanel(false);
-    setCanVerify(false);
-  }, []);
-
-  // Load early access state from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('earlyAccessUnlocked');
-    if (saved === 'true') {
-      setEarlyUnlocked(true);
-    }
   }, []);
 
   const {
@@ -903,23 +927,13 @@ export default function HomeClient() {
                     <button
                       onClick={async () => {
                         try {
-                          // Clear any existing timeout
-                          if (verifyTimeoutRef.current) {
-                            clearTimeout(verifyTimeoutRef.current);
-                            verifyTimeoutRef.current = null;
-                          }
+                          localStorage.setItem("earlyAccessShareTime", Date.now().toString());
                           
-                          setCanVerify(false);
                           await sdk.actions.composeCast({
                             text: EARLY_ACCESS_SHARE_TEXT,
                             embeds: [EARLY_ACCESS_SHARE_URL],
                             close: false,
                           });
-                          
-                          // Set new timeout
-                          verifyTimeoutRef.current = setTimeout(() => {
-                            setCanVerify(true);
-                          }, 20000);
                         } catch (err) {
                           console.error("Failed to open Farcaster composer", err);
                         }
