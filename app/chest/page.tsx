@@ -9,6 +9,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { base } from "viem/chains";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 import Header from "../components/Header";
 import ChestCard from "../components/ChestCard";
@@ -40,7 +41,6 @@ const ROTATING_CHEST_TEXTS = [
   "Another Bronze Chest day 🟤\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
 ];
 
-/* ---------------- page ---------------- */
 export default function ChestPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -84,15 +84,13 @@ export default function ChestPage() {
     setShowSharePopup(true);
   };
 
-  const handleBronzeShare = () => {
+  const handleBronzeShare = async () => {
     const text =
       ROTATING_CHEST_TEXTS[
         Math.floor(Math.random() * ROTATING_CHEST_TEXTS.length)
       ];
 
-    // existing Farcaster miniapp sdk
-    // @ts-ignore
-    window?.sdk?.actions?.composeCast({ text });
+    await sdk.actions.composeCast({ text });
 
     setShowSharePopup(false);
     setBronzeStep("claim");
@@ -111,7 +109,7 @@ export default function ChestPage() {
     });
   }, [daily, address, claimDaily]);
 
-  /* ================= SILVER (UNCHANGED) ================= */
+  /* ================= SILVER ================= */
   const { data: silverData } = useReadContract({
     address: CLAIM_CONTROLLER_ADDRESS,
     abi: claimControllerAbi,
