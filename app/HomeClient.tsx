@@ -810,9 +810,9 @@ export default function HomeClient() {
 
         <ul className="space-y-2 text-sm text-white/80">
           <li>• 3 FRH / day</li>
-          <li>• No multiplier</li>
-          <li>• No staking</li>
-          <li>• Default access</li>
+          <li>• No-Boost</li>
+          <li>• No-Stake</li>
+          <li>• Default</li>
         </ul>
       </div>
 
@@ -825,10 +825,10 @@ export default function HomeClient() {
 
           <ul className="space-y-2 text-sm">
             <li>• 9 FRH / day</li>
-            <li>• Rewards multiplier</li>
-            <li>• Staking enabled</li>
-            <li>• Monthly airdrop</li>
-            <li>• Priority access</li>
+            <li>• Boosted</li>
+            <li>• Staking</li>
+            <li>• Airdrops</li>
+            <li>• Priority</li>
           </ul>
         </div>
 
