@@ -13,14 +13,10 @@ import useFarcasterGate from "./hooks/useFarcasterGate";
 import useFarcasterEnvironment from "./hooks/useFarcasterEnvironment";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
-import {
-  useAccount,
-  useConnect,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useConnect } from "wagmi";
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "./lib/wagmi";
+import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { base } from "viem/chains";
@@ -893,8 +889,16 @@ export default function HomeClient() {
 
           {/* PRIMARY ACTION BUTTON */}
           {blocked ? (
-            <div className="w-full mt-4 rounded-lg border border-white/10 bg-white/5 p-3 text-center text-xs font-semibold text-red-400">
-              {message}
+            <div className="w-full space-y-3">
+              <div className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-center text-xs font-semibold text-red-400">
+                {message}
+              </div>
+              <button
+                onClick={() => connect({ connector: farcasterMiniApp() })}
+                className="w-full rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-purple-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                Connect Wallet
+              </button>
             </div>
           ) : (
             <div className="w-full mt-4">
@@ -981,7 +985,7 @@ export default function HomeClient() {
               type="button"
               onClick={() => {
                 navigator.clipboard.writeText("https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish");
-                setToast({ type: "success", message: "Farcaster link copied!" });
+                setToast({ type: "success", message: "Farcaster link copied" });
               }}
               disabled={!isConnected || !address}
               className="w-full bg-white/10 text-white py-3 rounded-lg text-sm transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"

@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { detectFarcasterEnvironment } from "../utils/farcaster";
+import { useAccount } from "wagmi";
 
 export default function useFarcasterGate() {
-  const [blocked, setBlocked] = useState(false);
+  const { isConnected } = useAccount();
+  const [blocked, setBlocked] = useState(true);
 
   useEffect(() => {
-    setBlocked(!detectFarcasterEnvironment());
-  }, []);
+    setBlocked(!isConnected);
+  }, [isConnected]);
 
-  const message =
-    "ACCESS DENIED. Please open FarFISH through a Farcaster client (Warpcast/Supercast) to connect your wallet.";
+  const message = "Please connect your wallet to continue.";
 
   return { blocked, message };
 }

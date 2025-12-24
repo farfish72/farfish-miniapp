@@ -26,6 +26,20 @@ const formatTime = (seconds: bigint | number): string => {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 };
 
+/* ---------------- ROTATING TEXTS ---------------- */
+const ROTATING_CHEST_TEXTS = [
+  "Daily Bronze Chest unlocked 🟤🐟\n\nClaim 3 FRH every day on FarFISH.\nFree, simple, on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Another day, another Bronze Chest 🟤\n\nFarFISH rewards consistency.\nFree FRH daily on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Daily check-in complete ✅\n\nBronze Chest claimed on FarFISH.\nFree FRH for real users.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Small daily rewards > big promises.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH, every day.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Consistency pays 🟤\n\nClaim your daily Bronze Chest on FarFISH.\nFree FRH on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Daily Bronze Chest claimed 🐟\n\nFarFISH keeps rewarding active users.\nFree FRH, no tricks.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Free daily rewards, done right.\n\nBronze Chest unlocked on FarFISH 🟤\nBuilt on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Daily habit unlocked 🔁\n\nBronze Chest claimed on FarFISH.\n3 FRH every day.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "No hype. Just daily rewards.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Another Bronze Chest day 🟤\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+];
+
 /* ---------------- page ---------------- */
 export default function ChestPage() {
   const { address, isConnected } = useAccount();
@@ -34,14 +48,10 @@ export default function ChestPage() {
 
   useFarcasterEnvironment("Chest");
 
-  const [toast, setToast] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
+  const [bronzeStep, setBronzeStep] =
+    useState<"idle" | "share" | "claim">("idle");
 
-  /* =========================================================
-     DAILY BRONZE — CLAIM CONTROLLER
-     ========================================================= */
+  /* ================= DAILY BRONZE ================= */
   const { data: dailyData } = useReadContract({
     address: CLAIM_CONTROLLER_ADDRESS,
     abi: claimControllerAbi,
@@ -68,8 +78,25 @@ export default function ChestPage() {
     hash: dailyTx,
   });
 
-  const handleDailyClaim = useCallback(() => {
-    if (!daily?.canClaim || dailyPending || dailyConfirming || !address) return;
+  const handleBronzeOpen = () => {
+    setBronzeStep("share");
+  };
+
+  const handleBronzeShare = () => {
+    const text =
+      ROTATING_CHEST_TEXTS[
+        Math.floor(Math.random() * ROTATING_CHEST_TEXTS.length)
+      ];
+
+    // existing miniapp sdk (already present)
+    // @ts-ignore
+    window?.sdk?.actions?.composeCast({ text });
+
+    setBronzeStep("claim");
+  };
+
+  const handleBronzeClaim = useCallback(() => {
+    if (!daily?.canClaim || !address) return;
 
     claimDaily({
       address: CLAIM_CONTROLLER_ADDRESS,
@@ -79,11 +106,9 @@ export default function ChestPage() {
       account: address,
       chain: base,
     });
-  }, [daily, dailyPending, dailyConfirming, claimDaily, address]);
+  }, [daily, address, claimDaily]);
 
-  /* =========================================================
-     SILVER CHEST — SAME CLAIM CONTROLLER (ABI ONLY)
-     ========================================================= */
+  /* ================= SILVER (UNCHANGED) ================= */
   const { data: silverData } = useReadContract({
     address: CLAIM_CONTROLLER_ADDRESS,
     abi: claimControllerAbi,
@@ -112,8 +137,7 @@ export default function ChestPage() {
   });
 
   const handleSilverClaim = useCallback(() => {
-    if (!silver?.canClaim || silverPending || silverConfirming || !address)
-      return;
+    if (!silver?.canClaim || !address) return;
 
     claimSilver({
       address: CLAIM_CONTROLLER_ADDRESS,
@@ -123,17 +147,9 @@ export default function ChestPage() {
       account: address,
       chain: base,
     });
-  }, [silver, silverPending, silverConfirming, claimSilver, address]);
+  }, [silver, address, claimSilver]);
 
-  /* =========================================================
-     TOASTS
-     ========================================================= */
-  useEffect(() => {
-    if (dailyTx) setToast({ type: "success", message: "3 FRH claimed" });
-    if (silverTx) setToast({ type: "success", message: "6 FRH claimed" });
-  }, [dailyTx, silverTx]);
-
-  /* ========================================================= */
+  /* ================= UI ================= */
   return (
     <div className="flex flex-col flex-1">
       <Header title="Chest" />
@@ -146,10 +162,19 @@ export default function ChestPage() {
           variant="bronze"
           badge={daily?.canClaim ? "Ready" : "Cooling"}
           progress={daily?.canClaim ? 100 : 0}
+          disclaimer={
+            bronzeStep === "share"
+              ? "To unlock today’s free Bronze Chest, please share the post below on Farcaster."
+              : undefined
+          }
           actionLabel={
-            daily?.canClaim
+            !daily?.canClaim
+              ? `Next claim in: ${formatTime(daily?.timeLeft ?? 0n)}`
+              : bronzeStep === "idle"
               ? "Open now (3 FRH)"
-              : `Next claim in: ${formatTime(daily?.timeLeft ?? 0n)}`
+              : bronzeStep === "share"
+              ? "Share on Farcaster"
+              : "Claim 3 FRH"
           }
           actionDisabled={
             !isConnected ||
@@ -158,7 +183,13 @@ export default function ChestPage() {
             dailyPending ||
             dailyConfirming
           }
-          onAction={handleDailyClaim}
+          onAction={
+            bronzeStep === "idle"
+              ? handleBronzeOpen
+              : bronzeStep === "share"
+              ? handleBronzeShare
+              : handleBronzeClaim
+          }
         />
 
         {/* SILVER CHEST */}
@@ -189,21 +220,14 @@ export default function ChestPage() {
           onAction={handleSilverClaim}
         />
 
-        {/* ACTIVITY (READ ONLY) */}
+        {/* ACTIVITY */}
         <ChestCard
           title="Activity Rewards (Airdrop and referral)"
           description="Monthly rewards based on activity."
           badge="Coming Soon"
           actionLabel="Not available"
           actionDisabled
-          onAction={() => {}}
         />
-
-        {toast && (
-          <div className="fixed bottom-4 left-4 right-4 z-50 rounded-lg border p-3 text-xs font-semibold bg-emerald-500/10 border-emerald-500/20 text-emerald-200">
-            {toast.message}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -3,8 +3,9 @@
 
 import Image from "next/image";
 import { useMemo, useState, useEffect, useCallback, useRef, Suspense } from "react";
-import { useAccount, useChainId } from "wagmi";
+import { useAccount, useChainId, useConnect } from "wagmi";
 import { useSearchParams, useRouter } from "next/navigation";
+import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 import { base } from "viem/chains";
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "../lib/wagmi";
@@ -87,6 +88,7 @@ const TOKEN_IDS = Array.from({ length: 16 }, (_, i) => i); // 0-15
 function ProfilePageContent() {
   const { user } = useUser();
   const { address, isConnected } = useAccount();
+  const { connect } = useConnect();
   const chainId = useChainId();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -450,10 +452,18 @@ function ProfilePageContent() {
         )}
 
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
-          <div className="flex justify-end">
+          <div className="space-y-3">
             {blocked ? (
-              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-red-400">
-                {message}
+              <div className="space-y-3">
+                <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-red-400">
+                  {message}
+                </div>
+                <button
+                  onClick={() => connect({ connector: farcasterMiniApp() })}
+                  className="w-full rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-purple-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                >
+                  Connect Wallet
+                </button>
               </div>
             ) : (
               <WalletConnect />

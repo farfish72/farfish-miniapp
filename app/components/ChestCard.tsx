@@ -3,13 +3,14 @@ type Props = {
   title: string;
   description?: string;
   badge?: string;
-  progress?: number; // 0 - 100
+  progress?: number;
   variant?: "bronze" | "silver" | "default";
   actionLabel?: string;
   actionDisabled?: boolean;
   onAction?: () => void;
   infoLabel?: string;
   onInfo?: () => void;
+  disclaimer?: string;
 };
 
 export default function ChestCard({
@@ -23,8 +24,8 @@ export default function ChestCard({
   onAction,
   infoLabel,
   onInfo,
+  disclaimer,
 }: Props) {
-  // small color accents per variant (only subtle)
   const accent =
     variant === "bronze"
       ? "bg-emerald-400/80"
@@ -55,7 +56,6 @@ export default function ChestCard({
         )}
       </div>
 
-      {/* progress bar */}
       {typeof progress === "number" && (
         <div className="mt-4">
           <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
@@ -68,7 +68,12 @@ export default function ChestCard({
         </div>
       )}
 
-      {/* actions */}
+      {disclaimer && (
+        <div className="mt-4 text-xs text-white/70 text-center">
+          {disclaimer}
+        </div>
+      )}
+
       <div className="mt-4 space-y-3">
         <button
           type="button"
@@ -86,13 +91,15 @@ export default function ChestCard({
           {effectiveActionLabel}
         </button>
 
-        <button
-          type="button"
-          className="w-full rounded-lg border border-white/10 bg-transparent py-3 text-sm text-white/70 hover:bg-white/5 transition"
-          onClick={onInfo}
-        >
-          {infoLabel ?? "Info"}
-        </button>
+        {onInfo && (
+          <button
+            type="button"
+            className="w-full rounded-lg border border-white/10 bg-transparent py-3 text-sm text-white/70 hover:bg-white/5 transition"
+            onClick={onInfo}
+          >
+            {infoLabel ?? "Info"}
+          </button>
+        )}
       </div>
     </article>
   );
