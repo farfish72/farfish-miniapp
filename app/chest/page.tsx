@@ -29,18 +29,22 @@ const formatTime = (seconds: bigint | number): string => {
 
 /* ---------------- ROTATING TEXTS ---------------- */
 const ROTATING_CHEST_TEXTS = [
-  "Daily Bronze Chest unlocked 🟤🐟\n\nClaim 3 FRH every day on FarFISH.\nFree, simple, on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Another day, another Bronze Chest 🟤\n\nFarFISH rewards consistency.\nFree FRH daily on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Daily check-in complete ✅\n\nBronze Chest claimed on FarFISH.\nFree FRH for real users.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Small daily rewards > big promises.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH, every day.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Consistency pays 🟤\n\nClaim your daily Bronze Chest on FarFISH.\nFree FRH on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Daily Bronze Chest claimed 🐟\n\nFarFISH keeps rewarding active users.\nFree FRH, no tricks.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Free daily rewards, done right.\n\nBronze Chest unlocked on FarFISH 🟤\nBuilt on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Daily habit unlocked 🔁\n\nBronze Chest claimed on FarFISH.\n3 FRH every day.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "No hype. Just daily rewards.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH on Base.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
-  "Another Bronze Chest day 🟤\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.\n\nhttps://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish",
+  "Daily Bronze Chest unlocked 🟤🐟\n\nClaim 3 FRH every day on FarFISH.\nFree, simple, on Base.",
+  "Another day, another Bronze Chest 🟤\n\nFarFISH rewards consistency.\nFree FRH daily on Base.",
+  "Daily check-in complete ✅\n\nBronze Chest claimed on FarFISH.\nFree FRH for real users.",
+  "Small daily rewards > big promises.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH, every day.",
+  "Consistency pays 🟤\n\nClaim your daily Bronze Chest on FarFISH.\nFree FRH on Base.",
+  "Daily Bronze Chest claimed 🐟\n\nFarFISH keeps rewarding active users.\nFree FRH, no tricks.",
+  "Free daily rewards, done right.\n\nBronze Chest unlocked on FarFISH 🟤\nBuilt on Base.",
+  "Daily habit unlocked 🔁\n\nBronze Chest claimed on FarFISH.\n3 FRH every day.",
+  "No hype. Just daily rewards.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH on Base.",
+  "Another Bronze Chest day 🟤\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.",
 ];
 
+const FARFISH_MINIAPP_URL =
+  "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish";
+
+/* ---------------- page ---------------- */
 export default function ChestPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -90,7 +94,15 @@ export default function ChestPage() {
         Math.floor(Math.random() * ROTATING_CHEST_TEXTS.length)
       ];
 
-    await sdk.actions.composeCast({ text });
+    try {
+      await sdk.actions.composeCast({
+        text,
+        embeds: [FARFISH_MINIAPP_URL],
+        close: false,
+      });
+    } catch (err) {
+      console.error("Farcaster compose failed:", err);
+    }
 
     setShowSharePopup(false);
     setBronzeStep("claim");
@@ -166,9 +178,7 @@ export default function ChestPage() {
               ? `Next claim in: ${formatTime(daily?.timeLeft ?? 0n)}`
               : bronzeStep === "idle"
               ? "Open now (3 FRH)"
-              : bronzeStep === "claim"
-              ? "Claim 3 FRH"
-              : "Open now (3 FRH)"
+              : "Claim 3 FRH"
           }
           actionDisabled={
             !isConnected ||
