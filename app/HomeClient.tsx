@@ -812,7 +812,7 @@ export default function HomeClient() {
           <li>• 3 FRH / day</li>
           <li>• No multiplier</li>
           <li>• No staking</li>
-          <li>• Standard access</li>
+          <li>• Default access</li>
         </ul>
       </div>
 
