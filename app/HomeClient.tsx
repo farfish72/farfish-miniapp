@@ -809,9 +809,9 @@ export default function HomeClient() {
         <h3 className="text-lg font-bold mb-3">Basic</h3>
 
         <ul className="space-y-2 text-sm text-white/80">
-          <li>• Earn 3 FRH per day</li>
+          <li>• Earn 3 FRH / day</li>
           <li>• No multiplier</li>
-          <li>• No staking rewards</li>
+          <li>• No staking</li>
           <li>• Standard access</li>
         </ul>
       </div>
@@ -824,11 +824,11 @@ export default function HomeClient() {
           <h3 className="text-lg font-bold mb-3">Premium</h3>
 
           <ul className="space-y-2 text-sm">
-            <li>• Earn 9 FRH per day</li>
-            <li>• Rewards multiplier unlocked</li>
-            <li>• Staking rewards enabled</li>
-            <li>• Monthly airdrop access</li>
-            <li>• Priority ecosystem access</li>
+            <li>• Earn 9 FRH / day</li>
+            <li>• Rewards multiplier</li>
+            <li>• Staking enabled</li>
+            <li>• Monthly airdrop</li>
+            <li>• Priority access</li>
           </ul>
         </div>
 
