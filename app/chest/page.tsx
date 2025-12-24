@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   useAccount,
   useChainId,
@@ -50,6 +50,7 @@ export default function ChestPage() {
 
   const [bronzeStep, setBronzeStep] =
     useState<"idle" | "share" | "claim">("idle");
+  const [showSharePopup, setShowSharePopup] = useState(false);
 
   /* ================= DAILY BRONZE ================= */
   const { data: dailyData } = useReadContract({
@@ -80,6 +81,7 @@ export default function ChestPage() {
 
   const handleBronzeOpen = () => {
     setBronzeStep("share");
+    setShowSharePopup(true);
   };
 
   const handleBronzeShare = () => {
@@ -88,10 +90,11 @@ export default function ChestPage() {
         Math.floor(Math.random() * ROTATING_CHEST_TEXTS.length)
       ];
 
-    // existing miniapp sdk (already present)
+    // existing Farcaster miniapp sdk
     // @ts-ignore
     window?.sdk?.actions?.composeCast({ text });
 
+    setShowSharePopup(false);
     setBronzeStep("claim");
   };
 
@@ -128,12 +131,11 @@ export default function ChestPage() {
 
   const {
     writeContract: claimSilver,
-    data: silverTx,
     isPending: silverPending,
   } = useWriteContract();
 
   const { isLoading: silverConfirming } = useWaitForTransactionReceipt({
-    hash: silverTx,
+    hash: undefined,
   });
 
   const handleSilverClaim = useCallback(() => {
@@ -155,26 +157,20 @@ export default function ChestPage() {
       <Header title="Chest" />
 
       <div className="mt-4 space-y-4 flex-1">
-        {/* DAILY BRONZE */}
         <ChestCard
           title="Daily Bronze Chest"
           description="Claim 3 FRH every 24 hours."
           variant="bronze"
           badge={daily?.canClaim ? "Ready" : "Cooling"}
           progress={daily?.canClaim ? 100 : 0}
-          disclaimer={
-            bronzeStep === "share"
-              ? "To unlock today’s free Bronze Chest, please share the post below on Farcaster."
-              : undefined
-          }
           actionLabel={
             !daily?.canClaim
               ? `Next claim in: ${formatTime(daily?.timeLeft ?? 0n)}`
               : bronzeStep === "idle"
               ? "Open now (3 FRH)"
-              : bronzeStep === "share"
-              ? "Share on Farcaster"
-              : "Claim 3 FRH"
+              : bronzeStep === "claim"
+              ? "Claim 3 FRH"
+              : "Open now (3 FRH)"
           }
           actionDisabled={
             !isConnected ||
@@ -186,13 +182,10 @@ export default function ChestPage() {
           onAction={
             bronzeStep === "idle"
               ? handleBronzeOpen
-              : bronzeStep === "share"
-              ? handleBronzeShare
               : handleBronzeClaim
           }
         />
 
-        {/* SILVER CHEST */}
         <ChestCard
           title="Silver Chest"
           description="Stake at least 1 NFT to claim 6 FRH daily."
@@ -220,7 +213,6 @@ export default function ChestPage() {
           onAction={handleSilverClaim}
         />
 
-        {/* ACTIVITY */}
         <ChestCard
           title="Activity Rewards (Airdrop and referral)"
           description="Monthly rewards based on activity."
@@ -229,6 +221,30 @@ export default function ChestPage() {
           actionDisabled
         />
       </div>
+
+      {showSharePopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-[90%] max-w-sm rounded-xl bg-[#0b0b0b] border border-white/10 p-4">
+            <p className="text-xs text-white/70 text-center mb-4">
+              To unlock today’s free Bronze Chest, please share the post below on Farcaster.
+            </p>
+
+            <button
+              className="w-full rounded-lg bg-emerald-400 py-3 font-semibold text-black"
+              onClick={handleBronzeShare}
+            >
+              Share on Farcaster
+            </button>
+
+            <button
+              className="mt-3 w-full text-xs text-white/50"
+              onClick={() => setShowSharePopup(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
