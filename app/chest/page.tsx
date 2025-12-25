@@ -230,64 +230,33 @@ export default function ChestPage() {
     });
   }, [silver, address, claimSilver]);
 
-  // Update Trust Anchor data when address changes
+  // Update Trust Anchor data when address changes or claims are made
   useEffect(() => {
-    if (!address) {
-      setTrustAnchorData({
-        streak: null,
-        claimedToday: 0,
-        totalRewards: null,
-        referrals: null,
-        followingFarfish: null,
-        recasts: null,
-      });
-      return;
-    }
+  if (!address) return;
 
-    // Load user-specific data from localStorage
-    const storedStreak = localStorage.getItem(`ff_${address}_streak`);
-    const storedTotalRewards = localStorage.getItem(`ff_${address}_total_rewards`);
-    const storedClaimedToday = localStorage.getItem(`ff_${address}_claimed_today`);
+  const streak = localStorage.getItem('ff_streak');
+  const totalRewards = localStorage.getItem('ff_total_rewards');
 
-    // Fetch KV data
-    const fetchKVData = async () => {
-      try {
-        const response = await fetch(
-          `${process.env.UPSTASH_REDIS_REST_URL}/get/trust_anchor:${address.toLowerCase()}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
+  const bronzeClaimed =
+    localStorage.getItem('ff_bronze_claimed_today') === 'true';
+  const silverClaimed =
+    localStorage.getItem('ff_silver_claimed_today') === 'true';
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.result) {
-            const kvData = JSON.parse(data.result);
-            setTrustAnchorData(prev => ({
-              ...prev,
-              referrals: kvData.referrals_count || null,
-              followingFarfish: kvData.following_farfish ?? null,
-              recasts: kvData.recasts_count || null,
-            }));
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching KV data:', error);
-      }
-    };
+  let claimedToday = 0;
+  if (bronzeClaimed) claimedToday += 3;
+  if (silverClaimed) claimedToday += 6;
 
-    setTrustAnchorData(prev => ({
-      ...prev,
-      streak: storedStreak ? parseInt(storedStreak, 10) : null,
-      totalRewards: storedTotalRewards ? parseFloat(storedTotalRewards) : null,
-      claimedToday: storedClaimedToday ? parseInt(storedClaimedToday, 10) : 0,
-    }));
-
-    fetchKVData();
-  }, [address]);
+  setTrustAnchorData(prev => ({
+    ...prev,
+    streak: streak ? parseInt(streak, 10) : null,
+    totalRewards: totalRewards ? parseFloat(totalRewards) : null,
+    claimedToday,
+    // KV data আগেরটাই থাকবে
+    referrals: prev.referrals,
+    followingFarfish: prev.followingFarfish,
+    recasts: prev.recasts,
+  }));
+}, [address, dailyData, silverData]);
 
   /* ================= UI ================= */
   return (
