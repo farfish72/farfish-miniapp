@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useAccount,
   useChainId,
@@ -13,6 +13,7 @@ import { sdk } from "@farcaster/miniapp-sdk";
 
 import Header from "../components/Header";
 import ChestCard from "../components/ChestCard";
+import TrustAnchor from "../components/TrustAnchor";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 
 import claimControllerAbi from "../abi/claimController.json";
@@ -55,6 +56,16 @@ export default function ChestPage() {
   const [bronzeStep, setBronzeStep] =
     useState<"idle" | "share" | "claim">("idle");
   const [showSharePopup, setShowSharePopup] = useState(false);
+  
+  // Trust Anchor state
+  const [trustAnchorData, setTrustAnchorData] = useState({
+    streak: null as number | null,
+    claimedToday: 0,
+    totalRewards: null as number | null,
+    referrals: null as number | null,
+    followingFarfish: null as boolean | null,
+    recasts: null as number | null,
+  });
 
   /* ================= DAILY BRONZE ================= */
   const { data: dailyData } = useReadContract({
@@ -111,6 +122,35 @@ export default function ChestPage() {
   const handleBronzeClaim = useCallback(() => {
     if (!daily?.canClaim || !address) return;
 
+    // Mark bronze as claimed today in localStorage
+    localStorage.setItem('ff_bronze_claimed_today', 'true');
+    
+    // Update total rewards
+    const currentTotal = parseFloat(localStorage.getItem('ff_total_rewards') || '0');
+    localStorage.setItem('ff_total_rewards', (currentTotal + 3).toString());
+    
+    // Update streak and last claim date
+    const lastClaimDate = localStorage.getItem('ff_last_claim_date');
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (lastClaimDate !== today) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      
+      const currentStreak = parseInt(localStorage.getItem('ff_streak') || '0', 10);
+      
+      if (lastClaimDate === yesterdayStr) {
+        // Consecutive day - increment streak
+        localStorage.setItem('ff_streak', (currentStreak + 1).toString());
+      } else if (lastClaimDate !== today) {
+        // Not consecutive - reset streak to 1
+        localStorage.setItem('ff_streak', '1');
+      }
+      
+      localStorage.setItem('ff_last_claim_date', today);
+    }
+
     claimDaily({
       address: CLAIM_CONTROLLER_ADDRESS,
       abi: claimControllerAbi,
@@ -151,6 +191,35 @@ export default function ChestPage() {
   const handleSilverClaim = useCallback(() => {
     if (!silver?.canClaim || !address) return;
 
+    // Mark silver as claimed today in localStorage
+    localStorage.setItem('ff_silver_claimed_today', 'true');
+    
+    // Update total rewards
+    const currentTotal = parseFloat(localStorage.getItem('ff_total_rewards') || '0');
+    localStorage.setItem('ff_total_rewards', (currentTotal + 6).toString());
+    
+    // Update streak and last claim date (same logic as bronze)
+    const lastClaimDate = localStorage.getItem('ff_last_claim_date');
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (lastClaimDate !== today) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      
+      const currentStreak = parseInt(localStorage.getItem('ff_streak') || '0', 10);
+      
+      if (lastClaimDate === yesterdayStr) {
+        // Consecutive day - increment streak
+        localStorage.setItem('ff_streak', (currentStreak + 1).toString());
+      } else if (lastClaimDate !== today) {
+        // Not consecutive - reset streak to 1
+        localStorage.setItem('ff_streak', '1');
+      }
+      
+      localStorage.setItem('ff_last_claim_date', today);
+    }
+
     claimSilver({
       address: CLAIM_CONTROLLER_ADDRESS,
       abi: claimControllerAbi,
@@ -161,12 +230,79 @@ export default function ChestPage() {
     });
   }, [silver, address, claimSilver]);
 
+  // Update Trust Anchor data when address changes
+  useEffect(() => {
+    if (!address) {
+      setTrustAnchorData({
+        streak: null,
+        claimedToday: 0,
+        totalRewards: null,
+        referrals: null,
+        followingFarfish: null,
+        recasts: null,
+      });
+      return;
+    }
+
+    // Load user-specific data from localStorage
+    const storedStreak = localStorage.getItem(`ff_${address}_streak`);
+    const storedTotalRewards = localStorage.getItem(`ff_${address}_total_rewards`);
+    const storedClaimedToday = localStorage.getItem(`ff_${address}_claimed_today`);
+
+    // Fetch KV data
+    const fetchKVData = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.UPSTASH_REDIS_REST_URL}/get/trust_anchor:${address.toLowerCase()}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.result) {
+            const kvData = JSON.parse(data.result);
+            setTrustAnchorData(prev => ({
+              ...prev,
+              referrals: kvData.referrals_count || null,
+              followingFarfish: kvData.following_farfish ?? null,
+              recasts: kvData.recasts_count || null,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching KV data:', error);
+      }
+    };
+
+    setTrustAnchorData(prev => ({
+      ...prev,
+      streak: storedStreak ? parseInt(storedStreak, 10) : null,
+      totalRewards: storedTotalRewards ? parseFloat(storedTotalRewards) : null,
+      claimedToday: storedClaimedToday ? parseInt(storedClaimedToday, 10) : 0,
+    }));
+
+    fetchKVData();
+  }, [address]);
+
   /* ================= UI ================= */
   return (
     <div className="flex flex-col flex-1">
       <Header title="Chest" />
 
       <div className="mt-4 space-y-4 flex-1">
+        <TrustAnchor
+          streak={trustAnchorData.streak}
+          claimedToday={trustAnchorData.claimedToday}
+          totalRewards={trustAnchorData.totalRewards}
+          referrals={trustAnchorData.referrals}
+          followingFarfish={trustAnchorData.followingFarfish}
+          recasts={trustAnchorData.recasts}
+        />
         <ChestCard
           title="Daily Bronze Chest"
           description="Claim 3 FRH every 24 hours."
