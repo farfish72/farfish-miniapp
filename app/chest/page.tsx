@@ -61,11 +61,50 @@ export default function ChestPage() {
   const [trustAnchorData, setTrustAnchorData] = useState({
     streak: null as number | null,
     claimedToday: 0,
-    totalRewards: null as number | null,
+    holding: null as number | null,  // Will hold ERC20 balance
+    rank: null as number | null,     // Will hold rank from KV
     referrals: null as number | null,
-    followingFarfish: null as boolean | null,
     recasts: null as number | null,
   });
+
+  // Read ERC20 balance
+  const { data: balanceData } = useReadContract({
+    address: process.env.NEXT_PUBLIC_ERC20_TOKEN_ADDRESS as `0x${string}`,
+    abi: [{
+      "constant": true,
+      "inputs": [{"name": "_owner", "type": "address"}],
+      "name": "balanceOf",
+      "outputs": [{"name": "balance", "type": "uint256"}],
+      "type": "function"
+    }],
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+    query: { enabled: !!address },
+  });
+
+  // Fetch KV data (rank, referrals, recasts)
+  useEffect(() => {
+    const fetchKVData = async () => {
+      if (!address) return;
+      
+      try {
+        const response = await fetch(`/api/trust-anchor?address=${address}`);
+        if (response.ok) {
+          const data = await response.json();
+          setTrustAnchorData(prev => ({
+            ...prev,
+            rank: data.rank || null,
+            referrals: data.referrals || null,
+            recasts: data.recasts || null,
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch KV data:', error);
+      }
+    };
+    
+    fetchKVData();
+  }, [address]);
 
   /* ================= DAILY BRONZE ================= */
   const { data: dailyData } = useReadContract({
@@ -232,31 +271,29 @@ export default function ChestPage() {
 
   // Update Trust Anchor data when address changes or claims are made
   useEffect(() => {
-  if (!address) return;
+    if (!address) return;
 
-  const streak = localStorage.getItem('ff_streak');
-  const totalRewards = localStorage.getItem('ff_total_rewards');
+    // Get streak from localStorage
+    const streak = localStorage.getItem('ff_streak');
+    
+    // Calculate claimed today from on-chain data
+    let claimedToday = 0;
+    if (dailyData && dailyData[0] === false) {  // If can't claim, means already claimed
+      claimedToday += 3;  // Bronze chest value
+    }
+    if (silverData && silverData[0] === false) {  // If can't claim, means already claimed
+      claimedToday += 6;  // Silver chest value
+    }
 
-  const bronzeClaimed =
-    localStorage.getItem('ff_bronze_claimed_today') === 'true';
-  const silverClaimed =
-    localStorage.getItem('ff_silver_claimed_today') === 'true';
-
-  let claimedToday = 0;
-  if (bronzeClaimed) claimedToday += 3;
-  if (silverClaimed) claimedToday += 6;
-
-  setTrustAnchorData(prev => ({
-    ...prev,
-    streak: streak ? parseInt(streak, 10) : null,
-    totalRewards: totalRewards ? parseFloat(totalRewards) : null,
-    claimedToday,
-    // KV data আগেরটাই থাকবে
-    referrals: prev.referrals,
-    followingFarfish: prev.followingFarfish,
-    recasts: prev.recasts,
-  }));
-}, [address, dailyData, silverData]);
+    // Update state
+    setTrustAnchorData(prev => ({
+      ...prev,
+      streak: streak ? parseInt(streak, 10) : null,
+      claimedToday,
+      holding: balanceData ? Number(balanceData) / 1e18 : null,  // Assuming 18 decimals
+      // rank, referrals, recasts are updated by the KV fetch effect
+    }));
+  }, [address, dailyData, silverData, balanceData]);
 
   /* ================= UI ================= */
   return (
@@ -267,9 +304,9 @@ export default function ChestPage() {
         <TrustAnchor
           streak={trustAnchorData.streak}
           claimedToday={trustAnchorData.claimedToday}
-          totalRewards={trustAnchorData.totalRewards}
+          holding={trustAnchorData.holding}
+          rank={trustAnchorData.rank}
           referrals={trustAnchorData.referrals}
-          followingFarfish={trustAnchorData.followingFarfish}
           recasts={trustAnchorData.recasts}
         />
         <ChestCard
