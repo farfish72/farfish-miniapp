@@ -118,12 +118,16 @@ export async function GET(request: Request) {
 
   try {
     const rankData = await getRankForAddress(address);
-    return NextResponse.json(rankData);
+    return NextResponse.json({
+      rank: rankData.rank,
+      status: 'ok'
+    });
   } catch (error) {
     console.error('Error getting rank:', error);
-    return NextResponse.json(
-      { error: 'Failed to calculate rank' },
-      { status: 500 }
-    );
+    // Return 200 with pending status instead of error
+    return NextResponse.json({
+      rank: null,
+      status: 'pending'
+    });
   }
 }

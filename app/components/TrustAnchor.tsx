@@ -1,7 +1,7 @@
 // app/components/TrustAnchor.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 
 interface TrustAnchorProps {
@@ -45,42 +45,58 @@ export default function TrustAnchor({
   // Status is derived from claimedToday
   const status = claimedToday > 0 ? 'Active' : 'Inactive';
 
-  // Fetch rank when address or holding changes
-  useEffect(() => {
+  // Fetch rank function that can be called from multiple places
+  const fetchRank = useCallback(async () => {
     if (!address) {
       setRank(null);
       return;
     }
 
-    const fetchRank = async () => {
-      setIsLoadingRank(true);
-      setRankError(null);
+    setIsLoadingRank(true);
+    setRankError(null);
+    
+    try {
+      const response = await fetch(`/api/rank?address=${address}`);
+      const data = await response.json();
       
-      try {
-        const response = await fetch(`/api/rank?address=${address}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch rank');
-        }
-        const data = await response.json();
-        setRank(data.rank);
-      } catch (err) {
-        console.error('Error fetching rank:', err);
-        setRankError('Failed to load rank');
-      } finally {
-        setIsLoadingRank(false);
+      // Handle both error and success cases with 200 status
+      if (!response.ok || data.status === 'error') {
+        throw new Error(data.error || 'Failed to fetch rank');
       }
-    };
+      
+      // Only set rank if we have a valid number, otherwise keep as null
+      setRank(typeof data.rank === 'number' ? data.rank : null);
+    } catch (err) {
+      console.error('Error fetching rank:', err);
+      // Don't set error state, just keep rank as null
+      setRank(null);
+    } finally {
+      setIsLoadingRank(false);
+    }
+  }, [address]);
 
+  // Initial fetch when component mounts or address changes
+  useEffect(() => {
     // Add a small delay to prevent rapid requests
     const timer = setTimeout(fetchRank, 500);
     return () => clearTimeout(timer);
-  }, [address, holding]);
+  }, [fetchRank]);
+
+  // Retry rank fetch when wallet connects or balance changes
+  useEffect(() => {
+    if (address && holding !== null) {
+      const timer = setTimeout(() => {
+        fetchRank();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [address, holding, fetchRank]);
 
   const getRankDisplay = () => {
-    if (isLoading) return '...';
-    if (rankError) return 'Error';
-    if (rank === null || rank === 0) return 'Unranked';
-    return `#${rank.toLocaleString()}`;
+    if (isLoadingRank) return '👑 Calculating...';
+    if (rank === null) return '👑 Calculating...';
+    if (rank === 0) return '👑 Unranked';
+    return `👑 #${rank.toLocaleString()}`;
   };
 
   return (
@@ -113,8 +129,8 @@ export default function TrustAnchor({
         </div>
         
         <div className="flex justify-between">
-          <span className="text-white/70">👑 Rank</span>
-          <span className={rankError ? 'text-amber-400' : ''}>
+          <span className="text-white/70">Rank</span>
+          <span className="text-amber-300">
             {getRankDisplay()}
           </span>
         </div>
