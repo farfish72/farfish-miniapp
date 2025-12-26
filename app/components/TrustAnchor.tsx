@@ -1,13 +1,11 @@
 // app/components/TrustAnchor.tsx
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useAccount } from 'wagmi';
-
 interface TrustAnchorProps {
   streak: number | null;          // From localStorage (ff_streak)
   claimedToday: number;           // From on-chain (Claim Controller)
-  holding: bigint | null;         // From ERC20 balanceOf (now using bigint)
+  holding: number | null;         // From ERC20 balanceOf
+  rank: number | null;            // From Upstash KV (via Server API)
   referrals: number | null;       // From Upstash KV
   recasts: number | null;         // From Upstash KV
   isLoading?: boolean;            // Loading state
@@ -18,97 +16,24 @@ export default function TrustAnchor({
   streak,
   claimedToday,
   holding,
+  rank,
   referrals,
   recasts,
-  isLoading: propIsLoading = false,
-  error: propError = null,
+  isLoading = false,
+  error = null,
 }: TrustAnchorProps) {
-  const { address } = useAccount();
-  const [rank, setRank] = useState<number | null>(null);
-  const [isLoadingRank, setIsLoadingRank] = useState(false);
-  const [rankError, setRankError] = useState<string | null>(null);
-  const isLoading = propIsLoading || isLoadingRank;
-  const error = propError || rankError;
-
   // Format number with commas
   const formatNumber = (num: number | null): string => {
-    return num !== null ? num.toLocaleString() : '—';
-  };
-
-  // Format FRH balance (dividing by 1e18 for display)
-  const formatFRH = (wei: bigint | null): string => {
-    if (wei === null) return '—';
-    const frh = Number(wei) / 1e18;
-    return frh.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return num !== null ? num.toString() : '—';
   };
 
   // Status is derived from claimedToday
   const status = claimedToday > 0 ? 'Active' : 'Inactive';
 
-  // Fetch rank function that can be called from multiple places
-  const fetchRank = useCallback(async () => {
-    if (!address) {
-      setRank(null);
-      return;
-    }
-
-    setIsLoadingRank(true);
-    setRankError(null);
-    
-    try {
-      const response = await fetch(`/api/rank?address=${address}`);
-      const data = await response.json();
-      
-      // Handle both error and success cases with 200 status
-      if (!response.ok || data.status === 'error') {
-        throw new Error(data.error || 'Failed to fetch rank');
-      }
-      
-      // Only set rank if we have a valid number, otherwise keep as null
-      setRank(typeof data.rank === 'number' ? data.rank : null);
-    } catch (err) {
-      console.error('Error fetching rank:', err);
-      // Don't set error state, just keep rank as null
-      setRank(null);
-    } finally {
-      setIsLoadingRank(false);
-    }
-  }, [address]);
-
-  // Initial fetch when component mounts or address changes
-  useEffect(() => {
-    // Add a small delay to prevent rapid requests
-    const timer = setTimeout(fetchRank, 500);
-    return () => clearTimeout(timer);
-  }, [fetchRank]);
-
-  // Retry rank fetch when wallet connects or balance changes
-  useEffect(() => {
-    if (address && holding !== null) {
-      const timer = setTimeout(() => {
-        fetchRank();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [address, holding, fetchRank]);
-
-  const getRankDisplay = () => {
-    if (isLoadingRank) return ' Calculating...';
-    if (rank === null) return ' Calculating...';
-    if (rank === 0) return ' Unranked';
-    return ` #${rank.toLocaleString()}`;
-  };
-
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-4">
       <h3 className="text-xl font-semibold mb-1">🛡 Trust Anchor</h3>
       <p className="text-sm text-white/70 mb-3">On-chain trust snapshot</p>
-      
-      {error && (
-        <div className="mb-3 p-2 text-sm bg-red-500/20 text-red-200 rounded">
-          {error}
-        </div>
-      )}
       
       <div className="space-y-2 text-sm">
         <div className="h-px bg-white/10 my-2"></div>
@@ -125,14 +50,12 @@ export default function TrustAnchor({
         
         <div className="flex justify-between">
           <span className="text-white/70">💵 Holding</span>
-          <span>{isLoading ? '...' : formatFRH(holding)} FRH</span>
+          <span>{isLoading ? '...' : (holding !== null ? `${holding} FRH` : '—')}</span>
         </div>
         
         <div className="flex justify-between">
           <span className="text-white/70">👑 Rank</span>
-          <span className="text-amber-300">
-            {getRankDisplay()}
-          </span>
+          <span>{isLoading ? '...' : (rank !== null ? `#${rank}` : 'Unranked')}</span>
         </div>
         
         <div className="flex justify-between">

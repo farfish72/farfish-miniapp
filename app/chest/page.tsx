@@ -61,7 +61,8 @@ export default function ChestPage() {
   const [trustAnchorData, setTrustAnchorData] = useState({
     streak: null as number | null,
     claimedToday: 0,
-    holding: null as bigint | null,  // Now using bigint for ERC20 balance
+    holding: null as number | null,  // Will hold ERC20 balance
+    rank: null as number | null,     // Will hold rank from KV
     referrals: null as number | null,
     recasts: null as number | null,
   });
@@ -78,27 +79,10 @@ export default function ChestPage() {
     }],
     functionName: 'balanceOf',
     args: [address as `0x${string}`],
-    query: { 
-      enabled: !!address,
-      refetchInterval: 30000, // Refresh every 30 seconds
-    },
+    query: { enabled: !!address },
   });
 
-  // Update holding balance when it changes
-  useEffect(() => {
-    if (balanceData !== undefined) {
-      setTrustAnchorData(prev => ({
-        ...prev,
-        holding: balanceData !== undefined ? BigInt(balanceData.toString()) : null,
-      }));
-    }
-  }, [balanceData]);
-
-  // Loading and error states
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Fetch referral and recast data from KV (not rank)
+  // Fetch KV data (rank, referrals, recasts)
   useEffect(() => {
     const fetchKVData = async () => {
       if (!address) return;
@@ -109,6 +93,7 @@ export default function ChestPage() {
           const data = await response.json();
           setTrustAnchorData(prev => ({
             ...prev,
+            rank: data.rank || null,
             referrals: data.referrals || null,
             recasts: data.recasts || null,
           }));
@@ -305,9 +290,10 @@ export default function ChestPage() {
       ...prev,
       streak: streak ? parseInt(streak, 10) : null,
       claimedToday,
-      // holding is updated by its own effect
+      holding: balanceData ? Number(balanceData) / 1e18 : null,  // Assuming 18 decimals
+      // rank, referrals, recasts are updated by the KV fetch effect
     }));
-  }, [address, dailyData, silverData]);
+  }, [address, dailyData, silverData, balanceData]);
 
   /* ================= UI ================= */
   return (
@@ -319,10 +305,9 @@ export default function ChestPage() {
           streak={trustAnchorData.streak}
           claimedToday={trustAnchorData.claimedToday}
           holding={trustAnchorData.holding}
+          rank={trustAnchorData.rank}
           referrals={trustAnchorData.referrals}
           recasts={trustAnchorData.recasts}
-          isLoading={isLoading}
-          error={error}
         />
         <ChestCard
           title="Daily Bronze Chest"
