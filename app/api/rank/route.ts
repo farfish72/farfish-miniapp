@@ -2,12 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
-import * as path from 'path';
-import * as fs from 'fs';
-
-// Read ABI from file
-const abiPath = path.join(process.cwd(), 'lib', 'abi', 'erc20-abi.json');
-const ERC20_ABI = JSON.parse(fs.readFileSync(abiPath, 'utf-8'));
+import ERC20_ABI from '../../../lib/abi/erc20-abi.json';
 
 // Initialize Viem client
 const client = createPublicClient({
