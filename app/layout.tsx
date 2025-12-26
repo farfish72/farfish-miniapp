@@ -9,14 +9,11 @@ import FarcasterWalletProvider from "./providers/FarcasterWalletProvider";
 import AutoBindReferral from "./components/AutoBindReferral";
 
 export const metadata: Metadata = {
-  robots: {
-    index: false,   // ✅ THIS IS THE FIX
-    follow: false,
-  },
   other: {
     "base:app_id": "694e9098c63ad876c908143e",
   },
 };
+
 export default function RootLayout({
   children,
 }: {
