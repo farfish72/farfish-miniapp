@@ -2,17 +2,12 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
+import * as path from 'path';
+import * as fs from 'fs';
 
-// Import the ABI directly as a constant
-const ERC20_ABI = [
-  {
-    "inputs": [{"name": "owner", "type": "address"}],
-    "name": "balanceOf",
-    "outputs": [{"name": "", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
+// Read ABI from file
+const abiPath = path.join(process.cwd(), 'lib', 'abi', 'erc20-abi.json');
+const ERC20_ABI = JSON.parse(fs.readFileSync(abiPath, 'utf-8'));
 
 // Initialize Viem client
 const client = createPublicClient({
@@ -64,15 +59,13 @@ async function getRankForAddress(address: string) {
   }
 
   // Get user's balance
- const userBalance = await client.readContract({
-  address: process.env.NEXT_PUBLIC_ERC20_TOKEN_ADDRESS as `0x${string}`,
-  abi: ERC20_ABI,
-  functionName: 'balanceOf',
-  args: [address as `0x${string}`],
-  blockTag: 'latest',
-  account: address as `0x${string}`,
-  authorizationList: [],  // Add empty array for authorizationList
-}) as bigint;
+  const userBalance = await client.readContract({
+    address: process.env.NEXT_PUBLIC_ERC20_TOKEN_ADDRESS as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+    authorizationList: []
+  }) as bigint;
 
   // Create a map of addresses to balances for faster lookups
   const balanceMap = new Map<string, bigint>();

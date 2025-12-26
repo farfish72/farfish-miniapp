@@ -93,10 +93,10 @@ export default function TrustAnchor({
   }, [address, holding, fetchRank]);
 
   const getRankDisplay = () => {
-    if (isLoadingRank) return '👑 Calculating...';
-    if (rank === null) return '👑 Calculating...';
-    if (rank === 0) return '👑 Unranked';
-    return `👑 #${rank.toLocaleString()}`;
+    if (isLoadingRank) return ' Calculating...';
+    if (rank === null) return ' Calculating...';
+    if (rank === 0) return ' Unranked';
+    return ` #${rank.toLocaleString()}`;
   };
 
   return (
@@ -129,7 +129,7 @@ export default function TrustAnchor({
         </div>
         
         <div className="flex justify-between">
-          <span className="text-white/70">Rank</span>
+          <span className="text-white/70">👑 Rank</span>
           <span className="text-amber-300">
             {getRankDisplay()}
           </span>
