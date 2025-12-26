@@ -11,6 +11,7 @@ import AutoBindReferral from "./components/AutoBindReferral";
 export const metadata: Metadata = {
   other: {
     "base:app_id": "694e9098c63ad876c908143e",
+    "noindex": "false", // ✅ THIS IS THE FIX
   },
 };
 
