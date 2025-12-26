@@ -1,41 +1,47 @@
 import { NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 
-// Ensure this route is not statically generated
 export const dynamic = 'force-dynamic';
 
-// Initialize Redis client
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const address = searchParams.get('address');
+    const rawAddress = searchParams.get('address');
 
-    if (!address) {
+    if (!rawAddress) {
       return NextResponse.json(
         { error: 'Address is required' },
         { status: 400 }
       );
     }
 
-    // Fetch data from Upstash KV
-    const [rank, referrals, recasts] = await Promise.all([
-      redis.get(`user:${address}:rank`),
-      redis.get(`user:${address}:referrals`),
-      redis.get(`user:${address}:recasts`),
-    ]);
+    const address = rawAddress.toLowerCase().trim();
+
+    const rankKey = `user:${address}:rank`;
+    const referralsKey = `user:${address}:referrals`;
+    const recastsKey = `user:${address}:recasts`;
+
+    // THIS LINE IS THE REAL FIX
+    const results = (await Promise.all([
+      redis.get(rankKey),
+      redis.get(referralsKey),
+      redis.get(recastsKey),
+    ])) as (string | number | null)[];
+
+    const [rankRaw, referralsRaw, recastsRaw] = results;
 
     return NextResponse.json({
-      rank: rank !== null ? Number(rank) : null,
-      referrals: referrals !== null ? Number(referrals) : null,
-      recasts: recasts !== null ? Number(recasts) : null,
+      rank: rankRaw !== null ? Number(rankRaw) : null,
+      referrals: referralsRaw !== null ? Number(referralsRaw) : null,
+      recasts: recastsRaw !== null ? Number(recastsRaw) : null,
     });
   } catch (error) {
-    console.error('Error fetching trust anchor data:', error);
+    console.error('[trust-anchor]', error);
     return NextResponse.json(
       { error: 'Failed to fetch trust anchor data' },
       { status: 500 }
