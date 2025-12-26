@@ -7,7 +7,7 @@
   "miniapp": {
     "version": "1",
     "name": "FarFISH",
-    "noIndex": true,
+    "noindex": true,
     "iconUrl": "https://farfish-miniapp5.vercel.app/icon.png",
     "homeUrl": "https://farfish-miniapp5.vercel.app",
     "imageUrl": "https://farfish-miniapp5.vercel.app/og-image.png",
