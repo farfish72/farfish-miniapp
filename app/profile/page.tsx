@@ -484,50 +484,50 @@ function ProfilePageContent() {
             )}
           </div>
           <div className="flex items-start gap-4">
-            {/* Profile Photo */}
-            <div className="relative group">
-              <div className="relative h-20 w-20 rounded-2xl overflow-hidden border-2 border-white/20">
+            {/* Profile Photo with top-right edit icon */}
+            <div className="relative">
+              <div className="relative h-24 w-24 rounded-2xl overflow-hidden border-2 border-white/20">
                 <Image
                   src={localStorage.getItem('profileImage') || user?.pfpUrl || "/farfish-logo.png"}
                   alt="Profile"
-                  width={80}
-                  height={80}
+                  width={96}
+                  height={96}
                   className="object-cover w-full h-full"
                   unoptimized
                 />
+                <label className="absolute top-1 right-1 bg-blue-500 rounded-full p-1.5 cursor-pointer border-2 border-white/90 shadow-lg hover:bg-blue-600 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const result = event.target?.result as string;
+                          localStorage.setItem('profileImage', result);
+                          setReferralState(prev => ({ ...prev }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </label>
               </div>
-              <label className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-1.5 cursor-pointer border-2 border-white/90 shadow-lg hover:bg-blue-600 transition-colors">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const result = event.target?.result as string;
-                        localStorage.setItem('profileImage', result);
-                        setReferralState(prev => ({ ...prev }));
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                />
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                </svg>
-              </label>
             </div>
 
-            {/* Username and Wallet */}
+            {/* Username and Connected Wallet Label */}
             <div className="flex-1">
               <div className="flex items-center gap-2 group relative">
                 <input
                   type="text"
-                  className="text-xl font-bold bg-transparent border-b-2 border-transparent focus:border-blue-400 focus:outline-none w-full pr-8"
+                  className="text-2xl font-bold bg-transparent border-b-2 border-transparent focus:border-blue-400 focus:outline-none w-full pr-8"
                   defaultValue={localStorage.getItem('username') || ''}
-                  placeholder={user?.walletAddress ? user.walletAddress.slice(-8).toLowerCase() : 'username'}
+                  placeholder={user?.walletAddress ? user.walletAddress.slice(2, 10).toLowerCase() : 'username'}
                   onBlur={(e) => {
                     const newUsername = e.target.value.trim();
                     if (newUsername) {
@@ -547,21 +547,9 @@ function ProfilePageContent() {
                 </div>
               </div>
               
-              {user?.walletAddress && (
-                <div className="mt-2">
-                  <span className="text-xs font-medium text-white/60">Connected Wallet</span>
-                  <div className="flex items-center gap-1.5 bg-white/5 rounded-lg px-2.5 py-1.5 mt-1">
-                    <svg className="h-3.5 w-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M3 16.5V19.5C3 20.6046 3.89543 21.5 5 21.5H19C20.1046 21.5 21 20.6046 21 19.5V16.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M16 10.5L12 14.5L8 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 14.5V2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <span className="text-xs font-mono text-white/80">
-                      {`${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`.toLowerCase()}
-                    </span>
-                  </div>
-                </div>
-              )}
+              <div className="mt-2">
+                <span className="text-sm font-medium text-white/60">Connected Wallet</span>
+              </div>
             </div>
           </div>
 
@@ -588,7 +576,7 @@ function ProfilePageContent() {
         </section>
 
         <section id="refer-earn" className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h3 className="text-lg font-semibold mb-2">Refer & Earn</h3>
+          <h3 className="text-lg font-semibold mb-2">Refer and earn</h3>
           <p className="text-sm text-white/70">
             Share your referral link to invite friends and grow the FarFISH community.
           </p>
