@@ -89,16 +89,6 @@ function pickWeightedTokenId(candidates: SupplyInfo[]): number {
 
 const TOKEN_IDS = Array.from({ length: 16 }, (_, i) => i); // 0-15
 
-const EARLY_ACCESS_SHARE_TEXT = [
-  "I just unlocked Early Access for FarFISH 🐟",
-  "",
-  "FarFISH is a daily reward ecosystem on Base.",
-  "Earn daily FRH rewards, unlock 5× earnings with NFT staking,",
-  "climb the leaderboard access, referrals and monthly airdrops.",
-  "",
-  "Early access is live 👇",
-].join("\n");
-
 const EARLY_ACCESS_SHARE_URL = "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish";
 
 export default function HomeClient() {
@@ -118,74 +108,6 @@ export default function HomeClient() {
   const [claimInfo, setClaimInfo] = useState<Map<number, TokenClaimInfo>>(new Map());
   const [loadingClaimConditions, setLoadingClaimConditions] = useState(false);
   const [justMinted, setJustMinted] = useState(false);
-  const [earlyUnlocked, setEarlyUnlocked] = useState(false);
-  const [showEarlyPanel, setShowEarlyPanel] = useState(false);
-  const [canVerify, setCanVerify] = useState(false);
-  const verifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Clear timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (verifyTimeoutRef.current) {
-        clearTimeout(verifyTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Handle verify timing when panel is shown
-  useEffect(() => {
-    if (!showEarlyPanel || earlyUnlocked) return;
-
-    const checkVerify = () => {
-      const t = localStorage.getItem("earlyAccessShareTime");
-      if (!t) return false;
-      return Date.now() - Number(t) >= 20000;
-    };
-
-    if (checkVerify()) {
-      setCanVerify(true);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      if (checkVerify()) {
-        setCanVerify(true);
-        clearInterval(interval);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [showEarlyPanel, earlyUnlocked]);
-
-  // Reset canVerify when panel is shown
-  useEffect(() => {
-    if (showEarlyPanel) {
-      setCanVerify(false);
-    }
-  }, [showEarlyPanel]);
-
-  // Clear timeout when verifying
-  const handleVerify = useCallback(() => {
-    if (verifyTimeoutRef.current) {
-      clearTimeout(verifyTimeoutRef.current);
-      verifyTimeoutRef.current = null;
-    }
-    localStorage.setItem("earlyAccessUnlocked", "true");
-    localStorage.removeItem("earlyAccessShareTime");
-    setEarlyUnlocked(true);
-    setShowEarlyPanel(false);
-    setCanVerify(false);
-  }, []);
-
-  // Clear timeout when panel is closed
-  const handleClosePanel = useCallback(() => {
-    if (verifyTimeoutRef.current) {
-      clearTimeout(verifyTimeoutRef.current);
-      verifyTimeoutRef.current = null;
-    }
-    setShowEarlyPanel(false);
-    setCanVerify(false);
-  }, []);
 
   const {
     writeContract: writeMint,
@@ -473,13 +395,6 @@ export default function HomeClient() {
     }
   }, [address]);
 
-  // Load early access state from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('earlyAccessUnlocked');
-    if (saved === 'true') {
-      setEarlyUnlocked(true);
-    }
-  }, []);
 
   // Fetch supply info and claim conditions on mount and when contract address changes
   useEffect(() => {
@@ -737,14 +652,13 @@ export default function HomeClient() {
     }
   }, [representativePrice]);
 
-  // Button states and labels - only: Mint, Minted, Already Minted
+  // Button states and labels
   const primaryButtonLabel = useMemo(() => {
     if (hasMinted) {
-      // Show "Minted" if just confirmed, otherwise "Already Minted"
       if (justMinted || isMintConfirmed) return "Minted";
       return "Already Minted";
     }
-    return "Mint";
+    return "Early Access";
   }, [hasMinted, isMintConfirmed, justMinted]);
 
   const primaryButtonClasses = useMemo(() => {
@@ -904,60 +818,12 @@ export default function HomeClient() {
             <div className="w-full mt-4">
               <button
                 type="button"
-                onClick={earlyUnlocked ? handleMint : () => {
-                  setShowEarlyPanel(true);
-                  setCanVerify(false);
-                }}
-                disabled={earlyUnlocked && (isConnecting || isMinting || isMintPending || isMintConfirming || !NFT_CONTRACT_ADDRESS || hasMinted || loadingSupplies || loadingClaimConditions || representativePrice === null)}
+                onClick={handleMint}
+                disabled={isConnecting || isMinting || isMintPending || isMintConfirming || !NFT_CONTRACT_ADDRESS || hasMinted || loadingSupplies || loadingClaimConditions || representativePrice === null}
                 className={primaryButtonClasses}
               >
-                {earlyUnlocked ? "Mint" : "Unlock Early Access"}
+                {primaryButtonLabel}
               </button>
-              
-              {showEarlyPanel && !earlyUnlocked && (
-                <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg relative">
-                  <button 
-                    onClick={handleClosePanel}
-                    className="absolute top-2 right-2 text-white/50 hover:text-white"
-                  >
-                    ×
-                  </button>
-                  <div className="whitespace-pre-line text-sm mb-4">
-                    {EARLY_ACCESS_SHARE_TEXT}
-                    {"\n"}
-                    {EARLY_ACCESS_SHARE_URL}
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    <button
-                      onClick={async () => {
-                        try {
-                          localStorage.setItem("earlyAccessShareTime", Date.now().toString());
-                          
-                          await sdk.actions.composeCast({
-                            text: EARLY_ACCESS_SHARE_TEXT,
-                            embeds: [EARLY_ACCESS_SHARE_URL],
-                            close: false,
-                          });
-                        } catch (err) {
-                          console.error("Failed to open Farcaster composer", err);
-                        }
-                      }}
-                      className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition"
-                      disabled={canVerify}
-                    >
-                      {canVerify ? 'Sharing...' : 'Share on Farcaster'}
-                    </button>
-                    {canVerify && (
-                      <button
-                        onClick={handleVerify}
-                        className="w-full py-2 bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-semibold rounded-lg"
-                      >
-                        Verify
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
               {lastMintedDisplay && (
                 <p className="mt-2 text-xs text-green-400">
                   Minted: {lastMintedDisplay}
@@ -979,21 +845,9 @@ export default function HomeClient() {
             </div>
           )}
 
-          {/* SHARE BUTTON */}
+          {/* PRICE TEXT */}
           <div className="space-y-2 mt-4">
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText("https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish");
-                setToast({ type: "success", message: "Farcaster link copied" });
-              }}
-              disabled={!isConnected || !address}
-              className="w-full bg-white/10 text-white py-3 rounded-lg text-sm transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Share
-            </button>
-            {/* PRICE TEXT */}
-            <p className="text-xs text-white/70 text-center mt-2">
+            <p className="text-xs text-white/70 text-center">
               {priceDisplay
                 ? `You have to pay ${priceDisplay.formattedPrice} ${priceDisplay.symbol} + gas`
                 : "Mint price is loading. Please wait..."}
