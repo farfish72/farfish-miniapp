@@ -32,11 +32,6 @@ export default function Header({ title }: { title: string }) {
 
       {/* নিচে পেজের নাম (Home / Chest / Stake / Rank / Profile) */}
       <p className="text-sm text-white/60 mt-1">{title}</p>
-      {!isFarcaster && (
-        <p className="text-[11px] text-yellow-200/80 mt-1">
-          Core actions like minting, referrals, and wallet stats work only when FarFISH is opened inside a Farcaster client.
-        </p>
-      )}
     </div>
   );
 }
