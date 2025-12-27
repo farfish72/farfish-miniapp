@@ -40,34 +40,48 @@ type LiveStats = {
 
 const faqItems = [
   {
-    question: "What is FarFish?",
-    answer:
-      "FarFish is the first GameFi & Utility project built natively for Farcaster on the Base chain. Stake NFTs, open Chests, and climb the leaderboards!",
+    question: "1. What is FarFISH?",
+    answer: "FarFISH is an on-chain reward system on Base for Farcaster and Base App users. Everything is wallet based and verifiable.",
   },
   {
-    question: "How do I earn rewards?",
-    answer:
-      "Stake your FarFish NFTs in the 'Stake' tab. Different NFT types (Bluefin, GoldRay, RedSpike, ShadowGill) earn different reward amounts based on staking duration.",
+    question: "2. What is the Home page?",
+    answer: "Your entry point. Mint NFT, unlock features and navigate the app.",
   },
   {
-    question: "What are Chests for?",
-    answer:
-      "Chests contain random rewards like tokens or points. Open them daily to maintain your streak and boost your profile rank.",
+    question: "3. What is the Chest page?",
+    answer: "Where daily rewards live. Claim FRH, check cooldowns and view your Trust Anchor.",
   },
   {
-    question: "How do I get a FarFish NFT?",
-    answer:
-      "Mint during the official launch phase on the Home page. Secondary sales will be available on Base NFT marketplaces.",
+    question: "4. What is Trust Anchor?",
+    answer: "A snapshot of your real activity streaks, holdings, rank and status. All on chain.",
   },
   {
-    question: "Which network is this on?",
-    answer:
-      "FarFish is built entirely on the Base L2 network. You will need ETH on Base to pay for gas fees.",
+    question: "5. What does the Stake page do?",
+    answer: "Stake NFTs to unlock higher rewards and future benefits.",
   },
   {
-    question: "Are the contracts safe?",
-    answer:
-      "Yes. Our smart contracts are verified, and team assets are secured using industry-standard Safe multi-sig wallets.",
+    question: "6. What is the Stream page?",
+    answer: "The FarFISH activity feed. Real interactions, real signals.",
+  },
+  {
+    question: "7. How do I earn FRH?",
+    answer: "Daily claims, NFT staking and real participation. No bots.",
+  },
+  {
+    question: "8. How is Rank calculated?",
+    answer: "Only by how much FRH you hold. Nothing else.",
+  },
+  {
+    question: "9. What is on the Profile page?",
+    answer: "Your wallet identity and basic stats. Detailed data lives in Trust Anchor.",
+  },
+  {
+    question: "10. Is FarFISH safe?",
+    answer: "Yes. It's non-custodial and onchain. You stay in control.",
+  },
+  {
+    question: "11. When will FRH be listed?",
+    answer: "Planned for Q1, 2026.",
   },
 ];
 
@@ -522,7 +536,7 @@ function ProfilePageContent() {
           )}
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
-              <span className="text-sm font-semibold text-white/80 flex-1">Follow on Farcaster</span>
+              <span className="text-sm font-semibold text-white/80 flex-1">Follow Us</span>
               <div className="flex items-center gap-2">
                 {!followComplete && !tasksLoading && (
                   <button
