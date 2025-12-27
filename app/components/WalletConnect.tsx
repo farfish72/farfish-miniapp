@@ -24,7 +24,7 @@ export default function WalletConnect() {
     <div className="w-full">
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 mb-2">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Farcaster Wallet</p>
+          <p className="text-sm font-semibold">Base Wallet</p>
           <button
             type="button"
             onClick={handleConnect}
