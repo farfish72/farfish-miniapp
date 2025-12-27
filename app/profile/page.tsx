@@ -484,22 +484,66 @@ function ProfilePageContent() {
             )}
           </div>
           <div className="flex items-center gap-3">
-          <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
-            <Image
-              src={user?.pfpUrl ?? "/farfish-logo.png"}
-              alt="FarFISH user"
-              fill
-              sizes="64px"
-              className="object-cover"
-              unoptimized
-            />
-          </div>
-            <div>
-              <p className="text-lg font-semibold">
-                FarFISH Captain
-              </p>
-              <p className="text-xs text-white/60">
-                {shortenAddress(user?.walletAddress)}
+            <div className="relative group">
+              <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
+                <Image
+                  src={user?.pfpUrl ?? "/farfish-logo.png"}
+                  alt="Profile"
+                  fill
+                  sizes="64px"
+                  className="object-cover"
+                  unoptimized
+                />
+              </div>
+              <label className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-2xl">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const result = event.target?.result as string;
+                        localStorage.setItem('profileImage', result);
+                        // Force re-render
+                        setReferralState(prev => ({ ...prev }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </label>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  className="text-lg font-semibold bg-transparent border-b border-transparent focus:border-white/30 focus:outline-none w-full"
+                  defaultValue={localStorage.getItem('username') || ''}
+                  placeholder={user?.walletAddress ? `0x${user.walletAddress.slice(-8)}`.toLowerCase() : '0x...'}
+                  onBlur={(e) => {
+                    const newUsername = e.target.value.trim();
+                    if (newUsername) {
+                      localStorage.setItem('username', newUsername);
+                    } else {
+                      localStorage.removeItem('username');
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                />
+              </div>
+              <p className="text-xs text-white/60 mt-1">
+                {user?.walletAddress ? `0x${user.walletAddress.slice(-8)}`.toLowerCase() : '0x...'}
               </p>
             </div>
           </div>
