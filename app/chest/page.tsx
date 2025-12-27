@@ -42,8 +42,7 @@ const ROTATING_CHEST_TEXTS = [
   "Another Bronze Chest day 🟤\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.",
 ];
 
-const FARFISH_MINIAPP_URL =
-  "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish";
+const FARFISH_MINIAPP_URL = "https://farfish-miniapp5.vercel.app";
 
 /* ---------------- page ---------------- */
 export default function ChestPage() {
@@ -53,9 +52,6 @@ export default function ChestPage() {
 
   useFarcasterEnvironment("Chest");
 
-  const [bronzeStep, setBronzeStep] =
-    useState<"idle" | "share" | "claim">("idle");
-  const [showSharePopup, setShowSharePopup] = useState(false);
   
   // Trust Anchor state
   const [trustAnchorData, setTrustAnchorData] = useState({
@@ -133,11 +129,6 @@ export default function ChestPage() {
     hash: dailyTx,
   });
 
-  const handleBronzeOpen = () => {
-    setBronzeStep("share");
-    setShowSharePopup(true);
-  };
-
   const handleBronzeShare = async () => {
     const text =
       ROTATING_CHEST_TEXTS[
@@ -151,11 +142,8 @@ export default function ChestPage() {
         close: false,
       });
     } catch (err) {
-      console.error("Farcaster compose failed:", err);
+      console.error("Share failed:", err);
     }
-
-    setShowSharePopup(false);
-    setBronzeStep("claim");
   };
 
   const handleBronzeClaim = useCallback(() => {
@@ -316,11 +304,9 @@ export default function ChestPage() {
           badge={daily?.canClaim ? "Ready" : "Cooling"}
           progress={daily?.canClaim ? 100 : 0}
           actionLabel={
-            !daily?.canClaim
-              ? `Next claim in: ${formatTime(daily?.timeLeft ?? 0n)}`
-              : bronzeStep === "idle"
-              ? "Open now (3 FRH)"
-              : "Claim 3 FRH"
+            daily?.canClaim 
+              ? "Claim 3 FRH" 
+              : `Next claim in: ${formatTime(daily?.timeLeft ?? 0n)}`
           }
           actionDisabled={
             !isConnected ||
@@ -329,11 +315,10 @@ export default function ChestPage() {
             dailyPending ||
             dailyConfirming
           }
-          onAction={
-            bronzeStep === "idle"
-              ? handleBronzeOpen
-              : handleBronzeClaim
-          }
+          onAction={handleBronzeClaim}
+          secondaryActionLabel="Share on Social"
+          secondaryActionDisabled={!isConnected}
+          onSecondaryAction={handleBronzeShare}
         />
 
         <ChestCard
@@ -366,35 +351,13 @@ export default function ChestPage() {
         <ChestCard
           title="Activity Rewards (Airdrop and referral)"
           description="Monthly rewards based on activity."
+          variant="default"
           badge="Coming Soon"
-          actionLabel="Not available"
-          actionDisabled
+          actionLabel="Coming Soon"
+          actionDisabled={true}
+          onAction={() => {}}
         />
       </div>
-
-      {showSharePopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-[90%] max-w-sm rounded-xl bg-[#0b0b0b] border border-white/10 p-4">
-            <p className="text-xs text-white/70 text-center mb-4">
-              To unlock today’s free Bronze Chest, please share the post below on Farcaster.
-            </p>
-
-            <button
-              className="w-full rounded-lg bg-emerald-400 py-3 font-semibold text-black"
-              onClick={handleBronzeShare}
-            >
-              Share on Farcaster
-            </button>
-
-            <button
-              className="mt-3 w-full text-xs text-white/50"
-              onClick={() => setShowSharePopup(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

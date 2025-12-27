@@ -8,6 +8,9 @@ type Props = {
   actionLabel?: string;
   actionDisabled?: boolean;
   onAction?: () => void;
+  secondaryActionLabel?: string;
+  secondaryActionDisabled?: boolean;
+  onSecondaryAction?: () => void;
 };
 
 export default function ChestCard({
@@ -19,6 +22,9 @@ export default function ChestCard({
   actionLabel,
   actionDisabled = false,
   onAction,
+  secondaryActionLabel,
+  secondaryActionDisabled = false,
+  onSecondaryAction,
 }: Props) {
   const accent =
     variant === "bronze"
@@ -56,18 +62,37 @@ export default function ChestCard({
         </div>
       )}
 
-      <button
-        type="button"
-        className={`mt-4 w-full rounded-lg py-3 font-semibold transition ${
-          actionDisabled
-            ? "bg-white/10 text-white/40 cursor-not-allowed"
-            : `${accent} text-black`
-        }`}
-        onClick={onAction}
-        disabled={actionDisabled}
-      >
-        {actionLabel}
-      </button>
+      <div className="space-y-2">
+        {actionLabel && onAction && (
+          <button
+            type="button"
+            className={`w-full rounded-lg py-3 font-semibold transition ${
+              actionDisabled
+                ? "bg-white/10 text-white/40 cursor-not-allowed"
+                : `${accent} text-black`
+            }`}
+            onClick={onAction}
+            disabled={actionDisabled}
+          >
+            {actionLabel}
+          </button>
+        )}
+        
+        {secondaryActionLabel && onSecondaryAction && (
+          <button
+            type="button"
+            className={`w-full rounded-lg border border-white/20 py-2.5 text-sm font-medium transition ${
+              secondaryActionDisabled
+                ? "text-white/40 cursor-not-allowed"
+                : "text-white/80 hover:bg-white/5"
+            }`}
+            onClick={onSecondaryAction}
+            disabled={secondaryActionDisabled}
+          >
+            {secondaryActionLabel}
+          </button>
+        )}
+      </div>
     </article>
   );
 }
