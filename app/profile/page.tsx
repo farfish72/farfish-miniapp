@@ -483,19 +483,20 @@ function ProfilePageContent() {
               <WalletConnect />
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-4">
+            {/* Profile Photo */}
             <div className="relative group">
-              <div className="relative h-16 w-16 rounded-2xl overflow-hidden border border-white/10">
+              <div className="relative h-20 w-20 rounded-2xl overflow-hidden border-2 border-white/20">
                 <Image
-                  src={user?.pfpUrl ?? "/farfish-logo.png"}
+                  src={localStorage.getItem('profileImage') || user?.pfpUrl || "/farfish-logo.png"}
                   alt="Profile"
-                  fill
-                  sizes="64px"
-                  className="object-cover"
+                  width={80}
+                  height={80}
+                  className="object-cover w-full h-full"
                   unoptimized
                 />
               </div>
-              <label className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-2xl">
+              <label className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-1.5 cursor-pointer border-2 border-white/90 shadow-lg hover:bg-blue-600 transition-colors">
                 <input
                   type="file"
                   accept="image/*"
@@ -507,26 +508,26 @@ function ProfilePageContent() {
                       reader.onload = (event) => {
                         const result = event.target?.result as string;
                         localStorage.setItem('profileImage', result);
-                        // Force re-render
                         setReferralState(prev => ({ ...prev }));
                       };
                       reader.readAsDataURL(file);
                     }
                   }}
                 />
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                 </svg>
               </label>
             </div>
+
+            {/* Username and Wallet */}
             <div className="flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 group relative">
                 <input
                   type="text"
-                  className="text-lg font-semibold bg-transparent border-b border-transparent focus:border-white/30 focus:outline-none w-full"
+                  className="text-xl font-bold bg-transparent border-b-2 border-transparent focus:border-blue-400 focus:outline-none w-full pr-8"
                   defaultValue={localStorage.getItem('username') || ''}
-                  placeholder={user?.walletAddress ? `0x${user.walletAddress.slice(-8)}`.toLowerCase() : '0x...'}
+                  placeholder={user?.walletAddress ? user.walletAddress.slice(-8).toLowerCase() : 'username'}
                   onBlur={(e) => {
                     const newUsername = e.target.value.trim();
                     if (newUsername) {
@@ -536,15 +537,31 @@ function ProfilePageContent() {
                     }
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.currentTarget.blur();
-                    }
+                    if (e.key === 'Enter') e.currentTarget.blur();
                   }}
                 />
+                <div className="absolute right-2 text-white/50 group-focus-within:text-blue-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </div>
               </div>
-              <p className="text-xs text-white/60 mt-1">
-                {user?.walletAddress ? `0x${user.walletAddress.slice(-8)}`.toLowerCase() : '0x...'}
-              </p>
+              
+              {user?.walletAddress && (
+                <div className="mt-2">
+                  <span className="text-xs font-medium text-white/60">Connected Wallet</span>
+                  <div className="flex items-center gap-1.5 bg-white/5 rounded-lg px-2.5 py-1.5 mt-1">
+                    <svg className="h-3.5 w-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M3 16.5V19.5C3 20.6046 3.89543 21.5 5 21.5H19C20.1046 21.5 21 20.6046 21 19.5V16.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M16 10.5L12 14.5L8 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 14.5V2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="text-xs font-mono text-white/80">
+                      {`${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`.toLowerCase()}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
