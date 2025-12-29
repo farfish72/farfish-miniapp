@@ -129,46 +129,51 @@ export default function ChestPage() {
     }
   };
 
-  const handleBronzeClaim = useCallback(() => {
+  const handleBronzeClaim = useCallback(async () => {
     if (!daily?.canClaim || !address) return;
 
-    // Mark bronze as claimed today in localStorage
-    localStorage.setItem('ff_bronze_claimed_today', 'true');
-    
-    // Update total rewards
-    const currentTotal = parseFloat(localStorage.getItem('ff_total_rewards') || '0');
-    localStorage.setItem('ff_total_rewards', (currentTotal + 3).toString());
-    
-    // Update streak and last claim date
-    const lastClaimDate = localStorage.getItem('ff_last_claim_date');
-    const today = new Date().toISOString().split('T')[0];
-    
-    if (lastClaimDate !== today) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+    try {
+      // Mark bronze as claimed today in localStorage
+      localStorage.setItem('ff_bronze_claimed_today', 'true');
       
-      const currentStreak = parseInt(localStorage.getItem('ff_streak') || '0', 10);
+      // Update total rewards
+      const currentTotal = parseFloat(localStorage.getItem('ff_total_rewards') || '0');
+      localStorage.setItem('ff_total_rewards', (currentTotal + 3).toString());
       
-      if (lastClaimDate === yesterdayStr) {
-        // Consecutive day - increment streak
-        localStorage.setItem('ff_streak', (currentStreak + 1).toString());
-      } else if (lastClaimDate !== today) {
-        // Not consecutive - reset streak to 1
-        localStorage.setItem('ff_streak', '1');
+      // Update streak and last claim date
+      const lastClaimDate = localStorage.getItem('ff_last_claim_date');
+      const today = new Date().toISOString().split('T')[0];
+      
+      if (lastClaimDate !== today) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        const currentStreak = parseInt(localStorage.getItem('ff_streak') || '0', 10);
+        
+        if (lastClaimDate === yesterdayStr) {
+          // Consecutive day - increment streak
+          localStorage.setItem('ff_streak', (currentStreak + 1).toString());
+        } else if (lastClaimDate !== today) {
+          // Not consecutive - reset streak to 1
+          localStorage.setItem('ff_streak', '1');
+        }
+        
+        localStorage.setItem('ff_last_claim_date', today);
       }
-      
-      localStorage.setItem('ff_last_claim_date', today);
-    }
 
-    claimDaily({
-      address: CLAIM_CONTROLLER_ADDRESS,
-      abi: claimControllerAbi,
-      functionName: "claimDailyChest",
-      args: [],
-      account: address,
-      chain: base,
-    });
+      await claimDaily({
+        address: CLAIM_CONTROLLER_ADDRESS,
+        abi: claimControllerAbi,
+        functionName: "claimDailyChest",
+        args: [],
+        account: address,
+        chain: base,
+      });
+    } catch (error) {
+      console.error('Bronze claim error:', error);
+      throw error; // Let ChestCard handle the error display
+    }
   }, [daily, address, claimDaily]);
 
   /* ================= SILVER ================= */
@@ -198,46 +203,51 @@ export default function ChestPage() {
     hash: undefined,
   });
 
-  const handleSilverClaim = useCallback(() => {
+  const handleSilverClaim = useCallback(async () => {
     if (!silver?.canClaim || !address) return;
 
-    // Mark silver as claimed today in localStorage
-    localStorage.setItem('ff_silver_claimed_today', 'true');
-    
-    // Update total rewards
-    const currentTotal = parseFloat(localStorage.getItem('ff_total_rewards') || '0');
-    localStorage.setItem('ff_total_rewards', (currentTotal + 6).toString());
-    
-    // Update streak and last claim date (same logic as bronze)
-    const lastClaimDate = localStorage.getItem('ff_last_claim_date');
-    const today = new Date().toISOString().split('T')[0];
-    
-    if (lastClaimDate !== today) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+    try {
+      // Mark silver as claimed today in localStorage
+      localStorage.setItem('ff_silver_claimed_today', 'true');
       
-      const currentStreak = parseInt(localStorage.getItem('ff_streak') || '0', 10);
+      // Update total rewards
+      const currentTotal = parseFloat(localStorage.getItem('ff_total_rewards') || '0');
+      localStorage.setItem('ff_total_rewards', (currentTotal + 6).toString());
       
-      if (lastClaimDate === yesterdayStr) {
-        // Consecutive day - increment streak
-        localStorage.setItem('ff_streak', (currentStreak + 1).toString());
-      } else if (lastClaimDate !== today) {
-        // Not consecutive - reset streak to 1
-        localStorage.setItem('ff_streak', '1');
+      // Update streak and last claim date (same logic as bronze)
+      const lastClaimDate = localStorage.getItem('ff_last_claim_date');
+      const today = new Date().toISOString().split('T')[0];
+      
+      if (lastClaimDate !== today) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        const currentStreak = parseInt(localStorage.getItem('ff_streak') || '0', 10);
+        
+        if (lastClaimDate === yesterdayStr) {
+          // Consecutive day - increment streak
+          localStorage.setItem('ff_streak', (currentStreak + 1).toString());
+        } else if (lastClaimDate !== today) {
+          // Not consecutive - reset streak to 1
+          localStorage.setItem('ff_streak', '1');
+        }
+        
+        localStorage.setItem('ff_last_claim_date', today);
       }
-      
-      localStorage.setItem('ff_last_claim_date', today);
-    }
 
-    claimSilver({
-      address: CLAIM_CONTROLLER_ADDRESS,
-      abi: claimControllerAbi,
-      functionName: "claimSilverChest",
-      args: [],
-      account: address,
-      chain: base,
-    });
+      await claimSilver({
+        address: CLAIM_CONTROLLER_ADDRESS,
+        abi: claimControllerAbi,
+        functionName: "claimSilverChest",
+        args: [],
+        account: address,
+        chain: base,
+      });
+    } catch (error) {
+      console.error('Silver claim error:', error);
+      throw error; // Let ChestCard handle the error display
+    }
   }, [silver, address, claimSilver]);
 
   // Update Trust Anchor data when address changes or claims are made

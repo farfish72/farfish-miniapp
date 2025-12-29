@@ -40,18 +40,13 @@ export default function Header({ title }: { title: string }) {
     <div className="w-full px-4 pt-4 pb-6">
       {/* Top section with app name and follow button */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center shadow-lg">
-            <span className="text-lg">🐟</span>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-              FarFISH
-            </h1>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-xs text-white/60">Live on Base</span>
-            </div>
+        <div className="flex flex-col">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+            FarFISH
+          </h1>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="text-xs text-white/60">Live on Base</span>
           </div>
         </div>
 

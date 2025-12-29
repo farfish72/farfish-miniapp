@@ -21,6 +21,8 @@ import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { base } from "viem/chains";
 import { formatEther } from "viem";
+import { useToast } from "./providers/ToastProvider";
+import { handleWalletError, handleTransactionError, checkWalletConnection, checkNetwork } from "./utils/errorHandling";
 
 interface SupplyInfo {
   id: number;
@@ -93,8 +95,9 @@ const EARLY_ACCESS_SHARE_URL = "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farf
 
 export default function HomeClient() {
   const { blocked, message } = useFarcasterGate();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
+  const { showError, showSuccess } = useToast();
 
   // State
   const [supplyInfo, setSupplyInfo] = useState<SupplyInfo[]>([]);
@@ -417,7 +420,7 @@ export default function HomeClient() {
     }
   }, [isConnected, address, checkHasMinted]);
 
-  // Refetch after successful mint
+  // Handle mint success
   useEffect(() => {
     if (isMintConfirmed && mintTxHash) {
       fetchSupplyInfo();
@@ -425,23 +428,18 @@ export default function HomeClient() {
       checkHasMinted();
       setIsMinting(false);
       setJustMinted(true);
-      setToast({ type: "success", message: "Mint successful!" });
+      showSuccess("NFT minted successfully!");
     }
-  }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, checkHasMinted]);
+  }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, checkHasMinted, showSuccess]);
 
   // Handle mint errors
   useEffect(() => {
     if (mintError) {
       setIsMinting(false);
-      const errorMsg = mintError.message || "Mint failed";
-      if (errorMsg.includes("reject") || errorMsg.includes("denied") || errorMsg.includes("User rejected")) {
-        setToast({ type: "error", message: "Transaction rejected" });
-      } else {
-        setErrorMessage(`Mint failed: ${errorMsg}`);
-        setToast({ type: "error", message: `Mint failed: ${errorMsg}` });
-      }
+      const appError = handleWalletError(mintError);
+      showError(appError.message);
     }
-  }, [mintError]);
+  }, [mintError, showError]);
 
   const handleConnect = useCallback(() => {
     const connector = connectors[0];
@@ -450,21 +448,29 @@ export default function HomeClient() {
   }, [connect, connectors]);
 
   const handleMint = useCallback(async () => {
-    setToast(null);
+    // Clear previous errors
     setErrorMessage(null);
 
-    if (!NFT_CONTRACT_ADDRESS) {
-      setToast({ type: "error", message: "Contract missing — mint disabled" });
+    // Pre-flight checks
+    const walletError = checkWalletConnection(address, isConnected);
+    if (walletError) {
+      showError(walletError.message);
       return;
     }
 
-    if (!address || !isConnected) {
-      handleConnect();
+    const networkError = checkNetwork(chainId);
+    if (networkError) {
+      showError(networkError.message);
+      return;
+    }
+
+    if (!NFT_CONTRACT_ADDRESS) {
+      showError("Contract not configured. Mint is disabled.");
       return;
     }
 
     if (hasMinted) {
-      setToast({ type: "error", message: "You have already minted" });
+      showError("You have already minted an NFT.");
       return;
     }
 
@@ -485,7 +491,7 @@ export default function HomeClient() {
     });
 
     if (candidates.length === 0) {
-      setToast({ type: "error", message: "All tokens are sold out or claim conditions not configured" });
+      showError("No tokens available for minting at this time.");
       return;
     }
 
@@ -495,7 +501,7 @@ export default function HomeClient() {
       const claim = claimInfo.get(tokenId);
 
       if (!claim || !claim.condition) {
-        setToast({ type: "error", message: "Claim conditions not available for selected token" });
+        showError("Mint conditions not available. Please try again.");
         return;
       }
 
@@ -505,86 +511,65 @@ export default function HomeClient() {
       // Verify mint has started
       const now = BigInt(Math.floor(Date.now() / 1000));
       if (claim.condition.startTimestamp > now) {
-        setToast({ type: "error", message: "Mint has not started yet" });
+        showError("Mint has not started yet. Please wait.");
         return;
       }
 
       // Verify claim condition has remaining supply
       if (claim.condition.supplyClaimed >= claim.condition.maxClaimableSupply) {
-        setToast({ type: "error", message: "Claim condition supply exhausted" });
+        showError("This token type is sold out. Please try again.");
         return;
       }
 
       // Calculate total value needed (pricePerToken * quantity)
-      // pricePerToken is already in wei (bigint) from on-chain claim condition
       const totalValue = pricePerToken * quantity;
 
       // Native ETH currency address (Thirdweb-style - required for this contract)
       const NATIVE_CURRENCY = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as `0x${string}`;
       const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
       
-      // Check if currency is native ETH (either EEE address or zero address)
-      // Contract expects EEE address for native ETH
+      // Check if currency is native ETH
       const isNativeCurrency = 
         currency.toLowerCase() === NATIVE_CURRENCY.toLowerCase() ||
         currency.toLowerCase() === ZERO_ADDRESS.toLowerCase();
 
-      // Use EEE address for native ETH (as required by contract)
-      // If condition has zero address, we normalize to EEE address
-      // The contract's claim condition should be configured with EEE address on-chain
       const normalizedCurrency = isNativeCurrency ? NATIVE_CURRENCY : currency;
 
-      // Prepare allowlist proof (empty for public mint)
-      // IMPORTANT: pricePerToken and currency in allowlistProof must match what we send to the contract
-      // We use normalized currency (EEE address) to match the contract's expectation
+      // Prepare allowlist proof
       const allowlistProof = {
         proof: [] as `0x${string}`[],
         quantityLimitPerWallet,
-        pricePerToken, // Must match claim.condition.pricePerToken
-        currency: normalizedCurrency, // Use EEE address for native ETH (matches contract expectation)
-      };
-
-      // Log claim parameters for debugging
-      console.log("Calling claim() with parameters:", {
-        receiver: address,
-        tokenId,
-        quantity: quantity.toString(),
+        pricePerToken,
         currency: normalizedCurrency,
-        pricePerToken: pricePerToken.toString(),
-        totalValue: totalValue.toString(),
-        isNativeCurrency,
-        msgValue: isNativeCurrency ? totalValue.toString() : "0",
-        allowlistProof,
-      });
+      };
 
       setIsMinting(true);
 
-      // Call claim function with all required parameters
-      // Contract will validate that _pricePerToken and _currency match the active claim condition
-      // For native ETH, msg.value must equal pricePerToken * quantity
-      writeMint({
+      // Call claim function
+      await writeMint({
         address: NFT_CONTRACT_ADDRESS as `0x${string}`,
         abi: nftDropAbi as any,
         functionName: "claim",
         args: [
-          address as `0x${string}`, // _receiver
-          BigInt(tokenId), // _tokenId
-          quantity, // _quantity
-          normalizedCurrency, // _currency (must match condition.currency)
-          pricePerToken, // _pricePerToken (must match condition.pricePerToken)
-          allowlistProof, // _allowlistProof (pricePerToken and currency must match condition)
-          "0x" as `0x${string}`, // _data (empty bytes)
+          address as `0x${string}`,
+          BigInt(tokenId),
+          quantity,
+          normalizedCurrency,
+          pricePerToken,
+          allowlistProof,
+          "0x" as `0x${string}`,
         ],
-        // Send native ETH via msg.value when currency is native
-        // value field in wagmi/viem sends ETH in the transaction
         value: isNativeCurrency ? totalValue : BigInt(0),
       } as any);
+
     } catch (error) {
-      console.error("Mint transaction failed to start", error);
+      console.error("Mint error:", error);
       setIsMinting(false);
-      setToast({ type: "error", message: error instanceof Error ? error.message : "Unable to start mint transaction" });
+      
+      const appError = handleTransactionError(error);
+      showError(appError.message);
     }
-  }, [address, isConnected, hasMinted, supplyInfo, claimInfo, writeMint, handleConnect]);
+  }, [address, isConnected, chainId, hasMinted, supplyInfo, claimInfo, writeMint, showError]);
 
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {

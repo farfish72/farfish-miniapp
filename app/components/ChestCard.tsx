@@ -1,4 +1,6 @@
 // app/components/ChestCard.tsx
+import { useState } from 'react';
+
 type Props = {
   title: string;
   description?: string;
@@ -7,10 +9,11 @@ type Props = {
   variant?: "bronze" | "silver" | "default";
   actionLabel?: string;
   actionDisabled?: boolean;
-  onAction?: () => void;
+  onAction?: () => void | Promise<void>;
   secondaryActionLabel?: string;
   secondaryActionDisabled?: boolean;
-  onSecondaryAction?: () => void;
+  onSecondaryAction?: () => void | Promise<void>;
+  error?: string | null;
 };
 
 const variantStyles = {
@@ -55,8 +58,47 @@ export default function ChestCard({
   secondaryActionLabel,
   secondaryActionDisabled = false,
   onSecondaryAction,
+  error
 }: Props) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [secondaryLoading, setSecondaryLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  
   const styles = variantStyles[variant];
+
+  const handleAction = async () => {
+    if (!onAction || actionDisabled || isLoading) return;
+    
+    setIsLoading(true);
+    setLocalError(null);
+    
+    try {
+      await onAction();
+    } catch (error) {
+      console.error('ChestCard action error:', error);
+      setLocalError('Action failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSecondaryAction = async () => {
+    if (!onSecondaryAction || secondaryActionDisabled || secondaryLoading) return;
+    
+    setSecondaryLoading(true);
+    setLocalError(null);
+    
+    try {
+      await onSecondaryAction();
+    } catch (error) {
+      console.error('ChestCard secondary action error:', error);
+      setLocalError('Action failed. Please try again.');
+    } finally {
+      setSecondaryLoading(false);
+    }
+  };
+
+  const displayError = error || localError;
 
   return (
     <article className={`
@@ -118,25 +160,35 @@ export default function ChestCard({
           </div>
         )}
 
+        {/* Error Display */}
+        {displayError && (
+          <div className="mb-4 p-3 rounded-2xl bg-red-500/10 border border-red-400/30">
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">⚠️</span>
+              <p className="text-sm text-red-300">{displayError}</p>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="space-y-3">
           {actionLabel && onAction && (
             <button
               type="button"
+              onClick={handleAction}
+              disabled={actionDisabled || isLoading}
               className={`
                 w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg
-                ${actionDisabled
+                ${actionDisabled || isLoading
                   ? "bg-white/10 text-white/50 cursor-not-allowed"
                   : `bg-gradient-to-r ${styles.button} text-black hover:scale-105 ${styles.shadow}`
                 }
               `}
-              onClick={onAction}
-              disabled={actionDisabled}
             >
-              {actionDisabled && actionLabel.includes("Next claim in") ? (
+              {isLoading ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                  {actionLabel}
+                  Processing...
                 </div>
               ) : (
                 actionLabel
@@ -147,20 +199,27 @@ export default function ChestCard({
           {secondaryActionLabel && onSecondaryAction && (
             <button
               type="button"
+              onClick={handleSecondaryAction}
+              disabled={secondaryActionDisabled || secondaryLoading}
               className={`
                 w-full py-3 rounded-2xl border backdrop-blur-sm text-sm font-semibold transition-all duration-300
-                ${secondaryActionDisabled
+                ${secondaryActionDisabled || secondaryLoading
                   ? "border-white/20 text-white/40 cursor-not-allowed"
                   : "border-white/30 text-white/90 hover:bg-white/10 hover:border-white/40 hover:scale-105"
                 }
               `}
-              onClick={onSecondaryAction}
-              disabled={secondaryActionDisabled}
             >
-              <div className="flex items-center justify-center gap-2">
-                <span>📱</span>
-                {secondaryActionLabel}
-              </div>
+              {secondaryLoading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                  Loading...
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2">
+                  <span>📱</span>
+                  {secondaryActionLabel}
+                </div>
+              )}
             </button>
           )}
         </div>
