@@ -707,216 +707,274 @@ export default function HomeClient() {
     <div className="flex flex-col flex-1 min-h-0">
       <Header title="Home" />
 
-      <div className="mt-4 flex-1 flex flex-col">
-        {/* COMPARISON – SINGLE MAIN CONTAINER */}
-<div className="w-full mb-6">
-  <h2 className="text-xl font-bold mb-4">Choose Your Place</h2>
+      <div className="flex-1 flex flex-col space-y-6">
+        {/* Hero Section with animated cards */}
+        <div className="relative">
+          <div className="bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-purple-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                  Choose Your Tier
+                </h2>
+                <p className="text-white/70 text-sm">Unlock exclusive benefits</p>
+              </div>
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center shadow-lg animate-pulse">
+                <span className="text-2xl">🐟</span>
+              </div>
+            </div>
 
-  {/* ONE MAIN BOX */}
-  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-    <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              {/* Basic Tier */}
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/50 backdrop-blur-sm border border-white/10 rounded-2xl p-4 hover:scale-105 transition-all duration-300">
+                <div className="text-center">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center">
+                    <span className="text-lg">🥉</span>
+                  </div>
+                  <h3 className="font-bold text-white mb-2">Basic</h3>
+                  <div className="space-y-1 text-xs text-white/70">
+                    <p>• Claim daily rewards</p>
+                    <p>• Build your activity streak</p>
+                    <p>• Appear on the leaderboard</p>
+                  </div>
+                </div>
+              </div>
 
-      {/* LEFT – BASIC */}
-      <div className="bg-black/20 border border-white/10 rounded-xl p-4">
-        <div className="text-white/70 text-xs mb-2">Casual users</div>
+              {/* Premium Tier */}
+              <div className="relative bg-gradient-to-br from-cyan-500/20 to-blue-500/20 backdrop-blur-sm border border-cyan-400/30 rounded-2xl p-4 hover:scale-105 transition-all duration-300 shadow-lg shadow-cyan-500/20">
+                <div className="absolute -top-2 -right-2 bg-gradient-to-r from-cyan-400 to-blue-400 text-xs font-bold text-black px-3 py-1 rounded-full animate-bounce">
+                  HOT 🔥
+                </div>
+                <div className="text-center">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center shadow-lg">
+                    <span className="text-lg">👑</span>
+                  </div>
+                  <h3 className="font-bold text-cyan-400 mb-2">Premium</h3>
+                  <div className="space-y-1 text-xs text-white/90">
+                    <p>• Earn rewards faster</p>
+                    <p>• Boost your leaderboard rank</p>
+                    <p>• Priority snapshot inclusion</p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-        <h3 className="text-lg font-bold mb-3">Basic</h3>
-
-        <ul className="space-y-2 text-sm text-white/80">
-          <li>• 3 FRH / day</li>
-          <li>• No-Boost</li>
-          <li>• No-Stake</li>
-          <li>• Default</li>
-        </ul>
-      </div>
-
-      {/* RIGHT – PREMIUM */}
-      <div className="relative">
-        <div className="bg-black/30 border border-[#00d4c4]/30 rounded-xl p-4 h-full">
-          <div className="text-[#00d4c4] text-xs mb-2">Core users</div>
-
-          <h3 className="text-lg font-bold mb-3">Premium</h3>
-
-          <ul className="space-y-2 text-sm">
-            <li>• 9 FRH / day</li>
-            <li>• Boosted</li>
-            <li>• Staking</li>
-            <li>• Airdrops</li>
-            <li>• Priority</li>
-          </ul>
-        </div>
-
-        {/* POWER PICK – OUTSIDE PREMIUM */}
-        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] text-xs font-bold text-black px-3 py-1 rounded-full">
-          Power Pick
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
-        {/* MINT CARD */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4 w-full">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold">Mint FarFISH NFTs</h2>
+            <div className="mt-4 text-center">
               <p className="text-xs text-white/60">
-                Total supply: {totalMaxSupply || "—"} • Species: Bluefin, GoldRay, RedSpike, ShadowGill
+                Higher activity leads to higher long-term rewards.
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* NFT Minting Section */}
+        <div className="bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-red-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Mint FarFISH NFTs
+              </h2>
+              <p className="text-white/70 text-sm">
+                {totalMaxSupply ? `${totalMaxSupply} total • 4 rarities` : "Loading supply..."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-xs text-white/60">Live</span>
             </div>
           </div>
 
           {!NFT_CONTRACT_ADDRESS && (
-            <div className="w-full mt-4 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-center text-xs font-semibold text-red-200">
-              Mint disabled — contract address is not configured.
+            <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <p className="font-semibold text-red-300">Contract Not Configured</p>
+                  <p className="text-xs text-red-400">Minting is temporarily disabled</p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* STATS */}
-          <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-            <div>
-              <p className="text-xs text-white/60">Minted</p>
-              <p className="font-bold">{loadingSupplies ? "—" : totalMinted}</p>
-              {errorMessage && (
-                <p className="text-[11px] text-red-300 mt-1">Supply data unavailable</p>
-              )}
+          {/* Stats Grid */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 backdrop-blur-sm border border-green-400/30 rounded-2xl p-4 text-center">
+              <div className="text-2xl font-bold text-green-400">
+                {loadingSupplies ? "..." : totalMinted.toLocaleString()}
+              </div>
+              <div className="text-xs text-white/70">Minted</div>
             </div>
-            <div>
-              <p className="text-xs text-white/60">Progress</p>
-              <p className="font-bold">
-                {loadingSupplies ? "—" : `${mintedProgress.toFixed(2)}%`}
-              </p>
+            <div className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 backdrop-blur-sm border border-blue-400/30 rounded-2xl p-4 text-center">
+              <div className="text-2xl font-bold text-blue-400">
+                {loadingSupplies ? "..." : `${mintedProgress.toFixed(1)}%`}
+              </div>
+              <div className="text-xs text-white/70">Progress</div>
             </div>
-            <div>
-              <p className="text-xs text-white/60">Remaining</p>
-              <p className="font-bold">{loadingSupplies ? "—" : totalRemaining}</p>
+            <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm border border-purple-400/30 rounded-2xl p-4 text-center">
+              <div className="text-2xl font-bold text-purple-400">
+                {loadingSupplies ? "..." : totalRemaining.toLocaleString()}
+              </div>
+              <div className="text-xs text-white/70">Left</div>
             </div>
           </div>
 
-          {/* PROGRESS BAR */}
-          <div className="w-full bg-white/10 rounded-full h-2 mt-4 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-[#00d4c4] to-[#80ffd1]"
-              style={{ width: `${mintedProgress}%` }}
-            />
+          {/* Progress Bar */}
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs text-white/60">Mint Progress</span>
+              <span className="text-xs text-white/60">{mintedProgress.toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 transition-all duration-1000 ease-out shadow-lg"
+                style={{ width: `${mintedProgress}%` }}
+              />
+            </div>
           </div>
 
-          {/* PRIMARY ACTION BUTTON */}
+          {/* Action Button */}
           {blocked ? (
-            <div className="w-full space-y-3">
-              <div className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-center text-xs font-semibold text-red-400">
-                {message}
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">🚫</span>
+                  <div>
+                    <p className="font-semibold text-red-300">Access Restricted</p>
+                    <p className="text-xs text-red-400">{message}</p>
+                  </div>
+                </div>
               </div>
               <button
                 onClick={() => connect({ connector: farcasterMiniApp() })}
-                className="w-full rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-purple-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold transition-all duration-300 hover:scale-105 shadow-lg"
               >
                 Connect Wallet
               </button>
             </div>
           ) : (
-            <div className="w-full mt-4">
+            <div className="space-y-4">
               <button
                 type="button"
                 onClick={handleMint}
-                disabled={isConnecting || isMinting || isMintPending || isMintConfirming || !NFT_CONTRACT_ADDRESS || hasMinted || loadingSupplies || loadingClaimConditions || representativePrice === null}
-                className={primaryButtonClasses}
+                disabled={primaryButtonDisabled}
+                className={`
+                  w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg
+                  ${primaryButtonDisabled 
+                    ? "bg-white/10 text-white/50 cursor-not-allowed" 
+                    : hasMinted 
+                      ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
+                      : "bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-500 hover:to-blue-600 text-black hover:scale-105"
+                  }
+                `}
               >
-                {primaryButtonLabel}
+                {isMinting || isMintPending || isMintConfirming ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                    {isMinting ? "Preparing..." : isMintPending ? "Confirming..." : "Processing..."}
+                  </div>
+                ) : (
+                  primaryButtonLabel
+                )}
               </button>
+
               {lastMintedDisplay && (
-                <p className="mt-2 text-xs text-green-400">
-                  Minted: {lastMintedDisplay}
-                  {mintedTokenUri && (
-                    <a
-                      href="/profile"
-                      className="ml-2 underline"
-                    >
-                      View NFT
-                    </a>
-                  )}
-                </p>
+                <div className="p-4 rounded-2xl bg-green-500/10 border border-green-400/30">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🎉</span>
+                    <div>
+                      <p className="font-semibold text-green-300">Successfully Minted!</p>
+                      <p className="text-xs text-green-400">
+                        {lastMintedDisplay}
+                        {mintedTokenUri && (
+                          <a href="/profile" className="ml-2 underline hover:text-green-300">
+                            View NFT →
+                          </a>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
-              {isMintConfirmed && (
-                <p className="mt-2 text-xs text-green-400">
-                  Mint transaction confirmed on-chain.
-                </p>
+
+              {priceDisplay && (
+                <div className="text-center">
+                  <p className="text-sm text-white/70">
+                    Price: <span className="font-bold text-cyan-400">{priceDisplay.formattedPrice} {priceDisplay.symbol}</span> + gas
+                  </p>
+                </div>
               )}
             </div>
           )}
-
-          {/* PRICE TEXT */}
-          <div className="space-y-2 mt-4">
-            <p className="text-xs text-white/70 text-center">
-              {priceDisplay
-                ? `You have to pay ${priceDisplay.formattedPrice} ${priceDisplay.symbol} + gas`
-                : "Mint price is loading. Please wait..."}
-            </p>
-          </div>
 
           {toast && (
-            <div
-              className={`mt-3 text-xs font-semibold rounded-lg border p-3 ${
-                toast.type === "success"
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-200"
-                  : "bg-red-500/10 border-red-500/20 text-red-200"
-              }`}
-            >
-              {toast.message}
+            <div className={`
+              mt-4 p-4 rounded-2xl border backdrop-blur-sm
+              ${toast.type === "success" 
+                ? "bg-green-500/10 border-green-400/30 text-green-300" 
+                : "bg-red-500/10 border-red-400/30 text-red-300"
+              }
+            `}>
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{toast.type === "success" ? "✅" : "❌"}</span>
+                <p className="font-medium">{toast.message}</p>
+              </div>
             </div>
           )}
         </div>
 
-        {/* WHY MINT */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-          <h3 className="font-bold mb-3">Why mint a FarFISH?</h3>
-          <ul className="text-sm text-white/80 space-y-3">
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🎮</span>
-              <div>
-                <div className="font-medium">Upcoming Games & Play-to-Earn Mechanics</div>
-                <div className="text-white/60">FarFISH NFTs will be used inside future in-app games where ownership unlocks gameplay advantages.</div>
+        {/* Why Mint Section */}
+        <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg">
+              <span className="text-xl">💎</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                Why Get FarFISH?
+              </h3>
+              <p className="text-white/70 text-sm">Build habits that pay off</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {[
+              { icon: "🎮", title: "Future Games", desc: "Access upcoming play-to-earn features" },
+              { icon: "🚀", title: "Growing Value", desc: "Your activity builds long-term rewards" },
+              { icon: "🌊", title: "Base Network", desc: "Built for the Base ecosystem" },
+              { icon: "⏰", title: "Daily Progress", desc: "Small actions, big results over time" },
+              { icon: "🏆", title: "Early Access", desc: "First to try new features and rewards" }
+            ].map((item, idx) => (
+              <div key={idx} className="flex items-start gap-4 p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-all duration-300 hover:scale-105">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400/20 to-orange-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-lg">{item.icon}</span>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-white mb-1">{item.title}</h4>
+                  <p className="text-sm text-white/70">{item.desc}</p>
+                </div>
               </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🧩</span>
-              <div>
-                <div className="font-medium">NFT-Based Progression System</div>
-                <div className="text-white/60">Your NFT is a permanent on-chain asset designed to evolve with future features.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🌊</span>
-              <div>
-                <div className="font-medium">Built for Farcaster & Base</div>
-                <div className="text-white/60">Designed specifically for social + on-chain interaction inside the Base ecosystem.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">⏳</span>
-              <div>
-                <div className="font-medium">Long-Term Utility, Not Just Art</div>
-                <div className="text-white/60">Minting is about access, progression, and participation — not visuals.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5">🏆</span>
-              <div>
-                <div className="font-medium">Early Holders Go First</div>
-                <div className="text-white/60">NFT holders get early access to new features, games, and experiments.</div>
-              </div>
-            </li>
-          </ul>
+            ))}
+          </div>
         </div>
 
-        {/* COLLECTION PREVIEW */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-          <h3 className="font-bold mb-2">Collection Preview</h3>
-          <div className="grid grid-cols-2 gap-3">
+        {/* Collection Preview */}
+        <div className="bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow-lg">
+              <span className="text-xl">🖼️</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                Collection Preview
+              </h3>
+              <p className="text-white/70 text-sm">Discover the rarities</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             {GALLERY_IMAGES.map((src, idx) => (
               <div
                 key={src}
-                className="relative bg-white/10 rounded-lg aspect-square overflow-hidden"
+                className="group relative bg-gradient-to-br from-white/10 to-white/5 rounded-2xl aspect-square overflow-hidden border border-white/20 hover:border-purple-400/50 transition-all duration-300 hover:scale-105"
               >
                 <Image
                   src={src}
@@ -924,8 +982,14 @@ export default function HomeClient() {
                   fill
                   priority={idx === 0}
                   sizes="(max-width: 768px) 50vw, 200px"
-                  className="object-cover"
+                  className="object-cover group-hover:scale-110 transition-transform duration-500"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="absolute bottom-3 left-3">
+                    <p className="text-white font-semibold text-sm">Fish #{idx + 1}</p>
+                    <p className="text-white/70 text-xs">Rare Collection</p>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

@@ -15,6 +15,7 @@ import Header from "../components/Header";
 import ChestCard from "../components/ChestCard";
 import TrustAnchor from "../components/TrustAnchor";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
+import useUserStakes from "../hooks/useUserStakes";
 
 import claimControllerAbi from "../abi/claimController.json";
 import { CLAIM_CONTROLLER_ADDRESS } from "../constants";
@@ -52,54 +53,36 @@ export default function ChestPage() {
 
   useFarcasterEnvironment("Chest");
 
+  // Get user stakes to determine tier
+  const { activeStakes } = useUserStakes();
   
   // Trust Anchor state
   const [trustAnchorData, setTrustAnchorData] = useState({
     streak: null as number | null,
-    claimedToday: 0,
-    holding: null as number | null,  // Will hold ERC20 balance
-    rank: null as number | null,     // Will hold rank from KV
+    daysActive: null as number | null,
     referrals: null as number | null,
-    recasts: null as number | null,
   });
 
-  // Read ERC20 balance
-  const { data: balanceData } = useReadContract({
-    address: process.env.NEXT_PUBLIC_ERC20_TOKEN_ADDRESS as `0x${string}`,
-    abi: [{
-      "constant": true,
-      "inputs": [{"name": "_owner", "type": "address"}],
-      "name": "balanceOf",
-      "outputs": [{"name": "balance", "type": "uint256"}],
-      "type": "function"
-    }],
-    functionName: 'balanceOf',
-    args: [address as `0x${string}`],
-    query: { enabled: !!address },
-  });
-
-  // Fetch KV data (rank, referrals, recasts)
+  // Fetch referral data from KV
   useEffect(() => {
-    const fetchKVData = async () => {
+    const fetchReferralData = async () => {
       if (!address) return;
       
       try {
-        const response = await fetch(`/api/trust-anchor?address=${address}`);
+        const response = await fetch(`/api/leaderboard/user?wallet=${address}`);
         if (response.ok) {
           const data = await response.json();
           setTrustAnchorData(prev => ({
             ...prev,
-            rank: data.rank || null,
-            referrals: data.referrals || null,
-            recasts: data.recasts || null,
+            referrals: data.referrals_count || 0,
           }));
         }
       } catch (error) {
-        console.error('Failed to fetch KV data:', error);
+        console.error('Failed to fetch referral data:', error);
       }
     };
     
-    fetchKVData();
+    fetchReferralData();
   }, [address]);
 
   /* ================= DAILY BRONZE ================= */
@@ -129,15 +112,15 @@ export default function ChestPage() {
     hash: dailyTx,
   });
 
-  const handleBronzeShare = async () => {
-    const text =
-      ROTATING_CHEST_TEXTS[
-        Math.floor(Math.random() * ROTATING_CHEST_TEXTS.length)
-      ];
+  const handleShareProgress = async () => {
+    const streak = localStorage.getItem('ff_streak') || '0';
+    const streakNum = parseInt(streak, 10);
+    
+    const shareText = `I'm on Day ${streakNum} on FarFISH 🐟 building daily on-chain habits.`;
 
     try {
       await sdk.actions.composeCast({
-        text,
+        text: shareText,
         embeds: [FARFISH_MINIAPP_URL],
         close: false,
       });
@@ -264,24 +247,34 @@ export default function ChestPage() {
     // Get streak from localStorage
     const streak = localStorage.getItem('ff_streak');
     
-    // Calculate claimed today from on-chain data
-    let claimedToday = 0;
-    if (dailyData && dailyData[0] === false) {  // If can't claim, means already claimed
-      claimedToday += 3;  // Bronze chest value
+    // Calculate days active (cumulative, never resets)
+    // For now, use a simple calculation based on streak and historical data
+    // In a real implementation, this would be stored separately and never decrease
+    const daysActive = localStorage.getItem('ff_days_active');
+    let calculatedDaysActive = 0;
+    
+    if (daysActive) {
+      calculatedDaysActive = parseInt(daysActive, 10);
+    } else {
+      // Initialize days active based on current streak if not set
+      calculatedDaysActive = streak ? parseInt(streak, 10) : 0;
+      localStorage.setItem('ff_days_active', calculatedDaysActive.toString());
     }
-    if (silverData && silverData[0] === false) {  // If can't claim, means already claimed
-      claimedToday += 6;  // Silver chest value
+    
+    // Update days active if current streak is higher (user has been more active)
+    const currentStreak = streak ? parseInt(streak, 10) : 0;
+    if (currentStreak > calculatedDaysActive) {
+      calculatedDaysActive = currentStreak;
+      localStorage.setItem('ff_days_active', calculatedDaysActive.toString());
     }
 
     // Update state
     setTrustAnchorData(prev => ({
       ...prev,
-      streak: streak ? parseInt(streak, 10) : null,
-      claimedToday,
-      holding: balanceData ? Number(balanceData) / 1e18 : null,  // Assuming 18 decimals
-      // rank, referrals, recasts are updated by the KV fetch effect
+      streak: currentStreak,
+      daysActive: calculatedDaysActive,
     }));
-  }, [address, dailyData, silverData, balanceData]);
+  }, [address, dailyData, silverData]);
 
   /* ================= UI ================= */
   return (
@@ -289,17 +282,44 @@ export default function ChestPage() {
       <Header title="Chest" />
 
       <div className="mt-4 space-y-4 flex-1">
+        {/* Daily Streak Indicator */}
+        {trustAnchorData.streak && trustAnchorData.streak > 0 && (
+          <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 backdrop-blur-sm border border-orange-400/30 rounded-2xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-lg">
+                  <span className="text-xl">🔥</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-orange-400">Day {trustAnchorData.streak} streak</h3>
+                  <p className="text-sm text-white/70">
+                    {daily?.canClaim 
+                      ? "Ready to claim today's reward" 
+                      : `Next check-in available in ${formatTime(daily?.timeLeft ?? 0n)}`
+                    }
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleShareProgress}
+                disabled={!isConnected}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-sm font-medium text-white transition-all duration-300 hover:scale-105 disabled:opacity-50"
+              >
+                Share my progress
+              </button>
+            </div>
+          </div>
+        )}
+
         <TrustAnchor
           streak={trustAnchorData.streak}
-          claimedToday={trustAnchorData.claimedToday}
-          holding={trustAnchorData.holding}
-          rank={trustAnchorData.rank}
+          daysActive={trustAnchorData.daysActive}
           referrals={trustAnchorData.referrals}
-          recasts={trustAnchorData.recasts}
+          hasActiveStake={activeStakes.length > 0}
         />
         <ChestCard
           title="Daily Bronze Chest"
-          description="Claim 3 FRH every 24 hours."
+          description="Claim rewards every 24 hours."
           variant="bronze"
           badge={daily?.canClaim ? "Ready" : "Cooling"}
           progress={daily?.canClaim ? 100 : 0}
@@ -316,14 +336,11 @@ export default function ChestPage() {
             dailyConfirming
           }
           onAction={handleBronzeClaim}
-          secondaryActionLabel="Share on Social"
-          secondaryActionDisabled={!isConnected}
-          onSecondaryAction={handleBronzeShare}
         />
 
         <ChestCard
           title="Silver Chest"
-          description="Stake at least 1 NFT to claim 6 FRH daily."
+          description="Stake tokens to unlock higher rewards."
           variant="silver"
           badge={
             !silver?.hasStaked
@@ -349,8 +366,8 @@ export default function ChestPage() {
         />
 
         <ChestCard
-          title="Activity Rewards (Airdrop and referral)"
-          description="Monthly rewards based on activity."
+          title="Future Rewards"
+          description="More reward types coming soon."
           variant="default"
           badge="Coming Soon"
           actionLabel="Coming Soon"

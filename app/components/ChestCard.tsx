@@ -13,6 +13,36 @@ type Props = {
   onSecondaryAction?: () => void;
 };
 
+const variantStyles = {
+  bronze: {
+    gradient: "from-amber-500/20 via-orange-500/20 to-red-500/20",
+    border: "border-amber-400/30",
+    icon: "🥉",
+    iconBg: "from-amber-400 to-orange-500",
+    button: "from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600",
+    progress: "from-amber-400 to-orange-500",
+    shadow: "shadow-amber-500/20"
+  },
+  silver: {
+    gradient: "from-slate-400/20 via-gray-400/20 to-slate-500/20",
+    border: "border-slate-400/30",
+    icon: "🥈",
+    iconBg: "from-slate-400 to-gray-500",
+    button: "from-slate-400 to-gray-500 hover:from-slate-500 hover:to-gray-600",
+    progress: "from-slate-400 to-gray-500",
+    shadow: "shadow-slate-500/20"
+  },
+  default: {
+    gradient: "from-purple-500/20 via-pink-500/20 to-red-500/20",
+    border: "border-purple-400/30",
+    icon: "💎",
+    iconBg: "from-purple-400 to-pink-500",
+    button: "from-purple-400 to-pink-500 hover:from-purple-500 hover:to-pink-600",
+    progress: "from-purple-400 to-pink-500",
+    shadow: "shadow-purple-500/20"
+  }
+};
+
 export default function ChestCard({
   title,
   description,
@@ -26,72 +56,114 @@ export default function ChestCard({
   secondaryActionDisabled = false,
   onSecondaryAction,
 }: Props) {
-  const accent =
-    variant === "bronze"
-      ? "bg-emerald-400/80"
-      : variant === "silver"
-      ? "bg-sky-400/70"
-      : "bg-emerald-400/70";
+  const styles = variantStyles[variant];
 
   return (
-    <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-2xl font-semibold">{title}</h3>
-          {description && (
-            <p className="text-sm text-white/70 mt-1">{description}</p>
+    <article className={`
+      relative overflow-hidden rounded-3xl border backdrop-blur-sm transition-all duration-300 hover:scale-105
+      bg-gradient-to-br ${styles.gradient} ${styles.border} ${styles.shadow} p-6 shadow-2xl
+    `}>
+      {/* Animated background elements */}
+      <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/5 rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-white/5 rounded-full blur-3xl animate-pulse delay-1000"></div>
+      
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="flex items-center gap-4">
+            <div className={`
+              w-16 h-16 rounded-2xl bg-gradient-to-br ${styles.iconBg} 
+              flex items-center justify-center shadow-lg ${styles.shadow}
+            `}>
+              <span className="text-2xl">{styles.icon}</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white mb-1">{title}</h3>
+              {description && (
+                <p className="text-sm text-white/70">{description}</p>
+              )}
+            </div>
+          </div>
+
+          {badge && (
+            <div className={`
+              px-4 py-2 rounded-full backdrop-blur-sm border text-xs font-semibold
+              ${badge === "Ready" 
+                ? "bg-green-500/20 border-green-400/30 text-green-300" 
+                : badge === "Cooling" 
+                  ? "bg-blue-500/20 border-blue-400/30 text-blue-300"
+                  : badge === "Stake required"
+                    ? "bg-red-500/20 border-red-400/30 text-red-300"
+                    : "bg-white/10 border-white/20 text-white/80"
+              }
+            `}>
+              {badge}
+            </div>
           )}
         </div>
 
-        {badge && (
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80">
-            {badge}
-          </span>
-        )}
-      </div>
-
-      {typeof progress === "number" && (
-        <div className="mt-4">
-          <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-            <div
-              className={`${accent} h-full`}
-              style={{ width: `${progress}%` }}
-            />
+        {/* Progress Bar */}
+        {typeof progress === "number" && (
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-white/70">Progress</span>
+              <span className="text-sm font-semibold text-white">{progress}%</span>
+            </div>
+            <div className="h-3 w-full rounded-full bg-white/10 overflow-hidden">
+              <div
+                className={`h-full bg-gradient-to-r ${styles.progress} transition-all duration-1000 ease-out shadow-lg`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
-          <div className="mt-2 text-xs text-white/70">{progress}%</div>
-        </div>
-      )}
+        )}
 
-      <div className="space-y-2">
-        {actionLabel && onAction && (
-          <button
-            type="button"
-            className={`w-full rounded-lg py-3 font-semibold transition ${
-              actionDisabled
-                ? "bg-white/10 text-white/40 cursor-not-allowed"
-                : `${accent} text-black`
-            }`}
-            onClick={onAction}
-            disabled={actionDisabled}
-          >
-            {actionLabel}
-          </button>
-        )}
-        
-        {secondaryActionLabel && onSecondaryAction && (
-          <button
-            type="button"
-            className={`w-full rounded-lg border border-white/20 py-2.5 text-sm font-medium transition ${
-              secondaryActionDisabled
-                ? "text-white/40 cursor-not-allowed"
-                : "text-white/80 hover:bg-white/5"
-            }`}
-            onClick={onSecondaryAction}
-            disabled={secondaryActionDisabled}
-          >
-            {secondaryActionLabel}
-          </button>
-        )}
+        {/* Action Buttons */}
+        <div className="space-y-3">
+          {actionLabel && onAction && (
+            <button
+              type="button"
+              className={`
+                w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg
+                ${actionDisabled
+                  ? "bg-white/10 text-white/50 cursor-not-allowed"
+                  : `bg-gradient-to-r ${styles.button} text-black hover:scale-105 ${styles.shadow}`
+                }
+              `}
+              onClick={onAction}
+              disabled={actionDisabled}
+            >
+              {actionDisabled && actionLabel.includes("Next claim in") ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                  {actionLabel}
+                </div>
+              ) : (
+                actionLabel
+              )}
+            </button>
+          )}
+          
+          {secondaryActionLabel && onSecondaryAction && (
+            <button
+              type="button"
+              className={`
+                w-full py-3 rounded-2xl border backdrop-blur-sm text-sm font-semibold transition-all duration-300
+                ${secondaryActionDisabled
+                  ? "border-white/20 text-white/40 cursor-not-allowed"
+                  : "border-white/30 text-white/90 hover:bg-white/10 hover:border-white/40 hover:scale-105"
+                }
+              `}
+              onClick={onSecondaryAction}
+              disabled={secondaryActionDisabled}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span>📱</span>
+                {secondaryActionLabel}
+              </div>
+            </button>
+          )}
+        </div>
       </div>
     </article>
   );
