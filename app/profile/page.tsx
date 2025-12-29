@@ -548,7 +548,12 @@ function ProfilePageContent() {
               </div>
               
               <div className="mt-2">
-                <span className="text-sm font-medium text-white/60">Connected Wallet</span>
+                {isConnected && address && (
+                  <>
+                    <span className="text-sm font-medium text-white/60">Connected Wallet</span>
+                    <p className="text-xs text-white/50 font-mono mt-1">{shortenAddress(address)}</p>
+                  </>
+                )}
               </div>
             </div>
           </div>
