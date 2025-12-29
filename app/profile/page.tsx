@@ -527,7 +527,7 @@ function ProfilePageContent() {
                   type="text"
                   className="text-2xl font-bold bg-transparent border-b-2 border-transparent focus:border-blue-400 focus:outline-none w-full pr-8"
                   defaultValue={localStorage.getItem('username') || ''}
-                  placeholder={user?.walletAddress ? user.walletAddress.slice(2, 10).toLowerCase() : 'username'}
+                  placeholder="username"
                   onBlur={(e) => {
                     const newUsername = e.target.value.trim();
                     if (newUsername) {
@@ -549,10 +549,7 @@ function ProfilePageContent() {
               
               <div className="mt-2">
                 {isConnected && address && (
-                  <>
-                    <span className="text-sm font-medium text-white/60">Connected Wallet</span>
-                    <p className="text-xs text-white/50 font-mono mt-1">{shortenAddress(address)}</p>
-                  </>
+                  <span className="text-sm font-medium text-white/60">Wallet connected</span>
                 )}
               </div>
             </div>

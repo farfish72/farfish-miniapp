@@ -24,7 +24,15 @@ export default function WalletConnect() {
     <div className="w-full">
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 mb-2">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Base Wallet</p>
+          <div>
+            <p className="text-sm font-semibold">Base Wallet</p>
+            {isConnected && address && (
+              <p className="text-xs text-white/60 mt-1">Connected</p>
+            )}
+            {!isConnected && (
+              <p className="text-xs text-white/60 mt-1">Not connected</p>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleConnect}
@@ -42,11 +50,6 @@ export default function WalletConnect() {
               : "Connect Farcaster Wallet"}
           </button>
         </div>
-        {isConnected && address && (
-          <p className="mt-2 text-xs text-white/70">
-            Address: {address.slice(0, 6)}...{address.slice(-4)}
-          </p>
-        )}
         {error && (
           <p className="mt-2 text-xs text-red-400">{error.message}</p>
         )}
