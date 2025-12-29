@@ -258,7 +258,7 @@ function ProfilePageContent() {
         });
         if (rankRes.ok) {
           const rankData = await rankRes.json();
-          rank = Number(rankData?.rank ?? 0) || null;
+          rank = Number(rankData?.rank ?? 0) > 0 ? Number(rankData.rank) : null;
         }
       } catch (error) {
         console.error("Failed to fetch rank:", error);
@@ -318,7 +318,7 @@ function ProfilePageContent() {
       },
       {
         label: "Rank",
-        value: loadingStats ? "…" : statsError.rank ? "Error" : (liveStats.rank ? `#${liveStats.rank}` : "Unranked"),
+        value: loadingStats ? "…" : statsError.rank ? "Error" : (liveStats.rank && liveStats.rank > 0 ? `#${liveStats.rank}` : "Unranked"),
       },
     ],
     [liveStats, loadingStats, statsError]

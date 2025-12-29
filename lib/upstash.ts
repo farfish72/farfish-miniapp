@@ -95,3 +95,12 @@ export const smembers = async (set: string) => {
   }
 };
 
+export const keys = async (pattern: string) => {
+  try {
+    const result = await upstashRequest<string[] | null>(`keys/${encodeURIComponent(pattern)}`);
+    return Array.isArray(result) ? result : [];
+  } catch {
+    return [];
+  }
+};
+
