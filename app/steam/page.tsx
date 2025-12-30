@@ -166,7 +166,7 @@ export default function SteamPage() {
         reward: `${referralCount * 40} FRH`,
         type: "referral",
         completed: false, // Always actionable
-        buttonText: "Share Referral Link",
+        buttonText: "Share on Farcaster",
         referralCount,
       },
       
@@ -267,20 +267,21 @@ export default function SteamPage() {
 
     if (verifying || task.completed) return;
 
-    // Handle referral share action
+    // Handle referral share action with Farcaster embed
     if (task.id === "referral_share") {
-      if (!referralLink) {
-        setToast({ type: "error", message: "Referral link not available yet" });
+      if (!address) {
+        setToast({ type: "error", message: "Please connect your wallet to share referral link" });
         return;
       }
       
-      try {
-        await navigator.clipboard.writeText(referralLink);
-        setToast({ type: "success", message: "Referral link copied! Share with friends to earn 40 FRH per referral." });
-      } catch (error) {
-        console.error("Failed to copy referral link:", error);
-        setToast({ type: "error", message: "Unable to copy link. Please try again." });
-      }
+      // Create Farcaster embed share URL
+      const embedText = encodeURIComponent("Earn FRH by completing on-chain tasks on Base");
+      const targetUrl = encodeURIComponent(`https://farfish-miniapp5.vercel.app/?ref=${address}`);
+      const farcasterShareUrl = `https://warpcast.com/~/compose?text=${embedText}&embeds[]=${targetUrl}`;
+      
+      // Open Farcaster share in new window
+      window.open(farcasterShareUrl, '_blank');
+      setToast({ type: "success", message: "Farcaster share opened! Complete the cast to earn 40 FRH per referral." });
       return;
     }
 
@@ -365,7 +366,7 @@ export default function SteamPage() {
           
           <div className="flex items-center justify-between text-sm">
             <span className="text-white/70">Progress:</span>
-            <span className="font-bold text-white">{completedTasks}/{tasks.length} tasks completed</span>
+            <span className="font-bold text-white">{completedTasks}/9 tasks completed</span>
           </div>
         </section>
 
