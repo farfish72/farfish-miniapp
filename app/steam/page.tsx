@@ -9,12 +9,13 @@ type ToastState = { type: "error" | "success"; message: string } | null;
 
 type TaskProgress = {
   referrals?: number;
-  fc?: {
-    follow?: boolean;
-    recast?: boolean;
-    comment?: boolean;
+  tasks?: {
+    fc_follow?: boolean;
+    fc_like_recast?: boolean;
+    fc_comment?: boolean;
+    nft_mint?: boolean;
   };
-  mint_nft?: boolean;
+  totalEarnedFRH?: number;
 };
 
 type Task = {
@@ -29,6 +30,7 @@ type Task = {
   verificationRequired?: boolean;
   referralCount?: number;
   milestone?: number;
+  showOpen?: boolean;
 };
 
 const FARFISH_FID = 694; // FarFISH Farcaster FID
@@ -49,13 +51,11 @@ export default function SteamPage() {
   const calculateTotalFRH = useCallback((progress: TaskProgress, referralCount: number) => {
     let total = 0;
     
-    // Farcaster tasks
-    if (progress.fc?.follow) total += 50;
-    if (progress.fc?.recast) total += 25;
-    if (progress.fc?.comment) total += 25;
-    
-    // NFT task
-    if (progress.mint_nft) total += 2000;
+    // Task rewards
+    if (progress.tasks?.fc_follow) total += 50;
+    if (progress.tasks?.fc_like_recast) total += 25;
+    if (progress.tasks?.fc_comment) total += 25;
+    if (progress.tasks?.nft_mint) total += 2000;
     
     // Referral rewards
     total += referralCount * 40; // 40 FRH per referral
@@ -72,55 +72,53 @@ export default function SteamPage() {
   // Initialize tasks
   const initializeTasks = useCallback((progress: TaskProgress, referralCount: number) => {
     const taskList: Task[] = [
-      // A. FARCASTER TASKS (Auto / Semi Auto)
+      // 1️⃣ Farcaster Follow
       {
         id: "fc_follow",
         title: "Follow FarFISH on Farcaster",
-        description: "Follow @farf on Farcaster to stay updated",
+        description: "Follow @farf on Farcaster",
         reward: "50 FRH",
         type: "auto-verify",
-        completed: !!progress.fc?.follow,
-        buttonText: progress.fc?.follow ? "Completed" : "Open Profile",
+        completed: !!progress.tasks?.fc_follow,
+        buttonText: progress.tasks?.fc_follow ? "Completed" : "Open",
         openUrl: "https://farcaster.xyz/farf",
         verificationRequired: true,
+        showOpen: !progress.tasks?.fc_follow,
       },
+      
+      // 2️⃣ Like & Recast
       {
-        id: "fc_recast",
-        title: "Like & Recast FarFISH post",
+        id: "fc_like_recast",
+        title: "Like & Recast FarFISH Post",
         description: "Like and recast the FarFISH announcement",
         reward: "25 FRH",
         type: "auto-verify",
-        completed: !!progress.fc?.recast,
-        buttonText: progress.fc?.recast ? "Completed" : "Open Post",
+        completed: !!progress.tasks?.fc_like_recast,
+        buttonText: progress.tasks?.fc_like_recast ? "Completed" : "Open",
         openUrl: "https://farcaster.xyz/farf/0xd8dccab8",
         verificationRequired: true,
-      },
-      {
-        id: "fc_comment",
-        title: "Comment on FarFISH post",
-        description: "Comment on the FarFISH announcement",
-        reward: "25 FRH",
-        type: "manual",
-        completed: !!progress.fc?.comment,
-        buttonText: progress.fc?.comment ? "Completed" : "Open Post",
-        openUrl: "https://farcaster.xyz/farf/0x7c1fc4bd",
+        showOpen: !progress.tasks?.fc_like_recast,
       },
       
-      // B. REFERRAL TASKS (Dynamic)
+      // 3️⃣ Comment
       {
-        id: "referral_base",
-        title: "Invite Friends",
-        description: "Earn 40 FRH per referral",
-        reward: `${referralCount * 40} FRH`,
-        type: "referral",
-        completed: false, // Always show as actionable
-        buttonText: "Share Referral Link",
-        referralCount,
+        id: "fc_comment",
+        title: "Comment on FarFISH Post",
+        description: "Comment on the FarFISH announcement",
+        reward: "25 FRH",
+        type: "auto-verify",
+        completed: !!progress.tasks?.fc_comment,
+        buttonText: progress.tasks?.fc_comment ? "Completed" : "Open",
+        openUrl: "https://farcaster.xyz/farf/0x7c1fc4bd",
+        verificationRequired: true,
+        showOpen: !progress.tasks?.fc_comment,
       },
+      
+      // REFERRAL MILESTONES
       {
-        id: "referral_milestone_5",
+        id: "referral_5",
         title: "5 Referrals Milestone",
-        description: "Bonus reward for reaching 5 referrals",
+        description: "Invite 5 friends to earn bonus reward",
         reward: "200 FRH",
         type: "referral",
         completed: referralCount >= 5,
@@ -129,9 +127,9 @@ export default function SteamPage() {
         milestone: 5,
       },
       {
-        id: "referral_milestone_10",
+        id: "referral_10",
         title: "10 Referrals Milestone",
-        description: "Bonus reward for reaching 10 referrals",
+        description: "Invite 10 friends to earn bonus reward",
         reward: "400 FRH",
         type: "referral",
         completed: referralCount >= 10,
@@ -140,9 +138,9 @@ export default function SteamPage() {
         milestone: 10,
       },
       {
-        id: "referral_milestone_30",
+        id: "referral_30",
         title: "30 Referrals Milestone",
-        description: "Bonus reward for reaching 30 referrals",
+        description: "Invite 30 friends to earn bonus reward",
         reward: "1200 FRH",
         type: "referral",
         completed: referralCount >= 30,
@@ -151,9 +149,9 @@ export default function SteamPage() {
         milestone: 30,
       },
       {
-        id: "referral_milestone_50",
+        id: "referral_50",
         title: "50 Referrals Milestone",
-        description: "Bonus reward for reaching 50 referrals",
+        description: "Invite 50 friends to earn bonus reward",
         reward: "2000 FRH",
         type: "referral",
         completed: referralCount >= 50,
@@ -161,17 +159,26 @@ export default function SteamPage() {
         referralCount,
         milestone: 50,
       },
-      
-      // C. NFT TASK (Optional, High Value)
       {
-        id: "mint_nft",
-        title: "FarFISH NFT Mint",
-        description: "Mint or stake a FarFISH NFT (Minter or Staker)",
+        id: "referral_share",
+        title: "Share Referral Link",
+        description: `Earn 40 FRH per referral (${referralCount} earned)`,
+        reward: `${referralCount * 40} FRH`,
+        type: "referral",
+        completed: false, // Always actionable
+        buttonText: "Share Referral Link",
+        referralCount,
+      },
+      
+      // NFT TASK (OPTIONAL - HIGH VALUE)
+      {
+        id: "nft_mint",
+        title: "FarFISH NFT Mint / Stake",
+        description: "Mint or stake a FarFISH NFT for premium rewards",
         reward: "2000 FRH",
         type: "optional",
-        completed: !!progress.mint_nft,
-        buttonText: progress.mint_nft ? "Completed" : "Mint NFT",
-        openUrl: "https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish", // Link to mint page
+        completed: !!progress.tasks?.nft_mint,
+        buttonText: progress.tasks?.nft_mint ? "Completed" : "Verify",
         verificationRequired: true,
       },
     ];
@@ -242,18 +249,13 @@ export default function SteamPage() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    // Handle tasks that require external navigation first
-    if (task.openUrl && !task.completed) {
-      // Open external URL
+    // Handle "Open" actions for external URLs
+    if (task.showOpen && task.openUrl && !task.completed) {
       window.open(task.openUrl, '_blank');
-      
-      // For non-completed tasks, show instruction to return and verify
-      if (!task.completed) {
-        setToast({ 
-          type: "success", 
-          message: `Opened ${task.title}. Complete the action and return to verify!` 
-        });
-      }
+      setToast({ 
+        type: "success", 
+        message: `Opened ${task.title}. Complete the action and return to verify!` 
+      });
       return;
     }
 
@@ -265,8 +267,8 @@ export default function SteamPage() {
 
     if (verifying || task.completed) return;
 
-    // Handle referral tasks (copy referral link)
-    if (task.type === "referral" && !task.milestone) {
+    // Handle referral share action
+    if (task.id === "referral_share") {
       if (!referralLink) {
         setToast({ type: "error", message: "Referral link not available yet" });
         return;
@@ -315,26 +317,6 @@ export default function SteamPage() {
       } finally {
         setVerifying(null);
       }
-    } else {
-      // Handle manual verification tasks
-      try {
-        const res = await fetch("/api/steam/complete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet: address, taskId }),
-        });
-
-        const data = await res.json();
-        if (data.success) {
-          setToast({ type: "success", message: `${task.title} completed! Reward earned.` });
-          await fetchTaskProgress(); // Refresh progress
-        } else {
-          setToast({ type: "error", message: data.error || "Task completion failed" });
-        }
-      } catch (error) {
-        console.error("Task completion failed:", error);
-        setToast({ type: "error", message: "Task completion failed. Please try again." });
-      }
     }
   };
 
@@ -364,12 +346,12 @@ export default function SteamPage() {
       )}
 
       <div className="mt-4 flex-1 flex flex-col space-y-4">
-        {/* Progress Summary - Always visible */}
+        {/* Header Section */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-bold bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] bg-clip-text text-transparent">
-                FRH Earnings
+                Steam
               </h2>
               <p className="text-sm text-white/70">
                 Complete tasks to earn FRH rewards
@@ -441,11 +423,11 @@ export default function SteamPage() {
                         ? "bg-green-500/20 text-green-300 cursor-not-allowed"
                         : verifying === task.id
                         ? "bg-white/10 text-white/50 cursor-not-allowed"
-                        : task.openUrl && !task.completed
+                        : task.showOpen && !task.completed
                         ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
-                        : task.type === "referral" && !task.milestone
+                        : task.type === "referral" && task.id === "referral_share"
                         ? "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
-                        : task.verificationRequired && !task.openUrl
+                        : task.verificationRequired && !task.showOpen
                         ? "bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] text-white hover:shadow-lg hover:scale-105"
                         : "bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] text-white hover:shadow-lg hover:scale-105"
                     }`}
@@ -455,16 +437,31 @@ export default function SteamPage() {
                         <div className="w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
                         Verifying...
                       </div>
-                    ) : task.openUrl && !task.completed ? (
+                    ) : task.showOpen && !task.completed ? (
                       "Open"
-                    ) : task.verificationRequired && !task.openUrl && !task.completed ? (
+                    ) : task.verificationRequired && !task.showOpen && !task.completed ? (
                       "Verify"
-                    ) : task.type === "manual" && !task.completed ? (
-                      "Check"
                     ) : (
                       task.buttonText
                     )}
                   </button>
+                  
+                  {/* Secondary Verify button for auto-verify tasks after opening */}
+                  {task.showOpen && task.verificationRequired && !task.completed && (
+                    <button
+                      onClick={() => {
+                        if (!address) {
+                          setToast({ type: "error", message: "Please connect your wallet to verify tasks" });
+                          return;
+                        }
+                        handleTaskAction(task.id);
+                      }}
+                      disabled={verifying === task.id}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] text-white hover:shadow-lg hover:scale-105 disabled:opacity-50"
+                    >
+                      {verifying === task.id ? "Verifying..." : "Verify"}
+                    </button>
+                  )}
                 </div>
               </div>
             ))

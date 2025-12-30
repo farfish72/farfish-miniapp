@@ -240,6 +240,69 @@ export async function verifyFarcasterEngagement(walletAddress: string, castHash:
 }
 
 /**
+ * Verify Farcaster comment for task completion
+ * Used only for task verification - no user tracking
+ * NOTE: This should be called from server-side API routes, not client-side
+ */
+export async function verifyFarcasterComment(walletAddress: string, castHash: string): Promise<boolean> {
+  if (!NEYNAR_API_KEY) {
+    console.warn("NEYNAR_API_KEY not available - this function should be called server-side");
+    return false;
+  }
+
+  try {
+    // Get user's FID first
+    const fidResponse = await fetch(
+      `${NEYNAR_BASE_URL}/user/bulk-by-address?addresses=${walletAddress.toLowerCase()}`,
+      {
+        headers: {
+          "accept": "application/json",
+          "api_key": NEYNAR_API_KEY,
+        },
+      }
+    );
+
+    if (!fidResponse.ok) return false;
+
+    const fidData = await fidResponse.json();
+    const users = fidData[walletAddress.toLowerCase()] || [];
+    
+    if (users.length === 0) return false;
+
+    const userFid = users[0].fid;
+
+    // Get cast conversation to check for comments
+    const conversationResponse = await fetch(
+      `${NEYNAR_BASE_URL}/cast/conversation?identifier=${castHash}&type=hash&reply_depth=2&include_chronological_parent_casts=false&limit=100`,
+      {
+        headers: {
+          "accept": "application/json",
+          "api_key": NEYNAR_API_KEY,
+        },
+      }
+    );
+
+    if (!conversationResponse.ok) return false;
+
+    const conversationData = await conversationResponse.json();
+    const conversation = conversationData.conversation || {};
+    const cast = conversation.cast;
+    
+    if (!cast || !cast.direct_replies) return false;
+
+    // Check if user has commented (appears in direct_replies)
+    const userCommented = cast.direct_replies.some((reply: any) => 
+      reply.author?.fid === userFid
+    );
+
+    return userCommented;
+  } catch (error) {
+    console.error("Failed to verify Farcaster comment:", error);
+    return false;
+  }
+}
+
+/**
  * Clear session cache (useful for testing or manual refresh)
  */
 export function clearFarcasterCache(): void {

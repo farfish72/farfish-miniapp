@@ -53,69 +53,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const now = new Date();
-    const today = now.toDateString();
-
     // Handle different task types
     switch (taskId) {
-      case "daily_checkin":
-        // Check if already claimed today
-        const lastCheckin = userData.daily_checkin?.last;
-        if (lastCheckin && new Date(lastCheckin).toDateString() === today) {
-          return NextResponse.json({ error: "Already claimed today" }, { status: 400 });
-        }
-
-        // Update daily checkin
-        userData.daily_checkin = {
-          count: (userData.daily_checkin?.count || 0) + 1,
-          last: now.toISOString(),
-        };
-        break;
-
-      case "add_miniapp":
-        // Simple one-time completion
-        if (userData.add_miniapp) {
-          return NextResponse.json({ error: "Task already completed" }, { status: 400 });
-        }
-        userData.add_miniapp = true;
-        break;
-
-      case "fc_comment":
-        // Manual verify Farcaster comment (snapshot-based)
-        if (!userData.fc) userData.fc = {};
-        if (userData.fc.comment) {
-          return NextResponse.json({ error: "Task already completed" }, { status: 400 });
-        }
-        userData.fc.comment = true;
-        break;
-
-      case "base_follow":
-        // Manual verify Base follow
-        if (!userData.base) userData.base = {};
-        if (userData.base.follow) {
-          return NextResponse.json({ error: "Task already completed" }, { status: 400 });
-        }
-        userData.base.follow = true;
-        break;
-
-      case "base_recast":
-        // Manual verify Base like/recast
-        if (!userData.base) userData.base = {};
-        if (userData.base.recast) {
-          return NextResponse.json({ error: "Task already completed" }, { status: 400 });
-        }
-        userData.base.recast = true;
-        break;
-
-      case "base_comment":
-        // Manual verify Base comment
-        if (!userData.base) userData.base = {};
-        if (userData.base.comment) {
-          return NextResponse.json({ error: "Task already completed" }, { status: 400 });
-        }
-        userData.base.comment = true;
-        break;
-
       default:
         return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
     }
