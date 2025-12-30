@@ -13,12 +13,24 @@ import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import useUser from "../hooks/useUser";
 import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
-import { NFT_CONTRACT_ADDRESS } from "../constants";
+import { FARCASTER_PROFILE_URL, NFT_CONTRACT_ADDRESS } from "../constants";
 import useFarcasterGate from "../hooks/useFarcasterGate";
 import nftDropAbi from "../abi/nftDrop.json";
 import useUserStakes from "../hooks/useUserStakes";
 
 type ToastState = { type: "error" | "success"; message: string } | null;
+
+type ReferralState = {
+  bound: boolean;
+  referrer?: string;
+  link?: string;
+  referralsCount: number;
+};
+
+type TaskState = {
+  followComplete: boolean;
+  recastComplete: boolean;
+} | null;
 
 type LiveStats = {
   nftsOwned: number;
@@ -88,16 +100,20 @@ const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 const TOKEN_IDS = Array.from({ length: 16 }, (_, i) => i); // 0-15
 
 function ProfilePageContent() {
-  const { user, loadingFarcaster } = useUser();
+  const { user } = useUser();
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
   const chainId = useChainId();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const [referralState, setReferralState] = useState<ReferralState>({ bound: false, referralsCount: 0 });
+  const [loadingReferral, setLoadingReferral] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [liveStats, setLiveStats] = useState<LiveStats>({ nftsOwned: 0, chestStreak: 0, rank: null });
   const [loadingStats, setLoadingStats] = useState(false);
+  // Tasks are UX-only; we do not persist or verify completion
+  const [taskState, setTaskState] = useState<TaskState>({ followComplete: false, recastComplete: false });
   const [nftInfo, setNftInfo] = useState<{ tokenId: number; uri: string } | null>(null);
   const [nftLoading, setNftLoading] = useState(false);
   const [nftError, setNftError] = useState<string | null>(null);
@@ -279,6 +295,8 @@ function ProfilePageContent() {
     };
   }, []);
 
+  // Tasks are UX-only engagement elements; no KV calls are made.
+
   const showToast = useCallback(
     (type: "error" | "success", msg: string) => setToast({ type, message: msg }),
     []
@@ -303,8 +321,105 @@ function ProfilePageContent() {
         value: loadingStats ? "…" : statsError.rank ? "Error" : (liveStats.rank && liveStats.rank > 0 ? `#${liveStats.rank}` : "Unranked"),
       },
     ],
-    [liveStats, loadingStats, statsError, stakes.length]
+    [liveStats, loadingStats, statsError]
   );
+
+  const followComplete = false;
+  const recastComplete = false;
+  const tasksLoading = false;
+
+  // Task buttons only open destinations; they do not verify or persist state.
+  const handleGoTask = useCallback(
+    (taskType: "follow" | "recast") => {
+      if (!address) {
+        showToast("error", "Please connect your wallet");
+        return;
+      }
+
+      if (taskType === "follow") {
+        window.open(FARCASTER_PROFILE_URL, "_blank", "noopener,noreferrer");
+      } else {
+        window.open("https://farcaster.xyz/farf/0x2dc370c3", "_blank", "noopener,noreferrer");
+      }
+    },
+    [address, showToast],
+  );
+
+  const createReferralLink = useCallback((wallet: string) => {
+    const refCode = wallet.slice(-8).toLowerCase();
+    return `https://farcaster.xyz/miniapps/DfVmB6jF12Ca/farfish?ref=${refCode}`;
+  }, []);
+
+  const fetchReferralInfo = useCallback(
+    async (wallet: string) => {
+      if (!wallet) return;
+      setLoadingReferral(true);
+      try {
+        const res = await fetch(`/api/referral/link?user=${wallet}`, {
+          headers: { "x-user-wallet": wallet },
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to load referral info");
+        }
+        const data = await res.json();
+        const link = data?.link ?? createReferralLink(wallet);
+        setReferralState({
+          bound: Boolean(data?.bound),
+          referrer: data?.referrer ?? undefined,
+          link,
+          referralsCount: Number(data?.referralsCount ?? 0),
+        });
+      } catch (error) {
+        console.error("Failed to load referral info", error);
+        showToast("error", "Failed to load referral info. Please try again.");
+        setReferralState({
+          bound: false,
+          referrer: undefined,
+          link: wallet ? createReferralLink(wallet) : undefined,
+          referralsCount: 0,
+        });
+      } finally {
+        setLoadingReferral(false);
+      }
+    },
+    [createReferralLink, showToast]
+  );
+
+  const handleCopyReferralLink = async () => {
+    if (!referralState.link) {
+      showToast("error", "No referral link yet.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(referralState.link);
+      showToast("success", "Referral link copied");
+    } catch (error) {
+      console.error("Failed to copy referral link", error);
+      showToast("error", "Unable to copy link");
+    }
+  };
+
+  useEffect(() => {
+    if (user?.walletAddress) {
+      fetchReferralInfo(user.walletAddress);
+    } else {
+      setReferralState({ bound: false, referrer: undefined, link: undefined, referralsCount: 0 });
+    }
+  }, [user?.walletAddress, fetchReferralInfo]);
+
+  // Auto-scroll to Refer & Earn section when hash is present
+  useEffect(() => {
+    if (window.location.hash === "#refer-earn") {
+      const element = document.getElementById("refer-earn");
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -373,49 +488,35 @@ function ProfilePageContent() {
             <div className="relative">
               <div className="relative h-24 w-24 rounded-2xl overflow-hidden border-2 border-white/20">
                 <Image
-                  src={user?.pfpUrl || localStorage.getItem('profileImage') || "/farfish-logo.png"}
+                  src={localStorage.getItem('profileImage') || user?.pfpUrl || "/farfish-logo.png"}
                   alt="Profile"
                   width={96}
                   height={96}
                   className="object-cover w-full h-full"
                   unoptimized
                 />
-                {/* Only show edit icon if no Farcaster profile or user wants to override */}
-                {(!user?.farcasterProfile || localStorage.getItem('profileImage')) && (
-                  <label className="absolute top-1 right-1 bg-blue-500 rounded-full p-1.5 cursor-pointer border-2 border-white/90 shadow-lg hover:bg-blue-600 transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const result = event.target?.result as string;
-                            localStorage.setItem('profileImage', result);
-                            // Force re-render to show new image
-                            window.location.reload();
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                  </label>
-                )}
-                
-                {/* Farcaster badge */}
-                {user?.farcasterProfile && (
-                  <div className="absolute bottom-1 right-1 bg-purple-500 rounded-full p-1 border-2 border-white/90">
-                    <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M23.2 12c0-6.2-5-11.2-11.2-11.2S.8 5.8.8 12s5 11.2 11.2 11.2S23.2 18.2 23.2 12zM12 20.8c-4.9 0-8.8-3.9-8.8-8.8S7.1 3.2 12 3.2s8.8 3.9 8.8 8.8-3.9 8.8-8.8 8.8z"/>
-                      <path d="M12 6.4c-3.1 0-5.6 2.5-5.6 5.6s2.5 5.6 5.6 5.6 5.6-2.5 5.6-5.6-2.5-5.6-5.6-5.6zm0 9.6c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z"/>
-                    </svg>
-                  </div>
-                )}
+                <label className="absolute top-1 right-1 bg-blue-500 rounded-full p-1.5 cursor-pointer border-2 border-white/90 shadow-lg hover:bg-blue-600 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const result = event.target?.result as string;
+                          localStorage.setItem('profileImage', result);
+                          setReferralState(prev => ({ ...prev }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </label>
               </div>
             </div>
 
@@ -425,8 +526,8 @@ function ProfilePageContent() {
                 <input
                   type="text"
                   className="text-2xl font-bold bg-transparent border-b-2 border-transparent focus:border-blue-400 focus:outline-none w-full pr-8"
-                  defaultValue={user?.displayName || localStorage.getItem('username') || ''}
-                  placeholder={user?.farcasterProfile ? user.displayName : "username"}
+                  defaultValue={localStorage.getItem('username') || ''}
+                  placeholder="username"
                   onBlur={(e) => {
                     const newUsername = e.target.value.trim();
                     if (newUsername) {
@@ -446,26 +547,9 @@ function ProfilePageContent() {
                 </div>
               </div>
               
-              <div className="mt-2 space-y-1">
+              <div className="mt-2">
                 {isConnected && address && (
                   <span className="text-sm font-medium text-white/60">Wallet connected</span>
-                )}
-                
-                {/* Farcaster Profile Status */}
-                {user?.farcasterProfile && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
-                    <span className="text-xs text-purple-300">
-                      @{user.farcasterProfile.username} • {user.farcasterProfile.followerCount} followers
-                    </span>
-                  </div>
-                )}
-                
-                {address && !user?.farcasterProfile && !loadingStats && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                    <span className="text-xs text-gray-400">No Farcaster profile linked</span>
-                  </div>
                 )}
               </div>
             </div>
@@ -493,57 +577,82 @@ function ProfilePageContent() {
           )}
         </section>
 
-        {/* Farcaster Profile Section */}
-        {user?.farcasterProfile && (
-          <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-4 h-4 bg-purple-500 rounded-full"></div>
-              <h3 className="text-lg font-semibold text-white">Farcaster Profile</h3>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">Username</p>
-                  <p className="text-sm font-medium text-white">@{user.farcasterProfile.username}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">FID</p>
-                  <p className="text-sm font-medium text-white">{user.farcasterProfile.fid}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">Followers</p>
-                  <p className="text-sm font-medium text-white">{user.farcasterProfile.followerCount?.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">Following</p>
-                  <p className="text-sm font-medium text-white">{user.farcasterProfile.followingCount?.toLocaleString()}</p>
-                </div>
+        <section id="refer-earn" className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-lg font-semibold mb-2">Refer and earn</h3>
+          <p className="text-sm text-white/70">
+            Share your referral link to invite friends and grow the FarFISH community.
+          </p>
+          {tasksLoading && (
+            <p className="text-xs text-white/60 mt-2">Loading task status...</p>
+          )}
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
+              <span className="text-sm font-semibold text-white/80 flex-1">Follow Us</span>
+              <div className="flex items-center gap-2">
+                {!followComplete && !tasksLoading && (
+                  <button
+                    type="button"
+                    onClick={() => handleGoTask("follow")}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                  >
+                    Go
+                  </button>
+                )}
+                {followComplete && <span className="text-green-400 text-lg">✔</span>}
               </div>
-              
-              {user.farcasterProfile.bio && (
-                <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide mb-1">Bio</p>
-                  <p className="text-sm text-white/80">{user.farcasterProfile.bio}</p>
-                </div>
-              )}
             </div>
-          </section>
-        )}
+            <div className="flex items-center justify-between w-full rounded-lg bg-white/10 border border-white/10 py-2 px-3 gap-2">
+              <span className="text-sm font-semibold text-white/80 flex-1">Like & Recast</span>
+              <div className="flex items-center gap-2">
+                {!recastComplete && !tasksLoading && (
+                  <button
+                    type="button"
+                    onClick={() => handleGoTask("recast")}
+                    className="rounded-lg bg-white/20 border border-white/20 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/30 transition"
+                  >
+                    Go
+                  </button>
+                )}
+                {recastComplete && <span className="text-green-400 text-lg">✔</span>}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {!user?.walletAddress && (
+              <div className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-sm text-yellow-100">
+                Connect your wallet to get your referral link.
+              </div>
+            )}
 
-        {/* Loading Farcaster Profile */}
-        {loadingFarcaster && (
-          <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-4 h-4 bg-purple-500/50 rounded-full animate-pulse"></div>
-              <h3 className="text-lg font-semibold text-white/70">Loading Farcaster Profile...</h3>
-            </div>
-            <div className="animate-pulse space-y-2">
-              <div className="h-4 bg-white/10 rounded w-3/4"></div>
-              <div className="h-4 bg-white/10 rounded w-1/2"></div>
-            </div>
-          </section>
-        )}
+            {user?.walletAddress && (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-xs text-white/70 mb-2">
+                    Your referral link:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-white/90 font-mono break-all flex-1">
+                      {referralState.link || createReferralLink(user.walletAddress)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCopyReferralLink}
+                      className="rounded-lg bg-white/10 border border-white/10 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/20 transition flex-shrink-0"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-white/80">
+                  Referrals Completed: {referralState.referralsCount ?? 0}
+                </p>
+                <p className="text-sm text-white/70">
+                  Every referral earns you 20 FRH. Rewards will be distributed on listing day.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <h3 className="text-lg font-semibold mb-3">Frequently Asked Questions</h3>
