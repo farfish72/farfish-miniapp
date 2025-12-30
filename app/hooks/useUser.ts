@@ -2,7 +2,16 @@
 
 import { useAccount } from "wagmi";
 import { useEffect, useMemo, useState } from "react";
- 
+
+type FarcasterProfile = {
+  fid: number;
+  username: string;
+  displayName: string;
+  pfpUrl: string;
+  bio?: string;
+  followerCount?: number;
+  followingCount?: number;
+};
 
 type Rarity = "common" | "rare" | "epic" | "legendary";
 
@@ -22,29 +31,10 @@ type FarcasterUser = {
   pfpUrl: string;
   walletAddress: string;
   stats?: UserStats;
+  farcasterProfile?: FarcasterProfile | null;
 };
 
 const rarityOrder: Rarity[] = ["common", "rare", "epic", "legendary"];
-
-const CONTRACTS = {
-  token: "0x00A3E047EbA4a769e310f515fD43203A4CEc4467",
-  nftCollection: "0x392B843aB6d3AC78A2ECeA9b0aFB7f2BD59c61FB",
-  staking: "0xAb3B485a558E6E7b917970Ed18e9A714996c5A3F",
-};
-
-const rarityFromAttributes = (attributes?: Record<string, any>): Rarity => {
-  if (!attributes) return "common";
-  const rarityAttribute =
-    attributes?.rarity ||
-    attributes?.Rarity ||
-    attributes?.attributes?.find?.((attr: any) => attr.trait_type?.toLowerCase?.() === "rarity")?.value;
-
-  const value = String(rarityAttribute ?? "").toLowerCase();
-  if (value.includes("legend")) return "legendary";
-  if (value.includes("epic")) return "epic";
-  if (value.includes("rare")) return "rare";
-  return "common";
-};
 
 const defaultBreakdown = (): RarityBreakdown => ({
   common: 0,
@@ -53,46 +43,57 @@ const defaultBreakdown = (): RarityBreakdown => ({
   legendary: 0,
 });
 
-type ProfileRow = {
-  display_name?: string | null;
-  fid?: number | null;
-  pfp_url?: string | null;
-  streak_days?: number | null;
-  rank_label?: string | null;
-};
-
 export default function useUser() {
   const { address } = useAccount();
   const [loadingNFTs, setLoadingNFTs] = useState(false);
+  const [loadingFarcaster, setLoadingFarcaster] = useState(false);
   const [rarityBreakdown, setRarityBreakdown] = useState<RarityBreakdown>(defaultBreakdown());
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [farcasterProfile, setFarcasterProfile] = useState<FarcasterProfile | null>(null);
   const [stakedCount, setStakedCount] = useState(0);
 
-  const displayName =
-    (profile?.display_name as string | undefined) ?? "FarFISH Captain";
-  const fid = Number(
-    profile?.fid ?? 0
-  );
-  const rawPfp = (profile?.pfp_url as string | undefined) ?? undefined;
-  const pfpUrl = rawPfp && !String(rawPfp).startsWith("data:")
-    ? String(rawPfp)
-    : "https://avatar.vercel.sh/1";
-
+  // Fetch Farcaster display data (PFP + username only) via server-side API
   useEffect(() => {
     let cancelled = false;
-    const fetchProfile = async () => {
+    
+    const fetchFarcasterDisplayData = async () => {
       if (!address) {
         if (!cancelled) {
-          setProfile(null);
-          setStakedCount(0);
+          setFarcasterProfile(null);
         }
         return;
       }
-      if (cancelled) return;
-      setProfile(null);
-      setStakedCount(0);
+
+      setLoadingFarcaster(true);
+      try {
+        // Call server-side API that has access to NEYNAR_API_KEY
+        const response = await fetch(`/api/farcaster/profile?wallet=${address}`, {
+          cache: "no-store",
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled) {
+            setFarcasterProfile(data.profile);
+          }
+        } else {
+          if (!cancelled) {
+            setFarcasterProfile(null);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch Farcaster display data:", error);
+        if (!cancelled) {
+          setFarcasterProfile(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingFarcaster(false);
+        }
+      }
     };
-    fetchProfile();
+
+    fetchFarcasterDisplayData();
+    
     return () => {
       cancelled = true;
     };
@@ -107,6 +108,7 @@ export default function useUser() {
 
       setLoadingNFTs(true);
       try {
+        // NFT fetching logic would go here
         setRarityBreakdown(defaultBreakdown());
       } catch (error) {
         console.error("Failed to fetch owned NFTs", error);
@@ -124,13 +126,52 @@ export default function useUser() {
     [rarityBreakdown]
   );
 
+  // Display name priority: localStorage override > Farcaster display name > Farcaster username > default
+  const displayName = useMemo(() => {
+    const localUsername = typeof window !== "undefined" ? localStorage.getItem('username') : null;
+    
+    // If user has set a custom username, use it
+    if (localUsername && localUsername.trim()) {
+      return localUsername.trim();
+    }
+    
+    // Otherwise use Farcaster data if available
+    if (farcasterProfile?.displayName) {
+      return farcasterProfile.displayName;
+    }
+    
+    if (farcasterProfile?.username) {
+      return farcasterProfile.username;
+    }
+    
+    return "FarFISH Captain";
+  }, [farcasterProfile]);
+
+  // Profile picture priority: localStorage override > Farcaster PFP > default
+  const pfpUrl = useMemo(() => {
+    const localImage = typeof window !== "undefined" ? localStorage.getItem('profileImage') : null;
+    
+    // If user has set a custom image, use it
+    if (localImage && localImage.trim()) {
+      return localImage;
+    }
+    
+    // Otherwise use Farcaster PFP if available
+    if (farcasterProfile?.pfpUrl) {
+      return farcasterProfile.pfpUrl;
+    }
+    
+    return "/farfish-logo.png";
+  }, [farcasterProfile]);
+
+  const fid = farcasterProfile?.fid ?? 0;
+
   const stats: UserStats = {
     nftsOwned,
     staked: stakedCount,
-    streakDays: profile?.streak_days ?? 0,
+    streakDays: 0, // This comes from KV via API calls
     rankLabel:
-      profile?.rank_label ??
-      (nftsOwned >= 5 ? "Gold" : nftsOwned >= 3 ? "Silver" : nftsOwned > 0 ? "Bronze" : "Unranked"),
+      nftsOwned >= 5 ? "Gold" : nftsOwned >= 3 ? "Silver" : nftsOwned > 0 ? "Bronze" : "Unranked",
     rarityBreakdown,
   };
 
@@ -139,14 +180,17 @@ export default function useUser() {
         displayName,
         fid,
         pfpUrl,
-        walletAddress: address,
+        walletAddress: address, // Primary identifier for all tracking
         stats,
+        farcasterProfile,
       }
     : null;
 
   return {
     user: connectedUser,
     loadingNFTs,
+    loadingFarcaster,
+    hasFarcasterProfile: !!farcasterProfile,
   };
 }
 
