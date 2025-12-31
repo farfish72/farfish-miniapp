@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const address = rawAddress.toLowerCase().trim();
 
     const rankKey = `user:${address}:rank`;
-    const referralsKey = `user:${address}:referrals`;
+    const referralsKey = `refcount:${address}`;
     const recastsKey = `user:${address}:recasts`;
 
     // THIS LINE IS THE REAL FIX
