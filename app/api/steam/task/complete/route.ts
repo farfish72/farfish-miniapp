@@ -47,11 +47,42 @@ export async function POST(req: NextRequest) {
       userObj.steam = {};
     }
     
-    // Mark task as completed using the authoritative data model
-    userObj.steam[taskId] = {
-      completed: true,
-      ts: now
-    };
+    // Special handling for fishing task (daily cooldown)
+    if (taskId === "fishing") {
+      const fishingData = userObj.steam.fishing || {};
+      
+      // Backward compatibility: migrate old format
+      let lastFishingTime = 0;
+      if (fishingData.ts) {
+        lastFishingTime = fishingData.ts;
+      } else if (fishingData.last) {
+        lastFishingTime = fishingData.last;
+      }
+      
+      // Check 24-hour cooldown (86400 seconds)
+      const cooldownPeriod = 86400;
+      const timeSinceLastFishing = now - lastFishingTime;
+      
+      if (lastFishingTime > 0 && timeSinceLastFishing < cooldownPeriod) {
+        const remainingCooldown = cooldownPeriod - timeSinceLastFishing;
+        return NextResponse.json({
+          error: "Fishing cooldown active",
+          cooldownRemaining: remainingCooldown,
+          canFishAt: lastFishingTime + cooldownPeriod
+        }, { status: 429 });
+      }
+      
+      // Update fishing with new format (only 'last' timestamp)
+      userObj.steam.fishing = {
+        last: now
+      };
+    } else {
+      // Other tasks use the old completion model
+      userObj.steam[taskId] = {
+        completed: true,
+        ts: now
+      };
+    }
     
     // Save updated user data
     await setKey(userKey, JSON.stringify(userObj));

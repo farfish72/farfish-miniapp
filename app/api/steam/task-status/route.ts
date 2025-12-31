@@ -36,9 +36,30 @@ export async function GET(req: NextRequest) {
     // Extract steam task completion status
     const steamData = userObj.steam || {};
     
+    // Special handling for fishing task (cooldown-based)
+    const fishingData = steamData.fishing || {};
+    let fishingStatus = false;
+    let fishingCooldown = 0;
+    
+    if (fishingData.last || fishingData.ts) {
+      // Backward compatibility: support both 'last' and 'ts'
+      const lastFishingTime = fishingData.last || fishingData.ts || 0;
+      const now = Math.floor(Date.now() / 1000);
+      const timeSinceLastFishing = now - lastFishingTime;
+      const cooldownPeriod = 86400; // 24 hours
+      
+      if (timeSinceLastFishing >= cooldownPeriod) {
+        fishingStatus = false; // Available to fish
+        fishingCooldown = 0;
+      } else {
+        fishingStatus = true; // On cooldown
+        fishingCooldown = cooldownPeriod - timeSinceLastFishing;
+      }
+    }
+    
     // Map to the task IDs used in the frontend
     const tasks: Record<string, boolean> = {
-      "daily_checkin": steamData.fishing?.completed || false,
+      "daily_checkin": fishingStatus, // true = on cooldown, false = available
       "add_miniapp": steamData.add_app?.completed || false,
       "fc_follow": steamData.follow?.completed || false,
       "fc_like_recast": steamData.like_recast?.completed || false,
@@ -55,6 +76,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       wallet,
       tasks,
+      fishingCooldown, // Add cooldown info for frontend
       timestamp: new Date().toISOString(),
     });
     

@@ -276,9 +276,45 @@ function VerifyModal({
 export default function SteamPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fishingCooldown, setFishingCooldown] = useState(0); // Cooldown in seconds
   const { address: wallet } = useAccount();
   const { activeStakes } = useUserStakes();
   const [referralData, setReferralData] = useState({ count: 0, rewards: 0 });
+  
+  // Countdown effect for fishing cooldown
+  useEffect(() => {
+    if (fishingCooldown <= 0) return;
+    
+    const interval = setInterval(() => {
+      setFishingCooldown(prev => {
+        if (prev <= 1) {
+          // Cooldown finished, refresh task status
+          fetchTaskStatuses();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [fishingCooldown]);
+
+  // Helper function to format cooldown time
+  const formatCooldownTime = (seconds: number): string => {
+    if (seconds <= 0) return "Available";
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  };
   const [verifyModal, setVerifyModal] = useState<{
     isOpen: boolean;
     taskId: string;
@@ -354,13 +390,16 @@ export default function SteamPage() {
       
       console.log("[STEAM] Task status response:", taskStatusData);
 
+      // Set fishing cooldown from API response
+      setFishingCooldown(taskStatusData.fishingCooldown || 0);
+
       const withStatus = TASKS.map((task) => {
         let status: TaskStatus = "not_started";
 
         if (task.type === "daily") {
-          // Fishing task completion from server
-          const fishingStatus = taskStatusData.tasks?.[task.id];
-          status = fishingStatus ? "verified" : "not_started";
+          // Fishing task: "verified" means on cooldown, "not_started" means available
+          const fishingOnCooldown = taskStatusData.tasks?.[task.id];
+          status = fishingOnCooldown ? "verified" : "not_started";
         } else if (task.type === "farcaster") {
           // Social tasks completion from server
           status = taskStatusData.tasks?.[task.id] ? "verified" : "not_started";
@@ -473,6 +512,10 @@ export default function SteamPage() {
       if (response.ok && data.success) {
         // Refresh task status to reflect the completed check-in
         fetchTaskStatuses();
+      } else if (response.status === 429) {
+        // Cooldown active - update local cooldown state
+        setFishingCooldown(data.cooldownRemaining || 0);
+        console.log('Fishing on cooldown:', data.cooldownRemaining, 'seconds remaining');
       } else {
         console.error('Fishing check-in failed:', data.error);
       }
@@ -698,7 +741,11 @@ export default function SteamPage() {
                   </div>
 
                   <div className="flex flex-col items-end gap-3">
-                    {task.status === "verified" ? (
+                    {task.status === "verified" && task.type === "daily" ? (
+                      <div className="px-3 py-1 rounded-full bg-orange-500/20 border border-orange-400/30 text-orange-400 text-sm font-medium">
+                        {formatCooldownTime(fishingCooldown)}
+                      </div>
+                    ) : task.status === "verified" ? (
                       <div className="px-3 py-1 rounded-full bg-green-500/20 border border-green-400/30 text-green-400 text-sm font-medium">
                         Completed
                       </div>
@@ -725,12 +772,20 @@ export default function SteamPage() {
                         {(task.type === "daily") && (
                           <button
                             onClick={() => handleVerify(task.id, task.title)}
-                            disabled={!wallet}
-                            className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
-                              !wallet ? "opacity-50 cursor-not-allowed" : ""
-                            }`}
+                            disabled={!wallet || fishingCooldown > 0}
+                            className={`
+                              bg-gradient-to-r from-purple-500/20 to-pink-500/20 
+                              hover:from-purple-500/30 hover:to-pink-500/30 
+                              backdrop-blur-sm border border-white/20 text-white 
+                              px-4 py-2 rounded-xl font-medium transition-all 
+                              duration-300 hover:scale-105 text-sm
+                              ${!wallet || fishingCooldown > 0
+                                ? "opacity-50 cursor-not-allowed" 
+                                : ""
+                              }
+                            `}
                           >
-                            Check In
+                            {fishingCooldown > 0 ? "On Cooldown" : "Check In"}
                           </button>
                         )}
                         {task.type === "miniapp" && (
