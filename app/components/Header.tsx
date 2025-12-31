@@ -8,6 +8,7 @@ const pageEmojis: Record<string, string> = {
   "Home": "🏠",
   "Chest": "💎",
   "Stake": "🔒",
+  "Steam": "⚡",
   "Rank": "🏆",
   "Profile": "👤",
   "Game": "🎮"
@@ -17,6 +18,7 @@ const pageGradients: Record<string, string> = {
   "Home": "from-blue-500 to-cyan-500",
   "Chest": "from-amber-500 to-orange-500",
   "Stake": "from-green-500 to-emerald-500",
+  "Steam": "from-purple-500 to-pink-500",
   "Rank": "from-yellow-500 to-amber-500",
   "Profile": "from-purple-500 to-pink-500",
   "Game": "from-red-500 to-pink-500"
@@ -82,6 +84,7 @@ export default function Header({ title }: { title: string }) {
             {title === "Home" && "Start your daily habit"}
             {title === "Chest" && "Claim daily rewards"}
             {title === "Stake" && "Lock & earn more"}
+            {title === "Steam" && "Complete tasks to earn FRH"}
             {title === "Rank" && "See your progress"}
             {title === "Profile" && "Track your activity"}
             {title === "Game" && "Play & win"}

@@ -6,7 +6,7 @@ import {
   FaHome,
   FaBoxOpen,
   FaCoins,
-  FaTrophy,
+  FaTasks,
   FaUser,
 } from "react-icons/fa";
 
@@ -14,8 +14,8 @@ const items = [
   { href: "/", label: "Home", icon: FaHome, color: "from-blue-500 to-cyan-500" },
   { href: "/chest", label: "Chest", icon: FaBoxOpen, color: "from-amber-500 to-orange-500" },
   { href: "/stake", label: "Stake", icon: FaCoins, color: "from-green-500 to-emerald-500" },
-  { href: "/rank", label: "Rank", icon: FaTrophy, color: "from-yellow-500 to-amber-500" },
-  { href: "/profile", label: "Profile", icon: FaUser, color: "from-purple-500 to-pink-500" },
+  { href: "/steam", label: "Steam", icon: FaTasks, color: "from-purple-500 to-pink-500" },
+  { href: "/profile", label: "Profile", icon: FaUser, color: "from-indigo-500 to-purple-500" },
 ];
 
 export default function BottomNav() {
