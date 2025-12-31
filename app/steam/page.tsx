@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { useAccount, useReadContract } from "wagmi";
 import { formatEther } from "viem";
@@ -555,7 +555,7 @@ export default function SteamPage() {
       const data = await response.json();
       
       if (data.link) {
-        const shareText = "Earn FRH rewards on FarFISH 🐟 Join using my referral link 👇";
+        const shareText = "Earn FRH token by completing simple tasks.\nDaily rewards, Referrals, On-chain progress.\nLock your position now...";
         
         await sdk.actions.composeCast({
           text: shareText,
@@ -664,7 +664,7 @@ export default function SteamPage() {
         {/* Task List */}
         <div className="space-y-4">
           {tasks.map((task, index) => (
-            <div key={task.id}>
+            <React.Fragment key={task.id}>
               <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex-1">
@@ -802,7 +802,7 @@ export default function SteamPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </React.Fragment>
           ))}
         </div>
         {/* How it works */}
