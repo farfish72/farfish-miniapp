@@ -663,117 +663,145 @@ export default function SteamPage() {
 
         {/* Task List */}
         <div className="space-y-4">
-          {tasks.map((task) => (
-            <div
-              key={task.id}
-              className="bg-gradient-to-br from-slate-800/50 to-slate-700/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-white mb-2">
-                    {task.title}
-                  </h3>
-                  <p className="text-white/70 text-sm mb-3">{task.description}</p>
-                  
-                  <div className="text-xs text-cyan-400 font-medium">
-                    {task.type === "referral" && referralData.count > 0
-                      ? `${referralData.count} × ${task.reward} = ${referralData.count * task.reward} FRH`
-                      : `${task.reward} FRH`
-                    }
+          {tasks.map((task, index) => (
+            <div key={task.id}>
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white mb-2">
+                      {task.title}
+                    </h3>
+                    <p className="text-white/70 text-sm mb-3">{task.description}</p>
+                    
+                    <div className="text-xs text-cyan-400 font-medium">
+                      {task.type === "referral" && referralData.count > 0
+                        ? `${referralData.count} × ${task.reward} = ${referralData.count * task.reward} FRH`
+                        : `${task.reward} FRH`
+                      }
+                    </div>
+                    
+                    {task.type === "referral_milestone" && (
+                      <div className="mt-2">
+                        <div className="text-xs text-white/80 mb-1">
+                          Progress: {Math.min(referralData.count, task.target || 0)} / {task.target}
+                        </div>
+                        <div className="w-full bg-slate-700/50 rounded-full h-2">
+                          <div 
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
+                            style={{ 
+                              width: `${Math.min(100, (referralData.count / (task.target || 1)) * 100)}%` 
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  
-                  {task.type === "referral_milestone" && (
-                    <div className="mt-2">
-                      <div className="text-xs text-white/80 mb-1">
-                        Progress: {Math.min(referralData.count, task.target || 0)} / {task.target}
-                      </div>
-                      <div className="w-full bg-slate-700/50 rounded-full h-2">
-                        <div 
-                          className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
-                          style={{ 
-                            width: `${Math.min(100, (referralData.count / (task.target || 1)) * 100)}%` 
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
 
-                <div className="flex flex-col items-end gap-3">
-                  {task.status === "verified" ? (
-                    <div className="px-3 py-1 rounded-full bg-green-500/20 border border-green-400/30 text-green-400 text-sm font-medium">
-                      Completed
-                    </div>
-                  ) : (
-                    <>
-                      {task.type === "farcaster" ? (
-                        <a
-                          href={getSocialTaskUrl(task.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => handleSocialTaskComplete(task.id)}
-                          className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-colors"
-                        >
-                          Open
-                        </a>
-                      ) : (
-                        <div className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-400 text-sm font-medium">
-                          {task.type === "daily" ? "Daily" : 
-                           task.type === "miniapp" ? "Mini App" :
-                           task.type === "referral" ? "Referral" : 
-                           task.type === "referral_milestone" ? "Milestone" : "NFT"}
-                        </div>
-                      )}
-                      {(task.type === "daily") && (
-                        <button
-                          onClick={() => handleVerify(task.id, task.title)}
-                          disabled={!wallet}
-                          className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
-                            !wallet ? "opacity-50 cursor-not-allowed" : ""
-                          }`}
-                        >
-                          Check In
-                        </button>
-                      )}
-                      {task.type === "miniapp" && (
-                        <button
-                          onClick={handleAddMiniApp}
-                          disabled={!wallet}
-                          className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
-                            !wallet ? "opacity-50 cursor-not-allowed" : ""
-                          }`}
-                        >
-                          Add FarFISH App
-                        </button>
-                      )}
-                      {task.type === "referral" && (
-                        <button
-                          onClick={handleReferralShare}
-                          disabled={!wallet}
-                          className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
-                            !wallet ? "opacity-50 cursor-not-allowed" : ""
-                          }`}
-                        >
-                          Share now
-                        </button>
-                      )}
-                      {task.type === "referral_milestone" && (
-                        <div className="text-xs text-white/80 text-center">
-                          {(task.status as TaskStatus) === "verified" 
-                            ? "Completed" 
-                            : `Progress (${Math.min(referralData.count, task.target || 0)}/${task.target})`
-                          }
-                        </div>
-                      )}
-                      {task.type === "nft" && (
-                        <div className="text-xs text-white/80 text-center">
-                          Mint or stake<br />FarFISH NFT
-                        </div>
-                      )}
-                    </>
-                  )}
+                  <div className="flex flex-col items-end gap-3">
+                    {task.status === "verified" ? (
+                      <div className="px-3 py-1 rounded-full bg-green-500/20 border border-green-400/30 text-green-400 text-sm font-medium">
+                        Completed
+                      </div>
+                    ) : (
+                      <>
+                        {task.type === "farcaster" ? (
+                          <a
+                            href={getSocialTaskUrl(task.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => handleSocialTaskComplete(task.id)}
+                            className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-colors"
+                          >
+                            Open
+                          </a>
+                        ) : (
+                          <div className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-400 text-sm font-medium">
+                            {task.type === "daily" ? "Daily" : 
+                             task.type === "miniapp" ? "Mini App" :
+                             task.type === "referral" ? "Referral" : 
+                             task.type === "referral_milestone" ? "Milestone" : "NFT"}
+                          </div>
+                        )}
+                        {(task.type === "daily") && (
+                          <button
+                            onClick={() => handleVerify(task.id, task.title)}
+                            disabled={!wallet}
+                            className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
+                              !wallet ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+                          >
+                            Check In
+                          </button>
+                        )}
+                        {task.type === "miniapp" && (
+                          <button
+                            onClick={handleAddMiniApp}
+                            disabled={!wallet}
+                            className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
+                              !wallet ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+                          >
+                            Add FarFISH App
+                          </button>
+                        )}
+                        {task.type === "referral" && (
+                          <button
+                            onClick={handleReferralShare}
+                            disabled={!wallet}
+                            className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
+                              !wallet ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+                          >
+                            Share now
+                          </button>
+                        )}
+                        {task.type === "referral_milestone" && (
+                          <div className="text-xs text-white/80 text-center">
+                            {(task.status as TaskStatus) === "verified" 
+                              ? "Completed" 
+                              : `Progress (${Math.min(referralData.count, task.target || 0)}/${task.target})`
+                            }
+                          </div>
+                        )}
+                        {task.type === "nft" && (
+                          <div className="text-xs text-white/80 text-center">
+                            Mint or stake<br />FarFISH NFT
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* Insert Referral Share Pad after Comment on Post task */}
+              {task.id === "fc_comment" && (
+                <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-white mb-2">
+                        Share Referral Link
+                      </h3>
+                      <p className="text-white/70 text-sm mb-3">Invite friends using your referral link</p>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-3">
+                      <div className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-400 text-sm font-medium">
+                        Utility
+                      </div>
+                      <button
+                        onClick={handleReferralShare}
+                        disabled={!wallet}
+                        className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
+                          !wallet ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        Share Now
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
