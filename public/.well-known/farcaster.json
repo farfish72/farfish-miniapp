@@ -22,19 +22,19 @@
     "tagline": "Earn Rewards Daily",
     "description": "Mint. Stake. Earn. Dominate the Seas. Premium NFT collection built for Farcaster. NFT Staking • Leaderboard • Monthly Rewards.",
   
-    "screenshotUrls": [
-      "https://farfish-miniapp5.vercel.app/frame-image.png"
-    ],
-  
-    "primaryCategory": "games",
-  
-    "tags": [
-      "nft",
-      "staking",
-      "fish",
-      "game",
-      "rewards"
-    ],
+      "screenshotUrls": [
+        "https://farfish-miniapp5.vercel.app/s1.png",
+        "https://farfish-miniapp5.vercel.app/s2.png",
+        "https://farfish-miniapp5.vercel.app/s3.png"
+      ],
+      "primaryCategory": "utility",
+      "tags": [
+  "nft",
+  "staking",
+  "rewards",
+  "onchain",
+  "utility"
+],
   
     "heroImageUrl": "https://farfish-miniapp5.vercel.app/og-image.png",
   

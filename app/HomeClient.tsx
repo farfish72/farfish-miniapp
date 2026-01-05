@@ -871,7 +871,7 @@ export default function HomeClient() {
                         {lastMintedDisplay}
                         {mintedTokenUri && (
                           <a href="/profile" className="ml-2 underline hover:text-green-300">
-                            View NFT →
+                            View NFT
                           </a>
                         )}
                       </p>

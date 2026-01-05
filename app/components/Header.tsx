@@ -55,11 +55,10 @@ export default function Header({ title }: { title: string }) {
         <Link
           href="https://warpcast.com/farf"
           target="_blank"
-          className="group relative overflow-hidden bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-xl transition-all duration-300 hover:scale-105"
+          className="relative overflow-hidden bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-xl transition-all duration-300 hover:scale-105"
         >
-          <span className="relative z-10 text-sm font-medium text-white flex items-center gap-2">
+          <span className="relative z-10 text-sm font-medium text-white">
             Follow
-            <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
           </span>
         </Link>
       </div>
@@ -67,7 +66,7 @@ export default function Header({ title }: { title: string }) {
       {/* Positioning message */}
       <div className="mb-4">
         <p className="text-sm text-white/80 text-center">
-          Daily on-chain habits → future rewards on Base
+          Daily on-chain habits for future rewards on Base
         </p>
       </div>
 

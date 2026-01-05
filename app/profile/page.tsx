@@ -473,9 +473,6 @@ function ProfilePageContent() {
                     onClick={() => setOpenIdx(open ? null : idx)}
                   >
                     <span className="font-medium text-sm">{faq.question}</span>
-                    <span className="text-xl leading-none text-white/60">
-                      {open ? "−" : "+"}
-                    </span>
                   </button>
                   {open && (
                     <div className="px-4 pb-4 text-sm text-white/70">
