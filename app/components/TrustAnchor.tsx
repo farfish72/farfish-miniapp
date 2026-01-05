@@ -5,6 +5,8 @@ interface TrustAnchorProps {
   streak: number | null;          // Current consecutive streak
   daysActive: number | null;      // Total cumulative days (never resets)
   referrals: number | null;       // Lifetime referral count
+  totalHolding: string | null;    // Total FRH token balance (formatted)
+  rank: number | null;            // User's rank based on referrals
   hasActiveStake: boolean;        // Whether user has active NFT stake
   isLoading?: boolean;            // Loading state
   error?: string | null;          // Error message if any
@@ -14,6 +16,8 @@ export default function TrustAnchor({
   streak,
   daysActive,
   referrals,
+  totalHolding,
+  rank,
   hasActiveStake,
   isLoading = false,
   error = null,
@@ -56,18 +60,25 @@ export default function TrustAnchor({
       bgColor: "from-purple-500/20 to-pink-500/20"
     },
     { 
-      icon: "📊", 
-      label: "Rank", 
-      value: "Tracking",
+      icon: "�", 
+      label: "Total Holding", 
+      value: totalHolding || "0 FRH",
       color: "from-yellow-400 to-amber-500",
       bgColor: "from-yellow-500/20 to-amber-500/20"
+    },
+    { 
+      icon: "📊", 
+      label: "Rank", 
+      value: rank ? `#${rank}` : "Unranked",
+      color: "from-indigo-400 to-purple-500",
+      bgColor: "from-indigo-500/20 to-purple-500/20"
     },
     { 
       icon: "⏱️", 
       label: "Next Snapshot", 
       value: "~30 days",
-      color: "from-indigo-400 to-purple-500",
-      bgColor: "from-indigo-500/20 to-purple-500/20"
+      color: "from-teal-400 to-cyan-500",
+      bgColor: "from-teal-500/20 to-cyan-500/20"
     },
     { 
       icon: tier === 'Premium' ? "👑" : "🥉", 
@@ -106,6 +117,7 @@ export default function TrustAnchor({
               className={`
                 relative overflow-hidden bg-gradient-to-br ${field.bgColor} backdrop-blur-sm 
                 border border-white/10 rounded-2xl p-3 hover:scale-105 transition-all duration-300
+                ${fields.length % 2 !== 0 && idx === fields.length - 1 ? 'col-span-2' : ''}
               `}
             >
               <div className="flex items-center gap-2">

@@ -9,7 +9,7 @@ type LeaderboardEntry = {
   rank: number;
   wallet: string;
   referrals_count: number;
-  rewards: number; // Referrals × 20 FRH
+  rewards: number; // Referrals × 40 FRH
 };
 
 type ToastState = { type: "error" | "success"; message: string } | null;
@@ -38,12 +38,12 @@ export default function LeaderboardPage() {
       }
       const data = (await res.json()) as any[];
       
-      // Transform data: rewards = referrals × 20 FRH (referral-based only)
+      // Transform data: rewards = referrals × 40 FRH (referral-based only)
       const transformed: LeaderboardEntry[] = data.map((entry) => ({
         rank: entry.rank || 0,
         wallet: entry.wallet || "",
         referrals_count: entry.referrals_count || 0,
-        rewards: (entry.referrals_count || 0) * 20, // Referrals × 20 FRH
+        rewards: (entry.referrals_count || 0) * 40, // Referrals × 40 FRH
       }));
       
       setEntries(transformed);
@@ -58,7 +58,7 @@ export default function LeaderboardPage() {
               rank: userData.rank || 0,
               wallet: userData.wallet || address,
               referrals_count: userData.referrals_count || 0,
-              rewards: (userData.referrals_count || 0) * 20, // Referrals × 20 FRH
+              rewards: (userData.referrals_count || 0) * 40, // Referrals × 40 FRH
             };
             setUserEntry(userEntry);
           }

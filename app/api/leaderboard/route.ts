@@ -5,7 +5,7 @@ import { getKey, smembers, keys } from "../../../lib/upstash";
 type LeaderboardRow = {
   wallet: string;
   referrals_count: number;
-  rewards: number; // Referrals × 20 FRH
+  rewards: number; // Referrals × 40 FRH
   rank: number;
 };
 
@@ -106,10 +106,10 @@ export async function GET() {
       }),
     );
 
-    // Calculate rewards: referrals × 20 FRH
+    // Calculate rewards: referrals × 40 FRH
     const withRewards: LeaderboardRow[] = withCounts.map((row) => ({
       ...row,
-      rewards: row.referrals_count * 20,
+      rewards: row.referrals_count * 40,
       rank: 0, // Will be set below
     }));
 

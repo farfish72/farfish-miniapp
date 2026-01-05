@@ -9,6 +9,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { base } from "viem/chains";
+import { formatEther } from "viem";
 import { sdk } from "@farcaster/miniapp-sdk";
 
 import Header from "../components/Header";
@@ -18,7 +19,8 @@ import useFarcasterEnvironment from "../hooks/useFarcasterEnvironment";
 import useUserStakes from "../hooks/useUserStakes";
 
 import claimControllerAbi from "../abi/claimController.json";
-import { CLAIM_CONTROLLER_ADDRESS } from "../constants";
+import erc20Abi from "../abi/erc20.json";
+import { CLAIM_CONTROLLER_ADDRESS, ERC20_TOKEN_ADDRESS } from "../constants";
 
 /* ---------------- helpers ---------------- */
 const formatTime = (seconds: bigint | number): string => {
@@ -61,6 +63,7 @@ export default function ChestPage() {
     streak: null as number | null,
     daysActive: null as number | null,
     referrals: null as number | null,
+    rank: null as number | null,
   });
 
   // Fetch referral data from KV
@@ -75,6 +78,7 @@ export default function ChestPage() {
           setTrustAnchorData(prev => ({
             ...prev,
             referrals: data.referrals_count || 0,
+            rank: Number(data?.rank ?? 0) > 0 ? Number(data.rank) : null,
           }));
         }
       } catch (error) {
@@ -84,6 +88,29 @@ export default function ChestPage() {
     
     fetchReferralData();
   }, [address]);
+
+  // Read ERC20 token balance
+  const { data: tokenBalance } = useReadContract({
+    address: ERC20_TOKEN_ADDRESS as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(isConnected && address && isBase) },
+  });
+
+  // Format token balance
+  const formattedBalance = useMemo(() => {
+    if (!tokenBalance || typeof tokenBalance !== 'bigint') return null;
+    const balance = formatEther(tokenBalance);
+    const numBalance = parseFloat(balance);
+    
+    if (numBalance === 0) return "0 FRH";
+    if (numBalance < 0.001) return "<0.001 FRH";
+    if (numBalance < 1) return `${numBalance.toFixed(3)} FRH`;
+    if (numBalance < 1000) return `${numBalance.toFixed(2)} FRH`;
+    if (numBalance < 1000000) return `${(numBalance / 1000).toFixed(2)}K FRH`;
+    return `${(numBalance / 1000000).toFixed(2)}M FRH`;
+  }, [tokenBalance]);
 
   /* ================= DAILY BRONZE ================= */
   const { data: dailyData } = useReadContract({
@@ -325,6 +352,8 @@ export default function ChestPage() {
           streak={trustAnchorData.streak}
           daysActive={trustAnchorData.daysActive}
           referrals={trustAnchorData.referrals}
+          totalHolding={formattedBalance}
+          rank={trustAnchorData.rank}
           hasActiveStake={activeStakes.length > 0}
         />
         <ChestCard

@@ -277,81 +277,51 @@ function ProfilePageContent() {
       <Header title="Profile" />
 
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
-        {/* A) BASIC PROFILE SECTION - ALWAYS VISIBLE */}
+        {/* SOCIAL PROFILE SECTION - PRIMARY HEADER */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <div className="flex items-start gap-4">
-            {/* Avatar - always visible with fallback */}
-            <div className="relative">
-              <div className="relative h-24 w-24 rounded-2xl overflow-hidden border-2 border-white/20">
+          {loadingFarcasterContext ? (
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-xl bg-white/10 animate-pulse"></div>
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-white/10 rounded animate-pulse"></div>
+                <div className="h-3 bg-white/10 rounded w-3/4 animate-pulse"></div>
+              </div>
+            </div>
+          ) : farcasterContext ? (
+            <div className="flex items-start gap-4">
+              <div className="relative h-16 w-16 rounded-xl overflow-hidden border-2 border-purple-400/50">
                 <Image
-                  src={getAvatarUrl()}
-                  alt="Profile Avatar"
-                  width={96}
-                  height={96}
+                  src={farcasterContext.pfpUrl}
+                  alt="Social Profile"
+                  width={64}
+                  height={64}
                   className="object-cover w-full h-full"
                   unoptimized
                 />
-                {/* Edit icon for custom avatar */}
-                <label className="absolute top-1 right-1 bg-blue-500 rounded-full p-1.5 cursor-pointer border-2 border-white/90 shadow-lg hover:bg-blue-600 transition-colors">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          const result = event.target?.result as string;
-                          localStorage.setItem('profileImage', result);
-                          window.location.reload();
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  />
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                  </svg>
-                </label>
-              </div>
-            </div>
-
-            {/* Username - always visible with fallback */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 group relative">
-                <input
-                  type="text"
-                  className="text-2xl font-bold bg-transparent border-b-2 border-transparent focus:border-blue-400 focus:outline-none w-full pr-8"
-                  defaultValue={getUsername()}
-                  placeholder="Enter username"
-                  onBlur={(e) => {
-                    const newUsername = e.target.value.trim();
-                    if (newUsername) {
-                      localStorage.setItem('username', newUsername);
-                    } else {
-                      localStorage.removeItem('username');
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur();
-                  }}
-                />
-                <div className="absolute right-2 text-white/50 group-focus-within:text-blue-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                  </svg>
-                </div>
               </div>
               
-              <div className="mt-2 space-y-1">
+              <div className="flex-1">
+                <div className="text-lg font-bold text-white mb-1">
+                  @{farcasterContext.username}
+                </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  <span className="text-sm text-blue-300">Profile always accessible</span>
+                  <span className="text-sm text-purple-300">
+                    FID: {farcasterContext.fid}
+                  </span>
                 </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="text-center py-4">
+              <div className="text-white/60 mb-2">
+                <svg className="w-8 h-8 mx-auto mb-2 opacity-50" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.2 12c0-6.2-5-11.2-11.2-11.2S.8 5.8.8 12s5 11.2 11.2 11.2S23.2 18.2 23.2 12z"/>
+                </svg>
+              </div>
+              <p className="text-white/70 text-sm mb-2">Social profile not connected</p>
+              <p className="text-white/50 text-xs">Open inside the social platform to link your profile</p>
+            </div>
+          )}
         </section>
 
         {/* B) WALLET SECTION - CONDITIONAL */}
@@ -395,64 +365,6 @@ function ProfilePageContent() {
             <div className="text-center py-4">
               <p className="text-white/70 mb-4">Connect your wallet to view stats and access features</p>
               <WalletConnect />
-            </div>
-          )}
-        </section>
-
-        {/* C) FARCASTER SECTION - CONDITIONAL */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-4 h-4 bg-purple-500 rounded-full"></div>
-            <h3 className="text-lg font-semibold text-white">Social Profile</h3>
-          </div>
-          
-          {loadingFarcasterContext ? (
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-xl bg-white/10 animate-pulse"></div>
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-white/10 rounded animate-pulse"></div>
-                <div className="h-3 bg-white/10 rounded w-3/4 animate-pulse"></div>
-              </div>
-            </div>
-          ) : farcasterContext ? (
-            <div className="flex items-start gap-4">
-              <div className="relative h-16 w-16 rounded-xl overflow-hidden border-2 border-purple-400/50">
-                <Image
-                  src={farcasterContext.pfpUrl}
-                  alt="Social Profile"
-                  width={64}
-                  height={64}
-                  className="object-cover w-full h-full"
-                  unoptimized
-                />
-                <div className="absolute bottom-0 right-0 bg-purple-500 rounded-full p-1 border border-white/90">
-                  <svg className="w-2 h-2 text-white" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M23.2 12c0-6.2-5-11.2-11.2-11.2S.8 5.8.8 12s5 11.2 11.2 11.2S23.2 18.2 23.2 12z"/>
-                  </svg>
-                </div>
-              </div>
-              
-              <div className="flex-1">
-                <div className="text-lg font-bold text-white mb-1">
-                  @{farcasterContext.username}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
-                  <span className="text-sm text-purple-300">
-                    FID: {farcasterContext.fid}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-4">
-              <div className="text-white/60 mb-2">
-                <svg className="w-8 h-8 mx-auto mb-2 opacity-50" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M23.2 12c0-6.2-5-11.2-11.2-11.2S.8 5.8.8 12s5 11.2 11.2 11.2S23.2 18.2 23.2 12z"/>
-                </svg>
-              </div>
-              <p className="text-white/70 text-sm mb-2">Social profile not connected</p>
-              <p className="text-white/50 text-xs">Open inside the social platform to link your profile</p>
             </div>
           )}
         </section>
