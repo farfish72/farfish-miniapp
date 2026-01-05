@@ -30,36 +30,36 @@ type LiveStats = {
 
 const faqItems = [
   {
-    question: "1. What is FarFISH?",
-    answer: "FarFISH is a daily habit-building app on Base that rewards consistent on-chain activity. Connect your wallet, complete tasks, and earn FRH tokens.",
+    question: "What is FarFISH?",
+    answer: "FarFISH is a daily habit building app on Base that rewards you for staying active on chain. Just connect your wallet, complete simple tasks, and earn FRH tokens every day.",
   },
   {
-    question: "2. How do I earn FRH tokens?",
-    answer: "Claim daily rewards in Chest, complete social tasks in Steam, stake NFTs for bonus rewards, and refer friends to the platform.",
+    question: "How do I earn FRH tokens?",
+    answer: "There are several ways to earn. Claim your daily rewards in the Chest section, complete social tasks in Steam, stake your NFTs for bonus rewards, and invite friends to join the platform.",
   },
   {
-    question: "3. What are the main features?",
-    answer: "Chest (daily rewards), Steam (task completion), Stake (NFT staking), Rank (leaderboard), and Profile (your stats and identity).",
+    question: "What are the main features?",
+    answer: "The app has five main sections. Chest for claiming daily rewards, Steam for completing tasks, Stake for earning with your NFTs, Rank to see the leaderboard, and Profile to track your progress.",
   },
   {
-    question: "4. How does staking work?",
-    answer: "Mint or buy FarFISH NFTs, then stake them to earn higher daily rewards and unlock premium features. Unstake anytime.",
+    question: "How does staking work?",
+    answer: "First you need to mint or buy FarFISH NFTs. Then you can stake them to earn higher daily rewards and unlock premium features. You can unstake them whenever you want.",
   },
   {
-    question: "5. What determines my rank?",
-    answer: "Your rank is based solely on the total amount of FRH tokens you hold. More FRH = higher rank on the leaderboard.",
+    question: "What determines my rank?",
+    answer: "Your rank depends entirely on how many FRH tokens you hold in total. The more FRH you have, the higher you climb on the leaderboard.",
   },
   {
-    question: "6. Is my data safe?",
-    answer: "Yes. FarFISH is non-custodial and built on Base blockchain. You control your wallet and assets at all times.",
+    question: "Is my data safe?",
+    answer: "Absolutely. FarFISH is non custodial and built on the Base blockchain. This means you always control your own wallet and assets. We never hold your funds.",
   },
   {
-    question: "7. How do referrals work?",
-    answer: "Share your referral link to earn 40 FRH per new user. Reach milestones (5, 10, 30, 50 referrals) for bonus rewards.",
+    question: "How do referrals work?",
+    answer: "Share your personal referral link with friends and earn 40 FRH for each new user who joins. Hit certain milestones like 5, 10, 30, or 50 referrals to unlock bonus rewards.",
   },
   {
-    question: "8. When can I trade FRH?",
-    answer: "FRH token listing is planned for Q1 2026. Until then, focus on building your daily habits and accumulating tokens.",
+    question: "When can I trade FRH?",
+    answer: "FRH token listing is planned for the first quarter of 2026. Until then, focus on building your daily habits and collecting as many tokens as possible.",
   },
 ];
 

@@ -17,7 +17,7 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "./lib/wagmi";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
-import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
+import { NFT_CONTRACT_ADDRESS, getNameFromTokenId, getRarityLabelFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { base } from "viem/chains";
 import { formatEther } from "viem";
@@ -678,7 +678,7 @@ export default function HomeClient() {
   }, [toast]);
 
   const GALLERY_IMAGES = useMemo(
-    () => ["/fish1.jpg", "/fish2.jpg", "/fish3.jpg", "/fish4.jpg"],
+    () => ["/bluefin.jpg", "/goldray.jpg", "/redspike.jpg", "/shadowgill.jpg"],
     [],
   );
 
@@ -956,27 +956,35 @@ export default function HomeClient() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {GALLERY_IMAGES.map((src, idx) => (
-              <div
-                key={src}
-                className="group relative bg-gradient-to-br from-white/10 to-white/5 rounded-2xl aspect-square overflow-hidden border border-white/20 hover:border-purple-400/50 transition-all duration-300 hover:scale-105"
-              >
-                <Image
-                  src={src}
-                  alt={`Artwork ${idx + 1}`}
-                  fill
-                  priority={idx === 0}
-                  sizes="(max-width: 768px) 50vw, 200px"
-                  className="object-cover group-hover:scale-110 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <div className="absolute bottom-3 left-3">
-                    <p className="text-white font-semibold text-sm">Fish #{idx + 1}</p>
-                    <p className="text-white/70 text-xs">Rare Collection</p>
+            {GALLERY_IMAGES.map((src, idx) => {
+              // Map gallery images to representative token IDs for different rarities
+              const representativeTokenIds = [0, 7, 12, 15]; // Bluefin, GoldRay, RedSpike, ShadowGill
+              const tokenId = representativeTokenIds[idx] || 0;
+              const fishName = getNameFromTokenId(tokenId);
+              const rarityLabel = getRarityLabelFromTokenId(tokenId);
+              
+              return (
+                <div
+                  key={src}
+                  className="group relative bg-gradient-to-br from-white/10 to-white/5 rounded-2xl aspect-square overflow-hidden border border-white/20 hover:border-purple-400/50 transition-all duration-300 hover:scale-105"
+                >
+                  <Image
+                    src={src}
+                    alt={`${fishName || 'Fish'} artwork`}
+                    fill
+                    priority={idx === 0}
+                    sizes="(max-width: 768px) 50vw, 200px"
+                    className="object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="absolute bottom-3 left-3">
+                      <p className="text-white font-semibold text-sm">{fishName || `Fish #${idx + 1}`}</p>
+                      <p className="text-white/70 text-xs">{rarityLabel || 'Rare'} Collection</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

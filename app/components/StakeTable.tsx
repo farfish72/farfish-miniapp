@@ -9,7 +9,7 @@ export default function StakeTable() {
 
   return (
     <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-      <h3 className="font-semibold text-lg mb-4">FarFISH Official NFT Staking Reward Table</h3>
+      <h3 className="font-semibold text-lg mb-4">Staking Reward Table</h3>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
