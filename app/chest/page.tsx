@@ -105,11 +105,10 @@ export default function ChestPage() {
     const numBalance = parseFloat(balance);
     
     if (numBalance === 0) return "0 FRH";
-    if (numBalance < 0.001) return "<0.001 FRH";
-    if (numBalance < 1) return `${numBalance.toFixed(3)} FRH`;
-    if (numBalance < 1000) return `${numBalance.toFixed(2)} FRH`;
-    if (numBalance < 1000000) return `${(numBalance / 1000).toFixed(2)}K FRH`;
-    return `${(numBalance / 1000000).toFixed(2)}M FRH`;
+    if (numBalance < 1) return "0 FRH";
+    if (numBalance < 1000) return `${Math.floor(numBalance)} FRH`;
+    if (numBalance < 1000000) return `${Math.floor(numBalance / 1000)}K FRH`;
+    return `${Math.floor(numBalance / 1000000)}M FRH`;
   }, [tokenBalance]);
 
   /* ================= DAILY BRONZE ================= */
