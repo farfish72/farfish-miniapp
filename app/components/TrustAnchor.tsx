@@ -60,8 +60,8 @@ export default function TrustAnchor({
       bgColor: "from-purple-500/20 to-pink-500/20"
     },
     { 
-      icon: "�", 
-      label: "Total Holding", 
+      icon: "💰", 
+      label: "Holding", 
       value: totalHolding || "0 FRH",
       color: "from-yellow-400 to-amber-500",
       bgColor: "from-yellow-500/20 to-amber-500/20"
