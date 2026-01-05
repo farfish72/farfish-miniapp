@@ -44,9 +44,8 @@ export default function StakeTable() {
       </div>
       <div className="mt-4 text-sm text-white/70 space-y-1">
         <p>- Rewards are fixed and permanent</p>
-        <p>- You select both NFT and staking duration</p>
+        <p>- Select both NFT and staking duration</p>
         <p>- Higher NFT rarity gives higher FRH reward</p>
-        <p>- Monthly rewards are distributed from the Chest page</p>
       </div>
     </section>
   );
