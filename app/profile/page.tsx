@@ -31,35 +31,35 @@ type LiveStats = {
 const faqItems = [
   {
     question: "What is FarFISH?",
-    answer: "FarFISH is a daily habit building app on Base that rewards you for staying active on chain. Just connect your wallet, complete simple tasks, and earn FRH tokens every day.",
+    answer: "FarFISH is a daily habit-building app on Base that rewards consistent on-chain activity. Connect your wallet, complete simple tasks, and earn FRH tokens every day.",
   },
   {
     question: "How do I earn FRH tokens?",
-    answer: "There are several ways to earn. Claim your daily rewards in the Chest section, complete social tasks in Steam, stake your NFTs for bonus rewards, and invite friends to join the platform.",
+    answer: "Earn through multiple ways: claim daily rewards in Chest, complete social tasks in Steam, stake NFTs for bonus rewards, and invite friends to the platform.",
   },
   {
     question: "What are the main features?",
-    answer: "The app has five main sections. Chest for claiming daily rewards, Steam for completing tasks, Stake for earning with your NFTs, Rank to see the leaderboard, and Profile to track your progress.",
+    answer: "Five core sections: Chest for daily rewards, Steam for task completion, Stake for NFT rewards, Rank for leaderboards, and Profile for progress tracking.",
   },
   {
     question: "How does staking work?",
-    answer: "First you need to mint or buy FarFISH NFTs. Then you can stake them to earn higher daily rewards and unlock premium features. You can unstake them whenever you want.",
+    answer: "Mint or purchase FarFISH NFTs, then stake them to earn enhanced daily rewards and unlock premium features. You can unstake anytime you want.",
   },
   {
     question: "What determines my rank?",
-    answer: "Your rank depends entirely on how many FRH tokens you hold in total. The more FRH you have, the higher you climb on the leaderboard.",
+    answer: "Your leaderboard position is based on your total FRH token balance. More tokens mean a higher rank on the leaderboard.",
   },
   {
     question: "Is my data safe?",
-    answer: "Absolutely. FarFISH is non custodial and built on the Base blockchain. This means you always control your own wallet and assets. We never hold your funds.",
+    answer: "Yes. FarFISH is non-custodial and built on Base blockchain. You maintain full control of your wallet and assets at all times.",
   },
   {
-    question: "How do referrals work?",
-    answer: "Share your personal referral link with friends and earn 40 FRH for each new user who joins. Hit certain milestones like 5, 10, 30, or 50 referrals to unlock bonus rewards.",
+    question: "How do invites work?",
+    answer: "Share your personal invite link with friends and earn 40 FRH for each new user who joins. Reach milestones like 5, 10, 30, or 50 invites for bonus rewards.",
   },
   {
     question: "When can I trade FRH?",
-    answer: "FRH token listing is planned for the first quarter of 2026. Until then, focus on building your daily habits and collecting as many tokens as possible.",
+    answer: "FRH token listing is planned for Q1 2026. Focus on building daily habits and accumulating tokens until then.",
   },
 ];
 
@@ -260,7 +260,7 @@ function ProfilePageContent() {
       },
       {
         label: "Rank",
-        value: loadingStats ? "…" : statsError.rank ? "Error" : (liveStats.rank && liveStats.rank > 0 ? `#${liveStats.rank}` : "Unranked"),
+        value: loadingStats ? "…" : statsError.rank ? "Error" : (liveStats.rank && liveStats.rank > 0 ? `#${liveStats.rank}` : "Not ranked"),
       },
     ],
     [liveStats, loadingStats, statsError, stakes.length]
@@ -357,7 +357,7 @@ function ProfilePageContent() {
               
               {Object.values(statsError).some(Boolean) && !loadingStats && (
                 <p className="text-xs text-red-300 text-center">
-                  Some stats failed to load. Try again later.
+                  Some data failed to load. Try refreshing the page.
                 </p>
               )}
             </div>

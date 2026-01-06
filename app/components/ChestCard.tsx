@@ -76,7 +76,7 @@ export default function ChestCard({
       await onAction();
     } catch (error) {
       console.error('ChestCard action error:', error);
-      setLocalError('Action failed. Please try again.');
+      setLocalError('Action failed. Please refresh and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -92,7 +92,7 @@ export default function ChestCard({
       await onSecondaryAction();
     } catch (error) {
       console.error('ChestCard secondary action error:', error);
-      setLocalError('Action failed. Please try again.');
+      setLocalError('Action failed. Please refresh and try again.');
     } finally {
       setSecondaryLoading(false);
     }
@@ -212,7 +212,7 @@ export default function ChestCard({
               {secondaryLoading ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                  Loading...
+                  Processing...
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-2">

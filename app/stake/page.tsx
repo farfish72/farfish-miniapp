@@ -93,19 +93,19 @@ export default function StakingPage() {
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
         {/* Actions */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h2 className="text-xl font-bold mb-4">Stake Your NFTs</h2>
+          <h2 className="text-xl font-bold mb-4">NFT Staking</h2>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setIsStakeModalOpen(true)}
               className="bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg"
             >
-              Stake NFT
+              Lock NFT
             </button>
             <button
               onClick={() => setIsUnstakeModalOpen(true)}
               className="bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20"
             >
-              Unstake NFT
+              Unlock NFT
             </button>
           </div>
         </section>
@@ -114,19 +114,19 @@ export default function StakingPage() {
 
         {/* My Stakes */}
         <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h3 className="font-semibold text-lg mb-4">My Staked NFTs</h3>
+          <h3 className="font-semibold text-lg mb-4">Your Locked NFTs</h3>
 
           {/* Static informational text */}
           <p className="mb-4 text-sm text-white/80">
-            When your claim period ends, you can automatically click the Claim button to claim your staking reward.
+            When your lock period ends, click Claim to collect your staking rewards.
           </p>
 
-          {!readEnabled && <p>Connect wallet.</p>}
-          {isLoading && <p>Loading…</p>}
-          {isError && <p className="text-red-400">Failed to load stakes.</p>}
+          {!readEnabled && <p>Connect your wallet to continue.</p>}
+          {isLoading && <p>Loading your NFTs...</p>}
+          {isError && <p className="text-red-400">Unable to load staked NFTs.</p>}
 
           {readEnabled && !isLoading && stakes.length === 0 && (
-            <p>No staked NFTs.</p>
+            <p>No NFTs currently staked.</p>
           )}
 
           {readEnabled &&
@@ -150,7 +150,7 @@ export default function StakingPage() {
                     key={s.stakeId.toString()}
                     className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 mb-3"
                   >
-                    <p className="font-semibold">Stake #{s.stakeId.toString()}</p>
+                    <p className="font-semibold">Position #{s.stakeId.toString()}</p>
                     <button
                       disabled={!isButtonEnabled}
                       onClick={() => handleClaim(s.stakeId)}

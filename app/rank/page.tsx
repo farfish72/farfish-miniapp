@@ -68,7 +68,7 @@ export default function LeaderboardPage() {
       }
     } catch (error) {
       console.error("Failed to fetch leaderboard", error);
-      setToast({ type: "error", message: "Could not load leaderboard. Please try again." });
+      setToast({ type: "error", message: "Unable to load rankings. Please try again." });
     } finally {
       setLoading(false);
     }
@@ -107,7 +107,7 @@ export default function LeaderboardPage() {
           </div>
 
           <p className="text-sm text-white/70 mb-4">
-            NFT rarity may boost your final rewards at distribution.
+            Rankings based on referral activity. NFT rarity may boost final rewards.
           </p>
 
           <div className="overflow-x-auto">
@@ -116,7 +116,7 @@ export default function LeaderboardPage() {
                 <tr className="text-left text-xs uppercase tracking-wide text-white/60">
                   <th className="py-2 pr-3">Rank</th>
                   <th className="py-2 pr-3">Username</th>
-                  <th className="py-2 pr-3">Referrals</th>
+                  <th className="py-2 pr-3">Friends</th>
                   <th className="py-2">Rewards (FRH)</th>
                 </tr>
               </thead>
@@ -124,14 +124,14 @@ export default function LeaderboardPage() {
                 {loading && (
                   <tr>
                     <td colSpan={4} className="py-4 text-center text-white/60 animate-pulse">
-                      Loading leaderboard…
+                      Loading rankings...
                     </td>
                   </tr>
                 )}
                 {!loading && entries.length === 0 && (
                   <tr>
                     <td colSpan={4} className="py-4 text-center text-white/60">
-                      No referrals yet.
+                      No activity yet. Start inviting friends!
                     </td>
                   </tr>
                 )}
@@ -157,7 +157,7 @@ export default function LeaderboardPage() {
           {/* Show user's own rank if outside top 100 */}
           {userEntry && !entries.find((e) => e.wallet.toLowerCase() === address?.toLowerCase()) && (
             <div className="mt-4 pt-4 border-t border-white/10">
-              <h3 className="text-sm font-semibold mb-2 text-white/80">You</h3>
+              <h3 className="text-sm font-semibold mb-2 text-white/80">Your Position</h3>
               <div className="rounded-lg border border-[#00d4c4]/30 bg-[#00d4c4]/5 p-3">
                 <div className="grid grid-cols-4 gap-2 text-sm">
                   <div>
@@ -169,7 +169,7 @@ export default function LeaderboardPage() {
                     <p className="font-mono">{getUsername(userEntry.wallet)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-white/60 mb-1">Referrals</p>
+                    <p className="text-xs text-white/60 mb-1">Friends</p>
                     <p>{userEntry.referrals_count}</p>
                   </div>
                   <div>

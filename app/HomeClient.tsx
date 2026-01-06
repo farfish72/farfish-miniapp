@@ -17,7 +17,7 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "./lib/wagmi";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
-import { NFT_CONTRACT_ADDRESS, getNameFromTokenId, getRarityLabelFromTokenId } from "./constants";
+import { NFT_CONTRACT_ADDRESS, getNameFromTokenId } from "./constants";
 import nftDropAbi from "./abi/nftDrop.json";
 import { base } from "viem/chains";
 import { formatEther } from "viem";
@@ -105,6 +105,7 @@ export default function HomeClient() {
   const [hasMinted, setHasMinted] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const [lastMintedTokenId, setLastMintedTokenId] = useState<number | null>(null);
+  const [lastMintedQuantity, setLastMintedQuantity] = useState<number>(1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [mintedTokenUri, setMintedTokenUri] = useState<string | null>(null);
@@ -428,7 +429,7 @@ export default function HomeClient() {
       checkHasMinted();
       setIsMinting(false);
       setJustMinted(true);
-      showSuccess("NFT minted successfully!");
+      showSuccess(`Successfully minted ${lastMintedQuantity} NFT${lastMintedQuantity > 1 ? 's' : ''}!`);
     }
   }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, checkHasMinted, showSuccess]);
 
@@ -469,10 +470,7 @@ export default function HomeClient() {
       return;
     }
 
-    if (hasMinted) {
-      showError("You have already minted an NFT.");
-      return;
-    }
+    // Note: Removed artificial UI block - let contract quantityLimitPerWallet determine limits
 
     // Build candidates with remaining supply > 0 and valid claim conditions
     const candidates = supplyInfo.filter((info) => {
@@ -506,7 +504,36 @@ export default function HomeClient() {
       }
 
       const { pricePerToken, currency, quantityLimitPerWallet } = claim.condition;
-      const quantity = BigInt(1);
+      
+      // Check how many user already owns of this specific tokenId
+      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
+      const currentBalance = await (publicClient!.readContract as any)({
+        address: NFT_CONTRACT_ADDRESS as `0x${string}`,
+        abi: nftDropAbi as any,
+        functionName: "balanceOf",
+        args: [address as `0x${string}`, BigInt(tokenId)],
+      }) as bigint;
+
+      // Calculate how many more can be minted for this tokenId
+      const remainingForUser = quantityLimitPerWallet - currentBalance;
+      
+      if (remainingForUser <= BigInt(0)) {
+        showError(`You have reached the limit for this token type. Try again for a different token.`);
+        return;
+      }
+
+      // Mint the maximum allowed or remaining supply, whichever is smaller
+      const maxMintable = remainingForUser > BigInt(10) ? BigInt(10) : remainingForUser; // Cap at 10 per transaction
+      const quantity = maxMintable;
+
+      console.log(`🎯 Minting details:`, {
+        tokenId,
+        currentBalance: currentBalance.toString(),
+        quantityLimitPerWallet: quantityLimitPerWallet.toString(),
+        remainingForUser: remainingForUser.toString(),
+        quantity: quantity.toString(),
+        pricePerToken: pricePerToken.toString(),
+      });
 
       // Verify mint has started
       const now = BigInt(Math.floor(Date.now() / 1000));
@@ -544,6 +571,9 @@ export default function HomeClient() {
       };
 
       setIsMinting(true);
+
+      // Store the quantity for success message
+      setLastMintedQuantity(Number(quantity));
 
       // Call claim function
       await writeMint({
@@ -639,12 +669,9 @@ export default function HomeClient() {
 
   // Button states and labels
   const primaryButtonLabel = useMemo(() => {
-    if (hasMinted) {
-      if (justMinted || isMintConfirmed) return "Minted";
-      return "Already Minted";
-    }
-    return "Early Access";
-  }, [hasMinted, isMintConfirmed, justMinted]);
+    if (justMinted || isMintConfirmed) return "Minted";
+    return "Mint NFTs";
+  }, [isMintConfirmed, justMinted]);
 
   const primaryButtonClasses = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) {
@@ -653,11 +680,8 @@ export default function HomeClient() {
     if (!address || !isConnected) {
       return "w-full py-4 text-lg font-semibold rounded-xl bg-white/15 text-white hover:bg-white/25 transition";
     }
-    if (hasMinted) {
-      return "w-full py-4 text-lg font-semibold rounded-xl bg-white/10 text-white/50 cursor-not-allowed";
-    }
     return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black transition disabled:opacity-60";
-  }, [address, isConnected, hasMinted]);
+  }, [address, isConnected]);
 
   const primaryButtonDisabled =
     isConnecting ||
@@ -665,7 +689,6 @@ export default function HomeClient() {
     isMintPending ||
     isMintConfirming ||
     !NFT_CONTRACT_ADDRESS ||
-    hasMinted ||
     loadingSupplies ||
     loadingClaimConditions ||
     representativePrice === null;
@@ -956,35 +979,27 @@ export default function HomeClient() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {GALLERY_IMAGES.map((src, idx) => {
-              // Map gallery images to representative token IDs for different rarities
-              const representativeTokenIds = [0, 7, 12, 15]; // Bluefin, GoldRay, RedSpike, ShadowGill
-              const tokenId = representativeTokenIds[idx] || 0;
-              const fishName = getNameFromTokenId(tokenId);
-              const rarityLabel = getRarityLabelFromTokenId(tokenId);
-              
-              return (
-                <div
-                  key={src}
-                  className="group relative bg-gradient-to-br from-white/10 to-white/5 rounded-2xl aspect-square overflow-hidden border border-white/20 hover:border-purple-400/50 transition-all duration-300 hover:scale-105"
-                >
-                  <Image
-                    src={src}
-                    alt={`${fishName || 'Fish'} artwork`}
-                    fill
-                    priority={idx === 0}
-                    sizes="(max-width: 768px) 50vw, 200px"
-                    className="object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="absolute bottom-3 left-3">
-                      <p className="text-white font-semibold text-sm">{fishName || `Fish #${idx + 1}`}</p>
-                      <p className="text-white/70 text-xs">{rarityLabel || 'Rare'} Collection</p>
-                    </div>
+            {GALLERY_IMAGES.map((src, idx) => (
+              <div
+                key={src}
+                className="group relative bg-gradient-to-br from-white/10 to-white/5 rounded-2xl aspect-square overflow-hidden border border-white/20 hover:border-purple-400/50 transition-all duration-300 hover:scale-105"
+              >
+                <Image
+                  src={src}
+                  alt={`Artwork ${idx + 1}`}
+                  fill
+                  priority={idx === 0}
+                  sizes="(max-width: 768px) 50vw, 200px"
+                  className="object-cover group-hover:scale-110 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="absolute bottom-3 left-3">
+                    <p className="text-white font-semibold text-sm">Fish #{idx + 1}</p>
+                    <p className="text-white/70 text-xs">Rare Collection</p>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       </div>

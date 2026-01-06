@@ -181,7 +181,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
       const errorMsg = error?.message || String(error);
       console.error("Stake error:", error);
       if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
-        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+        setToast({ type: "error", message: "Staking rewards unavailable. Please contact support." });
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }
@@ -248,7 +248,7 @@ export default function StakeModal({ isOpen, onClose, onSuccess }: StakeModalPro
       const errorMsg = stakeError.message || String(stakeError);
       console.error("Stake error:", stakeError);
       if (errorMsg.includes("mint") || errorMsg.includes("Mint") || errorMsg.includes("revert")) {
-        setToast({ type: "error", message: "Rewards temporarily unavailable — contact support." });
+        setToast({ type: "error", message: "Staking rewards unavailable. Please contact support." });
       } else {
         setToast({ type: "error", message: `Transaction failed: ${errorMsg}` });
       }

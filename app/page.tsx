@@ -4,12 +4,12 @@ import HomeClient from "./HomeClient";
 
 // ✔ This metadata must stay here (top of file)
 export const metadata: Metadata = {
-  title: "FarFISH – Mint & Rewards",
-  description: "Mint. Stake. Earn. Dominate the Seas.",
+  title: "FarFISH – Daily Rewards & NFTs",
+  description: "Build daily habits, earn rewards, collect NFTs on Base.",
 
   openGraph: {
     title: "FarFISH",
-    description: "Mint. Stake. Earn. Dominate the Seas.",
+    description: "Build daily habits, earn rewards, collect NFTs on Base.",
     type: "website",
     url: "https://farfish-miniapp5.vercel.app",
     images: ["https://farfish-miniapp5.vercel.app/og-image.png"],
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "FarFISH",
-    description: "Mint. Stake. Earn. Dominate the Seas.",
+    description: "Build daily habits, earn rewards, collect NFTs on Base.",
     images: ["https://farfish-miniapp5.vercel.app/og-image.png"],
   },
 

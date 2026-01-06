@@ -33,16 +33,16 @@ const formatTime = (seconds: bigint | number): string => {
 
 /* ---------------- ROTATING TEXTS ---------------- */
 const ROTATING_CHEST_TEXTS = [
-  "Daily Bronze Chest unlocked 🟤🐟\n\nClaim 3 FRH every day on FarFISH.\nFree, simple, on Base.",
-  "Another day, another Bronze Chest 🟤\n\nFarFISH rewards consistency.\nFree FRH daily on Base.",
-  "Daily check-in complete ✅\n\nBronze Chest claimed on FarFISH.\nFree FRH for real users.",
-  "Small daily rewards > big promises.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH, every day.",
-  "Consistency pays 🟤\n\nClaim your daily Bronze Chest on FarFISH.\nFree FRH on Base.",
-  "Daily Bronze Chest claimed 🐟\n\nFarFISH keeps rewarding active users.\nFree FRH, no tricks.",
-  "Free daily rewards, done right.\n\nBronze Chest unlocked on FarFISH 🟤\nBuilt on Base.",
-  "Daily habit unlocked 🔁\n\nBronze Chest claimed on FarFISH.\n3 FRH every day.",
-  "No hype. Just daily rewards.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH on Base.",
-  "Another Bronze Chest day 🟤\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.",
+  "Daily Bronze Chest ready 🟤🐟\n\nClaim 3 FRH tokens every day.\nSimple rewards on Base.",
+  "Another Bronze Chest awaits 🟤\n\nFarFISH rewards daily activity.\nConsistent habits pay off.",
+  "Daily check-in complete ✅\n\nBronze Chest claimed successfully.\nBuilding your streak on Base.",
+  "Small daily actions, big results.\n\nBronze Chest unlocked 🐟\nYour daily FRH is ready.",
+  "Consistency builds value 🟤\n\nClaim your Bronze Chest reward.\nDaily habits on Base network.",
+  "Daily Bronze Chest earned 🐟\n\nFarFISH rewards active users.\nSimple, reliable, daily.",
+  "Daily rewards made simple.\n\nBronze Chest unlocked 🟤\nBuilt for Base ecosystem.",
+  "Daily habit completed 🔁\n\nBronze Chest claimed today.\n3 FRH tokens earned.",
+  "No complexity, just rewards.\n\nBronze Chest ready 🐟\nDaily FRH on Base network.",
+  "Another successful day 🟤\n\nFarFISH delivers daily value.\nClaim your Bronze Chest.",
 ];
 
 const FARFISH_MINIAPP_URL = "https://farfish-miniapp5.vercel.app";
@@ -359,7 +359,7 @@ export default function ChestPage() {
           title="Daily Bronze Chest"
           description="Claim rewards every 24 hours."
           variant="bronze"
-          badge={daily?.canClaim ? "Ready" : "Cooling"}
+          badge={daily?.canClaim ? "Ready" : "Cooldown"}
           progress={daily?.canClaim ? 100 : 0}
           actionLabel={
             daily?.canClaim 
@@ -382,10 +382,10 @@ export default function ChestPage() {
           variant="silver"
           badge={
             !silver?.hasStaked
-              ? "Stake required"
+              ? "NFT required"
               : silver?.canClaim
               ? "Ready"
-              : "Cooling"
+              : "Cooldown"
           }
           actionLabel={
             silver?.canClaim
