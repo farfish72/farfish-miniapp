@@ -118,7 +118,7 @@ export default function StakingPage() {
 
           {/* Static informational text */}
           <p className="mb-4 text-sm text-white/80">
-            When your claim period ends, you can automatically click the Claim button to claim your staking reward.
+            Once the claim period is over, you can click Claim to collect your staking rewards.
           </p>
 
           {!readEnabled && <p>Connect wallet.</p>}

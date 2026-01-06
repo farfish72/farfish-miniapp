@@ -873,38 +873,102 @@ export default function HomeClient() {
         <div className="bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow-lg">
-              <span className="text-xl">🖼️</span>
+              <span className="text-xl">🎣</span>
             </div>
             <div>
               <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
                 Collection Preview
               </h3>
-              <p className="text-white/70 text-sm">Discover the rarities</p>
+              <p className="text-white/70 text-sm">Four unique rarities await</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {GALLERY_IMAGES.map((src, idx) => (
-              <div
-                key={src}
-                className="group relative bg-gradient-to-br from-white/10 to-white/5 rounded-2xl aspect-square overflow-hidden border border-white/20 hover:border-purple-400/50 transition-all duration-300 hover:scale-105"
-              >
-                <Image
-                  src={src}
-                  alt={`Artwork ${idx + 1}`}
-                  fill
-                  priority={idx === 0}
-                  sizes="(max-width: 768px) 50vw, 200px"
-                  className="object-cover group-hover:scale-110 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <div className="absolute bottom-3 left-3">
-                    <p className="text-white font-semibold text-sm">Fish #{idx + 1}</p>
-                    <p className="text-white/70 text-xs">Rare Collection</p>
-                  </div>
+            {/* BlueFin - Common */}
+            <div className="group relative bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-2xl aspect-square overflow-hidden border border-blue-400/30 hover:border-blue-400/60 transition-all duration-300 hover:scale-105">
+              <Image
+                src="/bluefin.jpg"
+                alt="BlueFin"
+                fill
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute top-3 right-3">
+                <div className="bg-blue-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                  <span className="text-xs font-bold text-white">COMMON</span>
                 </div>
               </div>
-            ))}
+              <div className="absolute bottom-3 left-3">
+                <p className="text-white font-bold text-lg">BlueFin</p>
+                <p className="text-blue-200 text-sm">The steady swimmer</p>
+              </div>
+            </div>
+
+            {/* GoldRay - Rare */}
+            <div className="group relative bg-gradient-to-br from-yellow-500/20 to-amber-500/20 rounded-2xl aspect-square overflow-hidden border border-yellow-400/30 hover:border-yellow-400/60 transition-all duration-300 hover:scale-105">
+              <Image
+                src="/goldray.jpg"
+                alt="GoldRay"
+                fill
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute top-3 right-3">
+                <div className="bg-yellow-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                  <span className="text-xs font-bold text-black">RARE</span>
+                </div>
+              </div>
+              <div className="absolute bottom-3 left-3">
+                <p className="text-white font-bold text-lg">GoldRay</p>
+                <p className="text-yellow-200 text-sm">Shines in the depths</p>
+              </div>
+            </div>
+
+            {/* RedSpike - Epic */}
+            <div className="group relative bg-gradient-to-br from-red-500/20 to-orange-500/20 rounded-2xl aspect-square overflow-hidden border border-red-400/30 hover:border-red-400/60 transition-all duration-300 hover:scale-105">
+              <Image
+                src="/redspike.jpg"
+                alt="RedSpike"
+                fill
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute top-3 right-3">
+                <div className="bg-red-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                  <span className="text-xs font-bold text-white">EPIC</span>
+                </div>
+              </div>
+              <div className="absolute bottom-3 left-3">
+                <p className="text-white font-bold text-lg">RedSpike</p>
+                <p className="text-red-200 text-sm">Fierce and powerful</p>
+              </div>
+            </div>
+
+            {/* ShadowGill - Legendary */}
+            <div className="group relative bg-gradient-to-br from-purple-500/20 to-black/40 rounded-2xl aspect-square overflow-hidden border border-purple-400/30 hover:border-purple-400/60 transition-all duration-300 hover:scale-105">
+              <Image
+                src="/shadowgill.jpg"
+                alt="ShadowGill"
+                fill
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute top-3 right-3">
+                <div className="bg-gradient-to-r from-purple-500 to-pink-500 backdrop-blur-sm px-2 py-1 rounded-full">
+                  <span className="text-xs font-bold text-white">LEGENDARY</span>
+                </div>
+              </div>
+              <div className="absolute bottom-3 left-3">
+                <p className="text-white font-bold text-lg">ShadowGill</p>
+                <p className="text-purple-200 text-sm">Master of the abyss</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-white/60">
+              Each rarity offers unique benefits and multipliers
+            </p>
           </div>
         </div>
       </div>

@@ -132,8 +132,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeI
 
         {/* Static description text */}
         <p className="mb-4 text-sm text-white/80">
-          When your claim period ends, you will be able to unstake your NFT.
-          For more information, please refer to the master reward table.
+          After the claim period ends, the NFT can be unstaked.
+          See the master reward table for details.
         </p>
 
         {/* Stake list */}

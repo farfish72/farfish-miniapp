@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureReferralEnv } from "../../../config/referral";
-import { getKey, incrKey, setKey, sadd } from "../../../../lib/upstash";
+import { getKey, incrKey, setKey, sadd, smembers, keys } from "../../../../lib/upstash";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
@@ -63,13 +63,76 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, alreadyRecorded: true });
     }
 
-    // Lookup referrer wallet from refCode
-    const referrerWallet = await getKey<string>(`refcode:${refCode}`);
-    if (!referrerWallet) {
-      return NextResponse.json({ error: "RefCode not found" }, { status: 404 });
+    // Derive referrer wallet deterministically from refCode
+    // refCode = last 8 chars of referrer's wallet address
+    let referrer: string;
+    
+    // First try the cache for performance
+    const cachedReferrerWallet = await getKey<string>(`refcode:${refCode}`);
+    if (cachedReferrerWallet) {
+      referrer = cachedReferrerWallet.toLowerCase();
+    } else {
+      // Cache miss - rebuild from existing data sources
+      // Look through all known wallets to find one ending with refCode
+      let matchingReferrer: string | null = null;
+      
+      // 1. Check existing referrers set (most reliable source)
+      const allReferrers = await smembers(`set:referrers`);
+      matchingReferrer = allReferrers.find(wallet => 
+        wallet.toLowerCase().slice(-8) === refCode
+      ) || null;
+      
+      // 2. If not found, check refcount keys (wallets with referral counts)
+      if (!matchingReferrer) {
+        const refcountKeys = await keys("refcount:*");
+        
+        for (const key of refcountKeys) {
+          const wallet = key.replace("refcount:", "");
+          if (wallet.toLowerCase().slice(-8) === refCode) {
+            matchingReferrer = wallet;
+            break;
+          }
+        }
+      }
+      
+      // 3. If still not found, check all referral records for referrer wallets
+      if (!matchingReferrer) {
+        const referralKeys = await keys("referral:*");
+        
+        for (const key of referralKeys) {
+          try {
+            const record = await getKey<string>(key);
+            if (record) {
+              let referrerWallet: string;
+              try {
+                const parsed = JSON.parse(record);
+                referrerWallet = parsed?.referrer;
+              } catch {
+                referrerWallet = record;
+              }
+              
+              if (referrerWallet && referrerWallet.toLowerCase().slice(-8) === refCode) {
+                matchingReferrer = referrerWallet;
+                break;
+              }
+            }
+          } catch {
+            // Skip invalid records
+          }
+        }
+      }
+      
+      if (matchingReferrer) {
+        referrer = matchingReferrer.toLowerCase();
+        // Rebuild the cache entry for future lookups
+        await setKey(`refcode:${refCode}`, referrer);
+      } else {
+        // No existing wallet found - this could be a first-time referrer
+        // Since we can't safely reconstruct the full wallet from 8 chars,
+        // and the requirements forbid wallet guessing, we must reject this
+        return NextResponse.json({ error: "RefCode not found" }, { status: 404 });
+      }
     }
-
-    const referrer = referrerWallet.toLowerCase();
 
     // Block self-referral based purely on wallet + refCode pattern
     const walletLast8 = wallet.slice(-8).toLowerCase();
