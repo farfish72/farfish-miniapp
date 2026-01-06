@@ -28,7 +28,7 @@ export const STAKING_TOKEN_RANGES = {
 } as const;
 
 export const RARITY_DISPLAY: Record<keyof typeof STAKING_TOKEN_RANGES, { name: string; rarityLabel: string }> = {
-  Bluefin: { name: "BlueFin", rarityLabel: "Common" },
+  Bluefin: { name: "Bluefin", rarityLabel: "Common" },
   GoldRay: { name: "GoldRay", rarityLabel: "Rare" },
   RedSpike: { name: "RedSpike", rarityLabel: "Epic" },
   ShadowGill: { name: "ShadowGill", rarityLabel: "Legendary" },

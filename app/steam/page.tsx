@@ -31,82 +31,82 @@ type VerificationState =
 const TASKS: Omit<Task, "status">[] = [
   {
     id: "daily_checkin",
-    title: "Daily Check-in",
-    description: "Claim your daily reward to build your streak",
+    title: "Fishing",
+    description: "Claim your daily reward",
     reward: 10,
     type: "daily",
   },
   {
     id: "add_miniapp",
     title: "Add FarFISH App",
-    description: "Add the app to your favorites for easy access",
+    description: "Add the app to unlock rewards",
     reward: 40,
     type: "miniapp",
   },
   {
     id: "fc_follow",
     title: "Follow FarFISH",
-    description: "Follow our official account for updates",
+    description: "Follow the official FarFISH account",
     reward: 50,
     type: "farcaster",
   },
   {
     id: "fc_like_recast",
-    title: "Like and Recast",
-    description: "Like and recast our announcement post",
+    title: "Like & Recast Post",
+    description: "Like and recast the FarFISH announcement",
     reward: 25,
     type: "farcaster",
   },
   {
     id: "fc_comment",
-    title: "Leave a Comment",
-    description: "Comment on our announcement post",
+    title: "Comment on Post",
+    description: "Leave a comment on the FarFISH announcement",
     reward: 25,
     type: "farcaster",
   },
   {
     id: "referral",
-    title: "Invite Friends",
-    description: "Earn rewards for each friend you invite",
+    title: "Referral Rewards",
+    description: "Earn 40 FRH per user you refer",
     reward: 40,
     type: "referral",
   },
   {
     id: "referral_milestone_5",
-    title: "5 Friends Milestone",
-    description: "Bonus reward for inviting 5 friends",
+    title: "5 Referrals Milestone",
+    description: "Bonus reward for referring 5 users",
     reward: 200,
     type: "referral_milestone",
     target: 5,
   },
   {
     id: "referral_milestone_10",
-    title: "10 Friends Milestone",
-    description: "Bonus reward for inviting 10 friends",
+    title: "10 Referrals Milestone",
+    description: "Bonus reward for referring 10 users",
     reward: 400,
     type: "referral_milestone",
     target: 10,
   },
   {
     id: "referral_milestone_30",
-    title: "30 Friends Milestone",
-    description: "Bonus reward for inviting 30 friends",
+    title: "30 Referrals Milestone",
+    description: "Bonus reward for referring 30 users",
     reward: 1200,
     type: "referral_milestone",
     target: 30,
   },
   {
     id: "referral_milestone_50",
-    title: "50 Friends Milestone",
-    description: "Bonus reward for inviting 50 friends",
+    title: "50 Referrals Milestone",
+    description: "Bonus reward for referring 50 users",
     reward: 2000,
     type: "referral_milestone",
     target: 50,
   },
   {
     id: "nft_mint",
-    title: "Own FarFISH NFT",
-    description: "Mint or stake a FarFISH NFT to unlock premium rewards",
+    title: "Mint FarFISH",
+    description: "Mint or stake a FarFISH NFT",
     reward: 2500,
     type: "nft",
   },
@@ -166,7 +166,7 @@ function VerifyModal({
 
         if (!context?.user?.fid) {
           setState("no_fid");
-          setMessage("Please open this app inside Farcaster to continue.");
+          setMessage("Please open this inside the social platform app.");
           return;
         }
 
@@ -178,7 +178,7 @@ function VerifyModal({
         await verifyTask(userFid, wallet);
       } catch {
         setState("no_fid");
-        setMessage("Please open this app inside Farcaster to continue.");
+        setMessage("Please open this inside the social platform app.");
       }
     };
 
@@ -187,7 +187,7 @@ function VerifyModal({
 
   const verifyTask = async (userFid: number, userWallet: string) => {
     setState("verifying");
-    setMessage("Checking your activity...");
+    setMessage("Verifying your social activity...");
 
     try {
       const res = await fetch("/api/farcaster/verify", {
@@ -204,7 +204,7 @@ function VerifyModal({
 
       if (res.ok && data.verified) {
         setState("success");
-        setMessage("Task completed successfully!");
+        setMessage("Task verified successfully!");
 
         setTimeout(() => {
           onSuccess();
@@ -213,12 +213,12 @@ function VerifyModal({
       } else {
         setState("error");
         setMessage(
-          data?.error || "Task not completed yet. Please complete it first."
+          data?.error || "Verification failed. Please complete the task first."
         );
       }
     } catch {
       setState("error");
-      setMessage("Connection error. Please try again.");
+      setMessage("Network error. Please try again.");
     }
   };
 
@@ -232,7 +232,7 @@ function VerifyModal({
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-50">
       <div className="max-w-md w-full bg-gradient-to-br from-slate-800/90 to-slate-700/90 backdrop-blur-sm border border-white/20 rounded-2xl p-8 text-center">
         <h2 className="text-2xl font-bold text-white mb-2">
-          Task Verification
+          FarFISH Verification
         </h2>
         <p className="text-purple-200 mb-6">{getTaskText()}</p>
 
@@ -240,7 +240,7 @@ function VerifyModal({
 
         {fid && (
           <p className="text-purple-300 text-sm mb-4">
-            Account ID: {fid}
+            Verifying for FID: {fid}
           </p>
         )}
 
@@ -646,7 +646,7 @@ export default function SteamPage() {
           <div className="bg-gradient-to-br from-yellow-500/10 via-orange-500/10 to-red-500/10 backdrop-blur-sm border border-yellow-400/30 rounded-2xl p-4">
             <div className="text-center">
               <p className="text-yellow-400 text-sm font-medium">
-                Connect your wallet to start earning rewards
+                Connect wallet to verify & earn rewards
               </p>
             </div>
           </div>
@@ -657,9 +657,9 @@ export default function SteamPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                Your Progress
+                Task Progress
               </h3>
-              <p className="text-white/70 text-sm">Complete tasks to earn FRH tokens</p>
+              <p className="text-white/70 text-sm">Complete tasks to earn FRH rewards</p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-cyan-400">
@@ -681,7 +681,7 @@ export default function SteamPage() {
         {wallet && referralData.count > 0 && (
           <div className="bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-purple-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
             <h3 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-4">
-              Friend Milestones
+              Referral Milestones
             </h3>
             <div className="grid grid-cols-2 gap-3">
               {REFERRAL_MILESTONES.map((milestone) => (
@@ -693,13 +693,13 @@ export default function SteamPage() {
                       : "bg-slate-500/20 border-slate-400/30 text-slate-300"
                   }`}
                 >
-                  <div className="text-sm font-medium">{milestone.count} Friends</div>
+                  <div className="text-sm font-medium">{milestone.count} Referrals</div>
                   <div className="text-xs">{milestone.reward} FRH</div>
                 </div>
               ))}
             </div>
             <p className="text-sm text-white/80 mt-3">
-              Current: {referralData.count} friends invited ({referralData.rewards} FRH earned)
+              Current: {referralData.count} referrals ({referralData.rewards} FRH earned)
             </p>
           </div>
         )}
@@ -785,7 +785,7 @@ export default function SteamPage() {
                               }
                             `}
                           >
-                            {fishingCooldown > 0 ? "On Cooldown" : "Claim Reward"}
+                            {fishingCooldown > 0 ? "On Cooldown" : "Check In"}
                           </button>
                         )}
                         {task.type === "miniapp" && (
@@ -796,7 +796,7 @@ export default function SteamPage() {
                               !wallet ? "opacity-50 cursor-not-allowed" : ""
                             }`}
                           >
-                            Add to Favorites
+                            Add FarFISH App
                           </button>
                         )}
                         {task.type === "referral" && (
@@ -807,20 +807,20 @@ export default function SteamPage() {
                               !wallet ? "opacity-50 cursor-not-allowed" : ""
                             }`}
                           >
-                            Share Link
+                            Share now
                           </button>
                         )}
                         {task.type === "referral_milestone" && (
                           <div className="text-xs text-white/80 text-center">
                             {(task.status as TaskStatus) === "verified" 
                               ? "Completed" 
-                              : `Progress: ${Math.min(referralData.count, task.target || 0)}/${task.target}`
+                              : `Progress (${Math.min(referralData.count, task.target || 0)}/${task.target})`
                             }
                           </div>
                         )}
                         {task.type === "nft" && (
                           <div className="text-xs text-white/80 text-center">
-                            Mint or stake<br />a FarFISH NFT
+                            Mint or stake<br />FarFISH NFT
                           </div>
                         )}
                       </>
@@ -835,9 +835,9 @@ export default function SteamPage() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex-1">
                       <h3 className="text-lg font-bold text-white mb-2">
-                        Share Your Link
+                        Share Referral Link
                       </h3>
-                      <p className="text-white/70 text-sm mb-3">Invite friends to earn together</p>
+                      <p className="text-white/70 text-sm mb-3">Invite friends using your referral link</p>
                     </div>
 
                     <div className="flex flex-col items-end gap-3">
@@ -851,7 +851,7 @@ export default function SteamPage() {
                           !wallet ? "opacity-50 cursor-not-allowed" : ""
                         }`}
                       >
-                        Share Invite
+                        Share Now
                       </button>
                     </div>
                   </div>
@@ -862,23 +862,23 @@ export default function SteamPage() {
         </div>
         {/* How it works */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h3 className="text-lg font-semibold mb-3 text-white">How Tasks Work:</h3>
+          <h3 className="text-lg font-semibold mb-3 text-white">How it works:</h3>
           <div className="space-y-2 text-white/80">
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Complete daily tasks to earn FRH tokens</span>
+              <span>Complete daily tasks to earn FRH rewards</span>
             </div>
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Tasks are verified automatically for smooth experience</span>
+              <span>Tasks complete instantly for smooth experience</span>
             </div>
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Rewards are tracked and distributed before token launch</span>
+              <span>Rewards are verified and distributed before token launch</span>
             </div>
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Only genuine activity counts toward your rewards</span>
+              <span>Invalid activity is automatically filtered out</span>
             </div>
           </div>
         </div>

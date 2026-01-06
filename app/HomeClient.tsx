@@ -105,7 +105,6 @@ export default function HomeClient() {
   const [hasMinted, setHasMinted] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const [lastMintedTokenId, setLastMintedTokenId] = useState<number | null>(null);
-  const [lastMintedQuantity, setLastMintedQuantity] = useState<number>(1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [mintedTokenUri, setMintedTokenUri] = useState<string | null>(null);
@@ -429,7 +428,7 @@ export default function HomeClient() {
       checkHasMinted();
       setIsMinting(false);
       setJustMinted(true);
-      showSuccess(`Successfully minted ${lastMintedQuantity} NFT${lastMintedQuantity > 1 ? 's' : ''}!`);
+      showSuccess("NFT minted successfully!");
     }
   }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, checkHasMinted, showSuccess]);
 
@@ -470,7 +469,10 @@ export default function HomeClient() {
       return;
     }
 
-    // Note: Removed artificial UI block - let contract quantityLimitPerWallet determine limits
+    if (hasMinted) {
+      showError("You have already minted an NFT.");
+      return;
+    }
 
     // Build candidates with remaining supply > 0 and valid claim conditions
     const candidates = supplyInfo.filter((info) => {
@@ -504,36 +506,7 @@ export default function HomeClient() {
       }
 
       const { pricePerToken, currency, quantityLimitPerWallet } = claim.condition;
-      
-      // Check how many user already owns of this specific tokenId
-      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
-      const currentBalance = await (publicClient!.readContract as any)({
-        address: NFT_CONTRACT_ADDRESS as `0x${string}`,
-        abi: nftDropAbi as any,
-        functionName: "balanceOf",
-        args: [address as `0x${string}`, BigInt(tokenId)],
-      }) as bigint;
-
-      // Calculate how many more can be minted for this tokenId
-      const remainingForUser = quantityLimitPerWallet - currentBalance;
-      
-      if (remainingForUser <= BigInt(0)) {
-        showError(`You have reached the limit for this token type. Try again for a different token.`);
-        return;
-      }
-
-      // Mint the maximum allowed or remaining supply, whichever is smaller
-      const maxMintable = remainingForUser > BigInt(10) ? BigInt(10) : remainingForUser; // Cap at 10 per transaction
-      const quantity = maxMintable;
-
-      console.log(`🎯 Minting details:`, {
-        tokenId,
-        currentBalance: currentBalance.toString(),
-        quantityLimitPerWallet: quantityLimitPerWallet.toString(),
-        remainingForUser: remainingForUser.toString(),
-        quantity: quantity.toString(),
-        pricePerToken: pricePerToken.toString(),
-      });
+      const quantity = BigInt(1);
 
       // Verify mint has started
       const now = BigInt(Math.floor(Date.now() / 1000));
@@ -571,9 +544,6 @@ export default function HomeClient() {
       };
 
       setIsMinting(true);
-
-      // Store the quantity for success message
-      setLastMintedQuantity(Number(quantity));
 
       // Call claim function
       await writeMint({
@@ -669,9 +639,12 @@ export default function HomeClient() {
 
   // Button states and labels
   const primaryButtonLabel = useMemo(() => {
-    if (justMinted || isMintConfirmed) return "Minted";
-    return "Mint NFTs";
-  }, [isMintConfirmed, justMinted]);
+    if (hasMinted) {
+      if (justMinted || isMintConfirmed) return "Minted";
+      return "Already Minted";
+    }
+    return "Early Access";
+  }, [hasMinted, isMintConfirmed, justMinted]);
 
   const primaryButtonClasses = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) {
@@ -680,8 +653,11 @@ export default function HomeClient() {
     if (!address || !isConnected) {
       return "w-full py-4 text-lg font-semibold rounded-xl bg-white/15 text-white hover:bg-white/25 transition";
     }
+    if (hasMinted) {
+      return "w-full py-4 text-lg font-semibold rounded-xl bg-white/10 text-white/50 cursor-not-allowed";
+    }
     return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black transition disabled:opacity-60";
-  }, [address, isConnected]);
+  }, [address, isConnected, hasMinted]);
 
   const primaryButtonDisabled =
     isConnecting ||
@@ -689,6 +665,7 @@ export default function HomeClient() {
     isMintPending ||
     isMintConfirming ||
     !NFT_CONTRACT_ADDRESS ||
+    hasMinted ||
     loadingSupplies ||
     loadingClaimConditions ||
     representativePrice === null;
@@ -701,7 +678,7 @@ export default function HomeClient() {
   }, [toast]);
 
   const GALLERY_IMAGES = useMemo(
-    () => ["/bluefin.jpg", "/goldray.jpg", "/redspike.jpg", "/shadowgill.jpg"],
+    () => ["/fish1.jpg", "/fish2.jpg", "/fish3.jpg", "/fish4.jpg"],
     [],
   );
 

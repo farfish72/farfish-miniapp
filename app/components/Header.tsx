@@ -48,7 +48,7 @@ export default function Header({ title }: { title: string }) {
           </h1>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            <span className="text-xs text-white/60">Active on Base</span>
+            <span className="text-xs text-white/60">Live on Base</span>
           </div>
         </div>
 
@@ -66,7 +66,7 @@ export default function Header({ title }: { title: string }) {
       {/* Positioning message */}
       <div className="mb-4">
         <p className="text-sm text-white/80 text-center">
-          Build daily habits, earn rewards on Base
+          Daily on-chain habits for future rewards on Base
         </p>
       </div>
 

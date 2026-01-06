@@ -25,12 +25,12 @@ export default function WalletConnect() {
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 mb-2">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold">Wallet Status</p>
+            <p className="text-sm font-semibold">Base Wallet</p>
             {isConnected && address && (
-              <p className="text-xs text-white/60 mt-1">Connected to Base</p>
+              <p className="text-xs text-white/60 mt-1">Connected</p>
             )}
             {!isConnected && (
-              <p className="text-xs text-white/60 mt-1">Ready to connect</p>
+              <p className="text-xs text-white/60 mt-1">Not connected</p>
             )}
           </div>
           <button
@@ -44,10 +44,10 @@ export default function WalletConnect() {
             }`}
           >
             {isConnected && address
-              ? `Active`
+              ? `Connected`
               : isPending
               ? "Connecting..."
-              : "Connect Wallet"}
+              : "Connect Farcaster Wallet"}
           </button>
         </div>
         {error && (

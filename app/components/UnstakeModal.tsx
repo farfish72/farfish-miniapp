@@ -132,8 +132,8 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeI
 
         {/* Static description text */}
         <p className="mb-4 text-sm text-white/80">
-          Your NFT will be ready to unstake when the lock period ends.
-          Check the staking rewards table for details.
+          When your claim period ends, you will be able to unstake your NFT.
+          For more information, please refer to the master reward table.
         </p>
 
         {/* Stake list */}
@@ -147,7 +147,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeI
           </div>
         ) : stakesError && activeStakes.length === 0 ? (
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-sm text-red-200">Unable to load your staked NFTs. Please refresh the page.</p>
+            <p className="text-sm text-red-200">Failed to load your staked positions. Please try again.</p>
           </div>
         ) : !stakesError && !isLoadingStakes && activeStakes.length === 0 ? (
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
