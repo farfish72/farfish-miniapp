@@ -3,18 +3,33 @@
 import { useEffect, useRef } from "react";
 import { useAccount } from "wagmi";
 
+const REFERRAL_CACHE_KEY = "ff_pending_referral";
+
 /**
- * Minimal auto-referral hook.
+ * Reliable auto-referral hook for Farcaster MiniApps.
  *
- * When a user connects their wallet on a URL containing ?ref=XXXXXXXX,
- * this hook will POST { wallet, refCode } once per connection to
- * /api/referral/record so the backend can store referral:{wallet}
- * with the referrer and timestamp.
+ * Caches ?ref=XXXXXXXX parameter immediately on page load to localStorage,
+ * then uses cached value when wallet connects (since URL params may be lost).
+ * POSTs { wallet, refCode } once per connection and clears cache on success.
  */
 export default function useAutoBindReferral() {
   const { address, isConnected } = useAccount();
   const hasRecorded = useRef(false);
 
+  // Cache referral code immediately on page load
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get("ref");
+
+    if (refCode && refCode.length === 8) {
+      // Cache the referral code for later use
+      localStorage.setItem(REFERRAL_CACHE_KEY, refCode);
+    }
+  }, []); // Run only once on mount
+
+  // Process referral when wallet connects
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isConnected || !address) {
@@ -25,10 +40,9 @@ export default function useAutoBindReferral() {
     // Only record once per wallet connection
     if (hasRecorded.current) return;
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const refCode = urlParams.get("ref");
-
-    if (!refCode || refCode.length !== 8) return;
+    // Read referral code from localStorage (cached on page load)
+    const cachedRefCode = localStorage.getItem(REFERRAL_CACHE_KEY);
+    if (!cachedRefCode || cachedRefCode.length !== 8) return;
 
     const recordReferral = async () => {
       try {
@@ -37,11 +51,13 @@ export default function useAutoBindReferral() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ wallet: address, refCode }),
+          body: JSON.stringify({ wallet: address, refCode: cachedRefCode }),
         });
 
         if (res.ok) {
           hasRecorded.current = true;
+          // Clear cached referral code after successful recording
+          localStorage.removeItem(REFERRAL_CACHE_KEY);
         }
       } catch (error) {
         console.error("Referral recording failed:", error);
