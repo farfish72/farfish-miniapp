@@ -1,7 +1,7 @@
 /**
  * DropERC1155 Mint Flow on Base (chainId 8453)
  * 
- * One-per-wallet rule enforced by checking balanceOf(address, id) for all tokenIds 0-15.
+ * Mint restrictions enforced entirely by the contract.
  * Mint price and currency read directly from on-chain claim conditions.
  * Random tokenId selection weighted by remaining supply (maxTotalSupply - totalSupply).
  */
@@ -102,7 +102,6 @@ export default function HomeClient() {
   // State
   const [supplyInfo, setSupplyInfo] = useState<SupplyInfo[]>([]);
   const [loadingSupplies, setLoadingSupplies] = useState(false);
-  const [hasMinted, setHasMinted] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const [lastMintedTokenId, setLastMintedTokenId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -347,57 +346,6 @@ export default function HomeClient() {
     }
   }, []);
 
-  // Check if wallet has already minted (balanceOf > 0 for any tokenId)
-  const checkHasMinted = useCallback(async () => {
-    if (typeof window === "undefined" || !address || !NFT_CONTRACT_ADDRESS) {
-      setHasMinted(false);
-      return;
-    }
-
-    try {
-      const publicClient = getPublicClient(wagmiConfig, { chainId: base.id });
-      if (!publicClient) {
-        return;
-      }
-
-      const balancePromises = TOKEN_IDS.map((id) =>
-        (publicClient.readContract as any)({
-          address: NFT_CONTRACT_ADDRESS as `0x${string}`,
-          abi: nftDropAbi as any,
-          functionName: "balanceOf",
-          args: [address as `0x${string}`, BigInt(id)],
-        }) as Promise<bigint>
-      );
-
-      const balances = await Promise.all(balancePromises);
-      const hasAnyBalance = balances.some((balance) => balance > BigInt(0));
-      setHasMinted(hasAnyBalance);
-
-      // If user has minted, find which tokenId and fetch its URI
-      if (hasAnyBalance) {
-        const mintedId = balances.findIndex((balance) => balance > BigInt(0));
-        if (mintedId >= 0) {
-          setLastMintedTokenId(mintedId);
-          try {
-            const uri = (await (publicClient.readContract as any)({
-              address: NFT_CONTRACT_ADDRESS as `0x${string}`,
-              abi: nftDropAbi as any,
-              functionName: "uri",
-              args: [BigInt(mintedId)],
-            })) as string;
-            if (uri) {
-              setMintedTokenUri(uri);
-            }
-          } catch {
-            // URI fetch failed, continue without it
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to check mint status:", error);
-    }
-  }, [address]);
-
 
   // Fetch supply info and claim conditions on mount and when contract address changes
   useEffect(() => {
@@ -407,30 +355,27 @@ export default function HomeClient() {
     }
   }, [fetchSupplyInfo, fetchAllClaimConditions]);
 
-  // Check mint status when wallet connects or address changes
+  // Reset justMinted when wallet connects or address changes
   useEffect(() => {
     if (typeof window !== "undefined" && isConnected && address) {
-      checkHasMinted();
       setJustMinted(false); // Reset justMinted when wallet changes
     } else {
-      setHasMinted(false);
       setLastMintedTokenId(null);
       setMintedTokenUri(null);
       setJustMinted(false);
     }
-  }, [isConnected, address, checkHasMinted]);
+  }, [isConnected, address]);
 
   // Handle mint success
   useEffect(() => {
     if (isMintConfirmed && mintTxHash) {
       fetchSupplyInfo();
       fetchAllClaimConditions();
-      checkHasMinted();
       setIsMinting(false);
       setJustMinted(true);
       showSuccess("NFT minted successfully!");
     }
-  }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, checkHasMinted, showSuccess]);
+  }, [isMintConfirmed, mintTxHash, fetchSupplyInfo, fetchAllClaimConditions, showSuccess]);
 
   // Handle mint errors
   useEffect(() => {
@@ -466,11 +411,6 @@ export default function HomeClient() {
 
     if (!NFT_CONTRACT_ADDRESS) {
       showError("Contract not configured. Mint is disabled.");
-      return;
-    }
-
-    if (hasMinted) {
-      showError("You have already minted an NFT.");
       return;
     }
 
@@ -569,7 +509,7 @@ export default function HomeClient() {
       const appError = handleTransactionError(error);
       showError(appError.message);
     }
-  }, [address, isConnected, chainId, hasMinted, supplyInfo, claimInfo, writeMint, showError]);
+  }, [address, isConnected, chainId, supplyInfo, claimInfo, writeMint, showError]);
 
   // Calculate total minted and remaining across all tokenIds
   const totalMinted = useMemo(() => {
@@ -639,12 +579,9 @@ export default function HomeClient() {
 
   // Button states and labels
   const primaryButtonLabel = useMemo(() => {
-    if (hasMinted) {
-      if (justMinted || isMintConfirmed) return "Minted";
-      return "Already Minted";
-    }
+    if (justMinted || isMintConfirmed) return "Minted";
     return "Early Access";
-  }, [hasMinted, isMintConfirmed, justMinted]);
+  }, [isMintConfirmed, justMinted]);
 
   const primaryButtonClasses = useMemo(() => {
     if (!NFT_CONTRACT_ADDRESS) {
@@ -653,11 +590,11 @@ export default function HomeClient() {
     if (!address || !isConnected) {
       return "w-full py-4 text-lg font-semibold rounded-xl bg-white/15 text-white hover:bg-white/25 transition";
     }
-    if (hasMinted) {
-      return "w-full py-4 text-lg font-semibold rounded-xl bg-white/10 text-white/50 cursor-not-allowed";
+    if (justMinted || isMintConfirmed) {
+      return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white";
     }
     return "w-full py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black transition disabled:opacity-60";
-  }, [address, isConnected, hasMinted]);
+  }, [address, isConnected, justMinted, isMintConfirmed]);
 
   const primaryButtonDisabled =
     isConnecting ||
@@ -665,7 +602,6 @@ export default function HomeClient() {
     isMintPending ||
     isMintConfirming ||
     !NFT_CONTRACT_ADDRESS ||
-    hasMinted ||
     loadingSupplies ||
     loadingClaimConditions ||
     representativePrice === null;
@@ -841,15 +777,7 @@ export default function HomeClient() {
                 type="button"
                 onClick={handleMint}
                 disabled={primaryButtonDisabled}
-                className={`
-                  w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg
-                  ${primaryButtonDisabled 
-                    ? "bg-white/10 text-white/50 cursor-not-allowed" 
-                    : hasMinted 
-                      ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
-                      : "bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-500 hover:to-blue-600 text-black hover:scale-105"
-                  }
-                `}
+                className={primaryButtonClasses}
               >
                 {isMinting || isMintPending || isMintConfirming ? (
                   <div className="flex items-center justify-center gap-2">
