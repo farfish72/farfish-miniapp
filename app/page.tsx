@@ -27,7 +27,7 @@ export const metadata: Metadata = {
       version: "1",
       imageUrl: "https://farfish-miniapp5.vercel.app/og-image.png",
       button: {
-        title: "Open FarFISH",
+        title: "Launch",
         action: {
           type: "launch_miniapp",
           url: "https://farfish-miniapp5.vercel.app",
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
       version: "1",
       imageUrl: "https://farfish-miniapp5.vercel.app/og-image.png",
       button: {
-        title: "Open FarFISH",
+        title: "Launch",
         action: {
           type: "launch_frame",
           url: "https://farfish-miniapp5.vercel.app",
