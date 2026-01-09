@@ -580,7 +580,7 @@ export default function HomeClient() {
   // Button states and labels
   const primaryButtonLabel = useMemo(() => {
     if (justMinted || isMintConfirmed) return "Minted";
-    return "Early Access";
+    return "Mint Premium Pass";
   }, [isMintConfirmed, justMinted]);
 
   const primaryButtonClasses = useMemo(() => {

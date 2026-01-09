@@ -55,9 +55,19 @@ export default function useAutoBindReferral() {
         });
 
         if (res.ok) {
-          hasRecorded.current = true;
-          // Clear cached referral code after successful recording
-          localStorage.removeItem(REFERRAL_CACHE_KEY);
+          const data = await res.json();
+          // Check if the referral was actually recorded successfully
+          if (data.success) {
+            hasRecorded.current = true;
+            // Clear cached referral code after successful recording
+            localStorage.removeItem(REFERRAL_CACHE_KEY);
+            console.log("✅ Referral recorded successfully:", data);
+          } else {
+            // API returned success: false - log the error but don't clear cache
+            console.error("❌ Referral recording failed:", data.error || "Unknown error");
+          }
+        } else {
+          console.error("❌ Referral API request failed:", res.status, res.statusText);
         }
       } catch (error) {
         console.error("Referral recording failed:", error);

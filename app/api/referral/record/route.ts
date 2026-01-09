@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
       ensureReferralEnv();
     } catch (error: any) {
       // Soft-fail if env/KV missing – do not crash client, just skip recording
+      console.error("❌ [REFERRAL] Environment validation failed:", error?.message);
       return NextResponse.json(
         { success: false, error: error?.message || "Referral storage unavailable" },
         { status: 200 },
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     // If this wallet already has a referral record, do nothing
     const existing = await getKey<string | Record<string, unknown> | null>(`referral:${wallet}`);
     if (existing) {
+      console.log("ℹ️ [REFERRAL] Wallet already has referral record:", wallet);
       return NextResponse.json({ success: true, alreadyRecorded: true });
     }
 
@@ -156,6 +158,13 @@ export async function POST(req: NextRequest) {
     if (newCount === 1) {
       await sadd("set:referrers", referrer);
     }
+
+    console.log("✅ [REFERRAL] Successfully recorded:", { 
+      referee: wallet, 
+      referrer, 
+      refCode, 
+      newReferrerCount: newCount 
+    });
 
     return NextResponse.json({ success: true, referrer });
   } catch (error: any) {
