@@ -12,7 +12,6 @@ import ToastProvider from "./providers/ToastProvider";
 
 export const metadata: Metadata = {
   other: {
-    "base:app_id": "694e9098c63ad876c908143e",
   },
 };
 
