@@ -6,7 +6,7 @@ type LeaderboardRow = {
   rank: number;
   wallet: string;
   referrals_count: number;
-  rewards: number; // Referrals x 40 FRH
+  rewards: number; // Referrals × 40 FRH
 };
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ const normalizeWallet = (wallet: string) => wallet.toLowerCase();
 /**
  * Get all unique users from KV store by merging:
  * 1. Keys matching referral:* (referred users)
- * 2. Values of referral:* map to referrer wallets
+ * 2. Values of referral:* → referrer wallets  
  * 3. Keys matching refcode:* (owners of referral codes)
  */
 const getAllUsers = async (): Promise<string[]> => {
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
   try {
     ensureReferralEnv();
   } catch (error: any) {
-    // Missing env/KV - safe empty stats (no fake rank)
+    // Missing env/KV → safe empty stats (no fake rank)
     return NextResponse.json({
       rank: 0,
       wallet: "",
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
     const countRaw = await getKey<number | string | null>(`refcount:${normalizeWallet(wallet)}`);
     const referrals_count = Number(countRaw ?? 0);
 
-    // Calculate rewards: referrals x 40 FRH
+    // Calculate rewards: referrals × 40 FRH
     const rewards = referrals_count * 40;
 
     // Get ALL users and calculate rank within the full ranked list

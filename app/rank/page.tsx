@@ -9,7 +9,7 @@ type LeaderboardEntry = {
   rank: number;
   wallet: string;
   referrals_count: number;
-  rewards: number; // Referrals x 40 FRH
+  rewards: number; // Referrals × 40 FRH
 };
 
 type ToastState = { type: "error" | "success"; message: string } | null;
@@ -38,12 +38,12 @@ export default function LeaderboardPage() {
       }
       const data = (await res.json()) as any[];
       
-      // Transform data: rewards = referrals x 40 FRH (referral-based only)
+      // Transform data: rewards = referrals × 40 FRH (referral-based only)
       const transformed: LeaderboardEntry[] = data.map((entry) => ({
         rank: entry.rank || 0,
         wallet: entry.wallet || "",
         referrals_count: entry.referrals_count || 0,
-        rewards: (entry.referrals_count || 0) * 40, // Referrals x 40 FRH
+        rewards: (entry.referrals_count || 0) * 40, // Referrals × 40 FRH
       }));
       
       setEntries(transformed);
@@ -58,7 +58,7 @@ export default function LeaderboardPage() {
               rank: userData.rank || 0,
               wallet: userData.wallet || address,
               referrals_count: userData.referrals_count || 0,
-              rewards: (userData.referrals_count || 0) * 40, // Referrals x 40 FRH
+              rewards: (userData.referrals_count || 0) * 40, // Referrals × 40 FRH
             };
             setUserEntry(userEntry);
           }
@@ -89,11 +89,11 @@ export default function LeaderboardPage() {
       <Header title="Rank" />
 
       <div className="mt-4 flex-1 flex flex-col space-y-4">
-        <section className="app-panel">
+        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-xl font-bold bg-gradient-to-r from-teal to-mint bg-clip-text text-transparent">
-                Hall of Fame
+              <h2 className="text-xl font-bold bg-gradient-to-r from-[#00d4c4] to-[#80ffd1] bg-clip-text text-transparent">
+                Leaderboard
               </h2>
             </div>
             <button
@@ -107,7 +107,7 @@ export default function LeaderboardPage() {
           </div>
 
           <p className="text-sm text-white/70 mb-4">
-            Rarer NFTs unlock higher reward multipliers at distribution.
+            NFT rarity may boost your final rewards at distribution.
           </p>
 
           <div className="overflow-x-auto">
@@ -115,16 +115,16 @@ export default function LeaderboardPage() {
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-white/60">
                   <th className="py-2 pr-3">Rank</th>
-                  <th className="py-2 pr-3">User ID</th>
+                  <th className="py-2 pr-3">Username</th>
                   <th className="py-2 pr-3">Referrals</th>
-                  <th className="py-2">Rewards</th>
+                  <th className="py-2">Rewards (FRH)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {loading && (
                   <tr>
                     <td colSpan={4} className="py-4 text-center text-white/60 animate-pulse">
-                      Loading…
+                      Loading leaderboard…
                     </td>
                   </tr>
                 )}
@@ -141,7 +141,7 @@ export default function LeaderboardPage() {
                     return (
                       <tr 
                         key={entry.rank} 
-                        className={`hover:bg-muted/5 transition ${isUser ? "bg-teal/10" : ""}`}
+                        className={`hover:bg-white/5 transition ${isUser ? "bg-[#00d4c4]/10" : ""}`}
                       >
                         <td className="py-2 pr-3 font-semibold">{entry.rank}</td>
                         <td className="py-2 pr-3 font-mono">{getUsername(entry.wallet)}</td>
@@ -158,14 +158,14 @@ export default function LeaderboardPage() {
           {userEntry && !entries.find((e) => e.wallet.toLowerCase() === address?.toLowerCase()) && (
             <div className="mt-4 pt-4 border-t border-white/10">
               <h3 className="text-sm font-semibold mb-2 text-white/80">You</h3>
-              <div className="rounded-lg border border-teal/30 bg-teal/5 p-3">
+              <div className="rounded-lg border border-[#00d4c4]/30 bg-[#00d4c4]/5 p-3">
                 <div className="grid grid-cols-4 gap-2 text-sm">
                   <div>
                     <p className="text-xs text-white/60 mb-1">Rank</p>
                     <p className="font-semibold">#{userEntry.rank}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-white/60 mb-1">User ID</p>
+                    <p className="text-xs text-white/60 mb-1">Username</p>
                     <p className="font-mono">{getUsername(userEntry.wallet)}</p>
                   </div>
                   <div>
@@ -173,7 +173,7 @@ export default function LeaderboardPage() {
                     <p>{userEntry.referrals_count}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-white/60 mb-1">Rewards</p>
+                    <p className="text-xs text-white/60 mb-1">Rewards (FRH)</p>
                     <p>{userEntry.rewards}</p>
                   </div>
                 </div>

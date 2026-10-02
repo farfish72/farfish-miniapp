@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
   try {
     ensureReferralEnv();
   } catch (error: any) {
-    // Missing env/KV - return empty progress
+    // Missing env/KV → return empty progress
     return NextResponse.json({ progress: {}, referralCount: 0 });
   }
 

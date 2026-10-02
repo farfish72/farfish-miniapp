@@ -1,5 +1,5 @@
 export const FARCASTER_PROFILE_URL = "https://farcaster.xyz/farf";
-// THIRDWEB REMOVED - replaced with wagmi later
+// THIRDWEB REMOVED — replaced with wagmi later
 export const NFT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS ?? "";
 export const STAKING_CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_STAKING_CONTRACT_ADDRESS ?? "") as `0x${string}`;
 export const ERC20_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_ERC20_TOKEN_ADDRESS ?? "";

@@ -5,7 +5,7 @@ import { getKey, smembers, keys } from "../../../lib/upstash";
 type LeaderboardRow = {
   wallet: string;
   referrals_count: number;
-  rewards: number; // Referrals x 40 FRH
+  rewards: number; // Referrals × 40 FRH
   rank: number;
 };
 
@@ -16,7 +16,7 @@ const normalizeWallet = (wallet: string) => wallet.toLowerCase();
 /**
  * Get all unique users from KV store by merging:
  * 1. Keys matching referral:* (referred users)
- * 2. Values of referral:* map to referrer wallets
+ * 2. Values of referral:* → referrer wallets  
  * 3. Keys matching refcode:* (owners of referral codes)
  */
 const getAllUsers = async (): Promise<string[]> => {
@@ -81,7 +81,7 @@ export async function GET() {
   try {
     ensureReferralEnv();
   } catch (error: any) {
-    // Missing env/KV - return safe empty list
+    // Missing env/KV → return safe empty list
     return NextResponse.json([]);
   }
 
@@ -106,7 +106,7 @@ export async function GET() {
       }),
     );
 
-    // Calculate rewards: referrals x 40 FRH
+    // Calculate rewards: referrals × 40 FRH
     const withRewards: LeaderboardRow[] = withCounts.map((row) => ({
       ...row,
       rewards: row.referrals_count * 40,

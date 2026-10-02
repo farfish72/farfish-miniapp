@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import HomeClient from "./HomeClient";
 
-// This metadata must stay here (top of file)
+// ✔ This metadata must stay here (top of file)
 export const metadata: Metadata = {
-  title: "FarFISH - Mint & Rewards",
+  title: "FarFISH – Mint & Rewards",
   description: "Mint. Stake. Earn. Dominate the Seas.",
 
   openGraph: {

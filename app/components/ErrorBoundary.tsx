@@ -1,8 +1,6 @@
 'use client';
 
 import React from 'react';
-import { Warning } from '@phosphor-icons/react';
-import { AppIcon } from './ui';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -43,10 +41,10 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-          <div className="app-panel w-full max-w-md text-center shadow-2xl">
+          <div className="w-full max-w-md bg-gradient-to-br from-red-500/10 via-red-500/5 to-red-500/10 backdrop-blur-sm border border-red-400/30 rounded-3xl p-8 text-center shadow-2xl">
             {/* Error Icon */}
-            <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-white/15 border border-white/30 flex items-center justify-center shadow-lg">
-              <AppIcon icon={Warning} size="lg" weight="fill" className="text-white" />
+            <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center shadow-lg">
+              <span className="text-3xl">⚠️</span>
             </div>
             
             {/* Error Message */}

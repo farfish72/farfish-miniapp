@@ -39,7 +39,7 @@ function VerifyContent() {
 
         if (!context?.user?.fid) {
           setState("no_fid");
-          setMessage("Open this inside Farcaster to continue.");
+          setMessage("Please open this inside Farcaster (Warpcast).");
           return;
         }
 
@@ -49,7 +49,7 @@ function VerifyContent() {
         await verifyTask(userFid);
       } catch {
         setState("no_fid");
-        setMessage("Open this inside Farcaster to continue.");
+        setMessage("Please open this inside Farcaster (Warpcast).");
       }
     };
 
@@ -58,7 +58,7 @@ function VerifyContent() {
 
   const verifyTask = async (userFid: number) => {
     setState("verifying");
-    setMessage("Checking activity…");
+    setMessage("Verifying your Farcaster activity...");
 
     try {
       const res = await fetch("/api/farcaster/verify", {
@@ -74,7 +74,7 @@ function VerifyContent() {
 
       if (res.ok && data.verified) {
         setState("success");
-        setMessage("Verified.");
+        setMessage("Task verified successfully!");
 
         setTimeout(() => {
           if (returnUrl) {
@@ -89,28 +89,28 @@ function VerifyContent() {
       }
     } catch {
       setState("error");
-      setMessage("Connection error. Try again.");
+      setMessage("Network error. Please try again.");
     }
   };
 
   const taskText = () => {
     switch (taskId) {
       case "fc_follow":
-        return "Follow @farf";
+        return "Follow @farf on Farcaster";
       case "fc_like_recast":
-        return "Like & recast";
+        return "Like and recast the announcement";
       case "fc_comment":
-        return "Leave a comment";
+        return "Comment on the announcement";
       default:
-        return "Complete task";
+        return "Complete Farcaster task";
     }
   };
 
   return (
-    <div className="app-page flex min-h-screen items-center justify-center bg-surface">
-      <div className="app-panel w-full max-w-md text-center">
+    <div className="min-h-screen bg-gradient-to-b from-purple-900 to-purple-950 flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white/10 border border-white/20 rounded-lg p-8 text-center">
         <h1 className="text-2xl font-bold text-white mb-2">
-          Verifying…
+          FarFISH Verification
         </h1>
         <p className="text-purple-200 mb-6">{taskText()}</p>
 
@@ -125,9 +125,9 @@ function VerifyContent() {
         {state === "no_fid" && returnUrl && (
           <button
             onClick={() => (window.location.href = returnUrl)}
-            className="app-button text-sm"
+            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm"
           >
-            Back to Steam
+            Return to Steam Page
           </button>
         )}
       </div>
@@ -138,10 +138,10 @@ function VerifyContent() {
 export default function FarcasterVerifyPage() {
   return (
     <Suspense fallback={
-      <div className="app-page flex min-h-screen items-center justify-center bg-surface">
-        <div className="app-panel w-full max-w-md text-center">
+      <div className="min-h-screen bg-gradient-to-b from-purple-900 to-purple-950 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white/10 border border-white/20 rounded-lg p-8 text-center">
           <h1 className="text-2xl font-bold text-white mb-2">
-            FarFISH
+            FarFISH Verification
           </h1>
           <p className="text-white">Loading...</p>
         </div>

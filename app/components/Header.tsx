@@ -1,20 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { detectFarcasterEnvironment } from "../utils/farcaster";
-import { ArrowSquareOut } from "@phosphor-icons/react";
-import { AppIcon } from "./ui";
 
-const pageLabels: Record<string, string> = {
-  "Home": "Overview",
-  "Chest": "Rewards",
-  "Stake": "Staking",
-  "Steam": "Missions",
-  "Rank": "Leaderboard",
-  "Profile": "Account",
-  "Game": "Game"
+const pageEmojis: Record<string, string> = {
+  "Home": "🏠",
+  "Chest": "💎",
+  "Stake": "🔒",
+  "Steam": "⚡",
+  "Rank": "🏆",
+  "Profile": "👤",
+  "Game": "🎮"
+};
+
+const pageGradients: Record<string, string> = {
+  "Home": "from-blue-500 to-cyan-500",
+  "Chest": "from-amber-500 to-orange-500",
+  "Stake": "from-green-500 to-emerald-500",
+  "Steam": "from-purple-500 to-pink-500",
+  "Rank": "from-yellow-500 to-amber-500",
+  "Profile": "from-purple-500 to-pink-500",
+  "Game": "from-red-500 to-pink-500"
 };
 
 export default function Header({ title }: { title: string }) {
@@ -28,43 +35,61 @@ export default function Header({ title }: { title: string }) {
     }
   }, []);
 
+  const emoji = pageEmojis[title] || "🐟";
+  const gradient = pageGradients[title] || "from-blue-500 to-cyan-500";
+
   return (
-    <header className="w-full border-b border-surface bg-surface px-page pb-4 pt-3 rounded-xl">
-      <div className="flex items-center justify-between">
+    <div className="w-full px-4 pt-4 pb-6">
+      {/* Top section with app name and follow button */}
+      <div className="flex items-center justify-between mb-2">
         <div className="flex flex-col">
-          <Image
-            src="/farfish-logo.png"
-            alt="FarFISH"
-            width={40}
-            height={40}
-            className="rounded-control object-cover"
-          />
+          <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+            FarFISH
+          </h1>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <span className="text-xs text-white/60">Live on Base</span>
+          </div>
         </div>
 
         <Link
           href="https://warpcast.com/farf"
           target="_blank"
-          className="app-control inline-flex items-center gap-1 border border-muted text-xs font-semibold text-white transition-colors hover:border-accent hover:text-accent"
+          className="relative overflow-hidden bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 px-4 py-2 rounded-xl transition-all duration-300 hover:scale-105"
         >
-          Follow
-          <AppIcon icon={ArrowSquareOut} size="sm" weight="bold" aria-hidden="true" />
+          <span className="relative z-10 text-sm font-medium text-white">
+            Follow
+          </span>
         </Link>
       </div>
 
-      <div className="mt-3 flex items-end justify-between">
+      {/* Positioning message */}
+      <div className="mb-4">
+        <p className="text-sm text-white/80 text-center">
+          Daily on-chain habits for future rewards on Base
+        </p>
+      </div>
+
+      {/* Page title with emoji and gradient */}
+      <div className="flex items-center gap-3">
+        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg shadow-${gradient.split(' ')[1]}/25`}>
+          <span className="text-xl">{emoji}</span>
+        </div>
         <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight text-white">{pageLabels[title] || title}</h2>
-          <p className="mt-1 text-xs text-muted">
+          <h2 className={`text-2xl font-bold bg-gradient-to-r ${gradient} bg-clip-text text-transparent`}>
+            {title}
+          </h2>
+          <p className="text-sm text-white/60">
             {title === "Home" && "Start your daily habit"}
-            {title === "Chest" && "Check in & collect"}
-            {title === "Stake" && "Lock NFTs, grow yield"}
-            {title === "Steam" && "Tasks & missions"}
-            {title === "Rank" && "How you stack up"}
-            {title === "Profile" && "Your identity & stats"}
+            {title === "Chest" && "Claim daily rewards"}
+            {title === "Stake" && "Lock & earn more"}
+            {title === "Steam" && "Complete tasks to earn FRH"}
+            {title === "Rank" && "See your progress"}
+            {title === "Profile" && "Track your activity"}
             {title === "Game" && "Play & win"}
           </p>
         </div>
       </div>
-    </header>
+    </div>
   );
 }

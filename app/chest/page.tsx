@@ -11,7 +11,6 @@ import {
 import { base } from "viem/chains";
 import { formatEther } from "viem";
 import { sdk } from "@farcaster/miniapp-sdk";
-import { Fire } from "@phosphor-icons/react";
 
 import Header from "../components/Header";
 import ChestCard from "../components/ChestCard";
@@ -22,7 +21,6 @@ import useUserStakes from "../hooks/useUserStakes";
 import claimControllerAbi from "../abi/claimController.json";
 import erc20Abi from "../abi/erc20.json";
 import { CLAIM_CONTROLLER_ADDRESS, ERC20_TOKEN_ADDRESS } from "../constants";
-import { AppIcon } from "../components/ui";
 
 /* ---------------- helpers ---------------- */
 const formatTime = (seconds: bigint | number): string => {
@@ -35,16 +33,16 @@ const formatTime = (seconds: bigint | number): string => {
 
 /* ---------------- ROTATING TEXTS ---------------- */
 const ROTATING_CHEST_TEXTS = [
-  "Daily Bronze Chest unlocked\n\nClaim 3 FRH every day on FarFISH.\nFree, simple, on Base.",
-  "Another day, another Bronze Chest\n\nFarFISH rewards consistency.\nFree FRH daily on Base.",
-  "Daily check-in complete.\n\nBronze Chest claimed on FarFISH.\nFree FRH for real users.",
-  "Small daily rewards > big promises.\n\nBronze Chest unlocked on FarFISH\nFree FRH, every day.",
-  "Consistency pays\n\nClaim your daily Bronze Chest on FarFISH.\nFree FRH on Base.",
-  "Daily Bronze Chest claimed\n\nFarFISH keeps rewarding active users.\nFree FRH, no tricks.",
-  "Free daily rewards, done right.\n\nBronze Chest unlocked on FarFISH\nBuilt on Base.",
+  "Daily Bronze Chest unlocked 🟤🐟\n\nClaim 3 FRH every day on FarFISH.\nFree, simple, on Base.",
+  "Another day, another Bronze Chest 🟤\n\nFarFISH rewards consistency.\nFree FRH daily on Base.",
+  "Daily check-in complete ✅\n\nBronze Chest claimed on FarFISH.\nFree FRH for real users.",
+  "Small daily rewards > big promises.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH, every day.",
+  "Consistency pays 🟤\n\nClaim your daily Bronze Chest on FarFISH.\nFree FRH on Base.",
+  "Daily Bronze Chest claimed 🐟\n\nFarFISH keeps rewarding active users.\nFree FRH, no tricks.",
+  "Free daily rewards, done right.\n\nBronze Chest unlocked on FarFISH 🟤\nBuilt on Base.",
   "Daily habit unlocked 🔁\n\nBronze Chest claimed on FarFISH.\n3 FRH every day.",
-  "No hype. Just daily rewards.\n\nBronze Chest unlocked on FarFISH\nFree FRH on Base.",
-  "Another Bronze Chest day\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.",
+  "No hype. Just daily rewards.\n\nBronze Chest unlocked on FarFISH 🐟\nFree FRH on Base.",
+  "Another Bronze Chest day 🟤\n\nFarFISH rewards show up daily.\nFree FRH, claim yours.",
 ];
 
 const FARFISH_MINIAPP_URL = "https://farfish-miniapp5.vercel.app";
@@ -145,7 +143,7 @@ export default function ChestPage() {
     const streak = localStorage.getItem('ff_streak') || '0';
     const streakNum = parseInt(streak, 10);
     
-    const shareText = `I'm on Day ${streakNum} on FarFISH building daily on-chain habits.`;
+    const shareText = `I'm on Day ${streakNum} on FarFISH 🐟 building daily on-chain habits.`;
 
     try {
       await sdk.actions.composeCast({
@@ -323,18 +321,18 @@ export default function ChestPage() {
       <div className="mt-4 space-y-4 flex-1">
         {/* Daily Streak Indicator */}
         {trustAnchorData.streak && trustAnchorData.streak > 0 && (
-          <div className="app-panel border-orange-400/30">
+          <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 backdrop-blur-sm border border-orange-400/30 rounded-2xl p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-white/15 border border-white/30 flex items-center justify-center shadow-lg">
-                  <AppIcon icon={Fire} size="md" weight="fill" className="text-white" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-lg">
+                  <span className="text-xl">🔥</span>
                 </div>
                 <div>
                   <h3 className="font-bold text-orange-400">Day {trustAnchorData.streak} streak</h3>
                   <p className="text-sm text-white/70">
                     {daily?.canClaim 
-                      ? "Today's chest is ready" 
-                      : `Next in ${formatTime(daily?.timeLeft ?? 0n)}`
+                      ? "Ready to claim today's reward" 
+                      : `Next check-in available in ${formatTime(daily?.timeLeft ?? 0n)}`
                     }
                   </p>
                 </div>
@@ -342,9 +340,9 @@ export default function ChestPage() {
               <button
                 onClick={handleShareProgress}
                 disabled={!isConnected}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-sm font-medium text-white transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-sm font-medium text-white transition-all duration-300 hover:scale-105 disabled:opacity-50"
               >
-                Share streak
+                Share my progress
               </button>
             </div>
           </div>
@@ -360,7 +358,7 @@ export default function ChestPage() {
         />
         <ChestCard
           title="Daily Bronze Chest"
-          description="Opens every 24 hours."
+          description="Claim rewards every 24 hours."
           variant="bronze"
           badge={daily?.canClaim ? "Ready" : "Cooling"}
           progress={daily?.canClaim ? 100 : 0}
@@ -381,7 +379,7 @@ export default function ChestPage() {
 
         <ChestCard
           title="Silver Chest"
-          description="Requires an active NFT stake."
+          description="Stake tokens to unlock higher rewards."
           variant="silver"
           badge={
             !silver?.hasStaked
@@ -407,11 +405,11 @@ export default function ChestPage() {
         />
 
         <ChestCard
-          title="Gold Chest"
-          description="Staking milestone rewards coming."
+          title="Future Rewards"
+          description="More reward types coming soon."
           variant="default"
-          badge="Next Up"
-          actionLabel="Next Up"
+          badge="Coming Soon"
+          actionLabel="Coming Soon"
           actionDisabled={true}
           onAction={() => {}}
         />

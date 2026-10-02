@@ -8,8 +8,6 @@ import Header from "../components/Header";
 import useUserStakes from "../hooks/useUserStakes";
 import { NFT_CONTRACT_ADDRESS } from "../constants";
 import nftAbi from "../abi/nftDrop.json";
-import { CheckCircle, XCircle } from "@phosphor-icons/react";
-import { AppIcon } from "../components/ui";
 
 type TaskStatus = "not_started" | "verified";
 
@@ -35,49 +33,49 @@ const TASKS: Omit<Task, "status">[] = [
     id: "daily_checkin",
     title: "Fishing",
     description: "Claim your daily reward",
-    reward: 5,
+    reward: 10,
     type: "daily",
   },
   {
     id: "add_miniapp",
-    title: "Add the App",
+    title: "Add FarFISH App",
     description: "Add the app to unlock rewards",
-    reward: 20,
+    reward: 40,
     type: "miniapp",
   },
   {
     id: "fc_follow",
-    title: "Follow Us",
-    description: "Follow the official account",
-    reward: 25,
+    title: "Follow FarFISH",
+    description: "Follow the official FarFISH account",
+    reward: 50,
     type: "farcaster",
   },
   {
     id: "fc_like_recast",
     title: "Like & Recast Post",
-    description: "Like and recast the announcement",
-    reward: 12,
+    description: "Like and recast the FarFISH announcement",
+    reward: 25,
     type: "farcaster",
   },
   {
     id: "fc_comment",
     title: "Comment on Post",
-    description: "Leave a comment on the announcement",
-    reward: 12,
+    description: "Leave a comment on the FarFISH announcement",
+    reward: 25,
     type: "farcaster",
   },
   {
     id: "referral",
     title: "Referral Rewards",
-    description: "Earn 20 points per user you refer",
-    reward: 20,
+    description: "Earn 40 FRH per user you refer",
+    reward: 40,
     type: "referral",
   },
   {
     id: "referral_milestone_5",
     title: "5 Referrals Milestone",
     description: "Bonus reward for referring 5 users",
-    reward: 100,
+    reward: 200,
     type: "referral_milestone",
     target: 5,
   },
@@ -85,7 +83,7 @@ const TASKS: Omit<Task, "status">[] = [
     id: "referral_milestone_10",
     title: "10 Referrals Milestone",
     description: "Bonus reward for referring 10 users",
-    reward: 200,
+    reward: 400,
     type: "referral_milestone",
     target: 10,
   },
@@ -93,7 +91,7 @@ const TASKS: Omit<Task, "status">[] = [
     id: "referral_milestone_30",
     title: "30 Referrals Milestone",
     description: "Bonus reward for referring 30 users",
-    reward: 600,
+    reward: 1200,
     type: "referral_milestone",
     target: 30,
   },
@@ -101,15 +99,15 @@ const TASKS: Omit<Task, "status">[] = [
     id: "referral_milestone_50",
     title: "50 Referrals Milestone",
     description: "Bonus reward for referring 50 users",
-    reward: 1000,
+    reward: 2000,
     type: "referral_milestone",
     target: 50,
   },
   {
     id: "nft_mint",
-    title: "Mint NFT",
-    description: "Own or lock an NFT to qualify",
-    reward: 1250,
+    title: "Mint FarFISH",
+    description: "Mint or stake a FarFISH NFT",
+    reward: 2500,
     type: "nft",
   },
 ];
@@ -234,7 +232,7 @@ function VerifyModal({
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-50">
       <div className="max-w-md w-full bg-gradient-to-br from-slate-800/90 to-slate-700/90 backdrop-blur-sm border border-white/20 rounded-2xl p-8 text-center">
         <h2 className="text-2xl font-bold text-white mb-2">
-          FarFish Verification
+          FarFISH Verification
         </h2>
         <p className="text-purple-200 mb-6">{getTaskText()}</p>
 
@@ -255,11 +253,11 @@ function VerifyModal({
         )}
 
         {state === "success" && (
-          <AppIcon icon={CheckCircle} size="lg" weight="fill" className="text-green-400 mb-4" />
+          <div className="text-green-400 text-4xl mb-4">✓</div>
         )}
 
         {state === "error" && (
-          <AppIcon icon={XCircle} size="lg" weight="fill" className="text-red-400 mb-4" />
+          <div className="text-red-400 text-4xl mb-4">✗</div>
         )}
 
         {(state === "no_fid" || state === "error") && (
@@ -600,7 +598,7 @@ export default function SteamPage() {
       const data = await response.json();
       
       if (data.link) {
-        const shareText = "Earn rewards by completing simple tasks.\nDaily rewards, Referrals, On-chain progress.\nLock your position now...";
+        const shareText = "Earn FRH token by completing simple tasks.\nDaily rewards, Referrals, On-chain progress.\nLock your position now...";
         
         await sdk.actions.composeCast({
           text: shareText,
@@ -645,7 +643,7 @@ export default function SteamPage() {
       <div className="flex-1 space-y-6 mt-4">
         {/* Wallet Connection Notice */}
         {!wallet && (
-          <div className="app-panel border-yellow-400/30">
+          <div className="bg-gradient-to-br from-yellow-500/10 via-orange-500/10 to-red-500/10 backdrop-blur-sm border border-yellow-400/30 rounded-2xl p-4">
             <div className="text-center">
               <p className="text-yellow-400 text-sm font-medium">
                 Connect wallet to verify & earn rewards
@@ -655,13 +653,13 @@ export default function SteamPage() {
         )}
 
         {/* Task Progress Card */}
-        <div className="app-panel shadow-2xl">
+        <div className="bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-purple-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
                 Task Progress
               </h3>
-              <p className="text-white/70 text-sm">Complete tasks to earn rewards</p>
+              <p className="text-white/70 text-sm">Complete tasks to earn FRH rewards</p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-cyan-400">
@@ -674,14 +672,14 @@ export default function SteamPage() {
           <div className="mb-4">
             <p className="text-sm text-white/80 mb-2">Total Earned:</p>
             <div className="text-lg font-bold text-cyan-400">
-              {wallet ? totalRewards : 0} Token
+              {wallet ? totalRewards : 0} FRH
             </div>
           </div>
         </div>
 
         {/* Referral Milestones */}
         {wallet && referralData.count > 0 && (
-          <div className="app-panel shadow-2xl">
+          <div className="bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-purple-500/10 backdrop-blur-sm border border-white/20 rounded-3xl p-6 shadow-2xl">
             <h3 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-4">
               Referral Milestones
             </h3>
@@ -696,12 +694,12 @@ export default function SteamPage() {
                   }`}
                 >
                   <div className="text-sm font-medium">{milestone.count} Referrals</div>
-                  <div className="text-xs">{milestone.reward} Token</div>
+                  <div className="text-xs">{milestone.reward} FRH</div>
                 </div>
               ))}
             </div>
             <p className="text-sm text-white/80 mt-3">
-              Current: {referralData.count} referrals ({referralData.rewards} Token earned)
+              Current: {referralData.count} referrals ({referralData.rewards} FRH earned)
             </p>
           </div>
         )}
@@ -710,7 +708,7 @@ export default function SteamPage() {
         <div className="space-y-4">
           {tasks.map((task, index) => (
             <React.Fragment key={task.id}>
-              <div className="app-panel hover:scale-[1.02] transition-all duration-300">
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-white mb-2">
@@ -720,8 +718,8 @@ export default function SteamPage() {
                     
                     <div className="text-xs text-cyan-400 font-medium">
                       {task.type === "referral" && referralData.count > 0
-                        ? `${referralData.count} x ${task.reward} = ${referralData.count * task.reward} Token`
-                        : `${task.reward} Token`
+                        ? `${referralData.count} × ${task.reward} = ${referralData.count * task.reward} FRH`
+                        : `${task.reward} FRH`
                       }
                     </div>
                     
@@ -730,15 +728,7 @@ export default function SteamPage() {
                         <div className="text-xs text-white/80 mb-1">
                           Progress: {Math.min(referralData.count, task.target || 0)} / {task.target}
                         </div>
-                        <div
-                          className="w-full bg-slate-700/50 rounded-full h-2"
-                          role="progressbar"
-                          aria-label={`${task.title} progress`}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={Math.min(100, (referralData.count / (task.target || 1)) * 100)}
-                          aria-valuetext={`${Math.min(referralData.count, task.target || 0)} of ${task.target}`}
-                        >
+                        <div className="w-full bg-slate-700/50 rounded-full h-2">
                           <div 
                             className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
                             style={{ 
@@ -806,7 +796,7 @@ export default function SteamPage() {
                               !wallet ? "opacity-50 cursor-not-allowed" : ""
                             }`}
                           >
-                            Add the App
+                            Add FarFISH App
                           </button>
                         )}
                         {task.type === "referral" && (
@@ -828,35 +818,67 @@ export default function SteamPage() {
                             }
                           </div>
                         )}
-                        
+                        {task.type === "nft" && (
+                          <div className="text-xs text-white/80 text-center">
+                            Mint or stake<br />FarFISH NFT
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
                 </div>
               </div>
 
+              {/* Insert Referral Share Pad after Comment on Post task */}
+              {task.id === "fc_comment" && (
+                <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-white mb-2">
+                        Share Referral Link
+                      </h3>
+                      <p className="text-white/70 text-sm mb-3">Invite friends using your referral link</p>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-3">
+                      <div className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-400 text-sm font-medium">
+                        Utility
+                      </div>
+                      <button
+                        onClick={handleReferralShare}
+                        disabled={!wallet}
+                        className={`bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 backdrop-blur-sm border border-white/20 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 text-sm ${
+                          !wallet ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        Share Now
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </React.Fragment>
           ))}
         </div>
         {/* How it works */}
-        <div className="app-panel">
-          <h3 className="text-lg font-semibold mb-3 text-white">How it works</h3>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-lg font-semibold mb-3 text-white">How it works:</h3>
           <div className="space-y-2 text-white/80">
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Finish tasks to accumulate tokens</span>
+              <span>Complete daily tasks to earn FRH rewards</span>
             </div>
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Completions are recorded on the spot</span>
+              <span>Tasks complete instantly for smooth experience</span>
             </div>
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Balances are settled ahead of launch</span>
+              <span>Rewards are verified and distributed before token launch</span>
             </div>
             <div className="flex items-start gap-2">
               <span>•</span>
-              <span>Suspicious activity is screened out automatically</span>
+              <span>Invalid activity is automatically filtered out</span>
             </div>
           </div>
         </div>
