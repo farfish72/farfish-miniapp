@@ -8,8 +8,8 @@ export default function StakeTable() {
   const lockDurations: Array<30 | 90 | 180 | 360> = [30, 90, 180, 360];
 
   return (
-    <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-      <h3 className="font-semibold text-lg mb-4">NFT Staking Reward Table</h3>
+    <section className="app-panel overflow-x-auto">
+      <h3 className="font-semibold text-lg mb-4">Staking Rewards</h3>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -42,11 +42,7 @@ export default function StakeTable() {
           </tbody>
         </table>
       </div>
-      <div className="mt-4 text-sm text-white/70 space-y-1">
-        <p>- Rewards are fixed and permanent</p>
-        <p>- Select both NFT and staking duration</p>
-        <p>- Higher NFT rarity gives higher FRH reward</p>
-      </div>
+      
     </section>
   );
 }

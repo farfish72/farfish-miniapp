@@ -1,10 +1,10 @@
 export default function Footer() {
   return (
-    <footer className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-60">
-      <div className="bg-gradient-to-r from-purple-500/20 to-cyan-500/20 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-lg">
+    <footer className="fixed bottom-20 left-1/2 z-40 w-full max-w-md -translate-x-1/2 px-4">
+      <div className="border-t border-surface-raised bg-surface p-2 rounded-xl">
         <div className="text-center">
-          <p className="text-xs text-white/80 font-medium">
-            FarFISH © 2026 • Built on Base
+          <p className="text-[10px] font-medium text-muted">
+            FarFISH 2026 | Built on Base
           </p>
         </div>
       </div>

@@ -50,8 +50,8 @@ export async function POST(req: NextRequest) {
     try {
       ensureReferralEnv();
     } catch (error: any) {
-      // Soft-fail if env/KV missing – do not crash client, just skip recording
-      console.error("❌ [REFERRAL] Environment validation failed:", error?.message);
+      // Soft-fail if env/KV missing - do not crash client, just skip recording
+      console.error("[REFERRAL] Environment validation failed:", error?.message);
       return NextResponse.json(
         { success: false, error: error?.message || "Referral storage unavailable" },
         { status: 200 },
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
       await sadd("set:referrers", referrer);
     }
 
-    console.log("✅ [REFERRAL] Successfully recorded:", { 
+    console.log("[REFERRAL] Successfully recorded:", {
       referee: wallet, 
       referrer, 
       refCode, 

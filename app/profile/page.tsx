@@ -7,12 +7,14 @@ import { useAccount, useChainId } from "wagmi";
 import { base } from "viem/chains";
 import { getPublicClient } from "@wagmi/core";
 import { wagmiConfig } from "../lib/wagmi";
+import { UserCircle } from "@phosphor-icons/react";
 import WalletConnect from "../components/WalletConnect";
 import Header from "../components/Header";
 import { NFT_CONTRACT_ADDRESS } from "../constants";
 import nftDropAbi from "../abi/nftDrop.json";
 import useUserStakes from "../hooks/useUserStakes";
 import { sdk } from "@farcaster/miniapp-sdk";
+import { AppIcon } from "../components/ui";
 
 type FarcasterContext = {
   fid: number;
@@ -31,35 +33,35 @@ type LiveStats = {
 const faqItems = [
   {
     question: "1. What is FarFISH?",
-    answer: "FarFISH is a daily habit-building app on Base that rewards consistent on-chain activity. Connect your wallet, complete tasks, and earn FRH tokens.",
+    answer: "FarFISH is a daily habit-building app on Base that rewards consistent on-chain activity. Connect your wallet, complete tasks, and accumulate tokens before launch.",
   },
   {
-    question: "2. How do I earn FRH tokens?",
-    answer: "Claim daily rewards in Chest, complete social tasks in Steam, stake NFTs for bonus rewards, and refer friends to the platform.",
+    question: "2. How do I earn tokens?",
+    answer: "Claim daily rewards in Chest, complete social tasks in Steam, lock NFTs for bonus yield, and refer friends to earn per referral.",
   },
   {
     question: "3. What are the main features?",
-    answer: "Chest (daily rewards), Steam (task completion), Stake (NFT staking), Rank (leaderboard), and Profile (your stats and identity).",
+    answer: "Chest (daily check-in), Steam (task missions), Stake (NFT locking), Hall of Fame (rankings), and Profile (your stats and identity).",
   },
   {
-    question: "4. How does staking work?",
-    answer: "Mint or buy FarFISH NFTs, then stake them to earn higher daily rewards and unlock premium features. Unstake anytime.",
+    question: "4. How does NFT locking work?",
+    answer: "Own a FarFISH NFT, then lock it for 30–360 days to earn yield. Rarer NFTs unlock higher multipliers. Release anytime after the lock period ends.",
   },
   {
     question: "5. What determines my rank?",
-    answer: "Your rank is based solely on the total amount of FRH tokens you hold. More FRH = higher rank on the leaderboard.",
+    answer: "Your rank is based on total referrals and token balance. More activity = higher standing in the Hall of Fame.",
   },
   {
     question: "6. Is my data safe?",
-    answer: "Yes. FarFISH is non-custodial and built on Base blockchain. You control your wallet and assets at all times.",
+    answer: "Yes. FarFISH is non-custodial and built on Base. You control your wallet and assets at all times — we never hold your funds.",
   },
   {
     question: "7. How do referrals work?",
-    answer: "Share your referral link to earn 40 FRH per new user. Reach milestones (5, 10, 30, 50 referrals) for bonus rewards.",
+    answer: "Share your referral link to earn 20 tokens per new user. Hit milestones (5, 10, 30, 50 referrals) for bonus rewards on top.",
   },
   {
     question: "8. When can I trade FRH?",
-    answer: "FRH token listing is planned for Q1 2026. Until then, focus on building your daily habits and accumulating tokens.",
+    answer: "FRH token listing is planned for Q1 2027. Until then, focus on building your daily habits and accumulating tokens.",
   },
 ];
 
@@ -213,7 +215,7 @@ function ProfilePageContent() {
 
       setLiveStats({ nftsOwned, chestStreak, rank });
     } catch (error) {
-      console.error("Failed to fetch live stats:", error);
+      console.error("Failed to fetch stats:", error);
       setStatsError((prev) => ({
         nftsOwned: prev.nftsOwned || true,
         chestStreak: prev.chestStreak || true,
@@ -247,15 +249,15 @@ function ProfilePageContent() {
   const stats = useMemo(
     () => [
       {
-        label: "NFT Owned",
+        label: "NFTs Held",
         value: loadingStats ? "…" : statsError.nftsOwned ? "Error" : formatStatValue(liveStats.nftsOwned),
       },
       {
-        label: "Staked NFT",
+        label: "NFTs Staked",
         value: loadingStats ? "…" : formatStatValue(stakes.length),
       },
       {
-        label: "Chest Streak",
+        label: "Streak",
         value: loadingStats ? "…" : statsError.chestStreak ? "Error" : formatStatValue(liveStats.chestStreak, " days"),
       },
       {
@@ -278,7 +280,7 @@ function ProfilePageContent() {
 
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
         {/* SOCIAL PROFILE SECTION - PRIMARY HEADER */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <section className="app-panel">
           {loadingFarcasterContext ? (
             <div className="flex items-center gap-4">
               <div className="h-16 w-16 rounded-xl bg-white/10 animate-pulse"></div>
@@ -314,28 +316,26 @@ function ProfilePageContent() {
           ) : (
             <div className="text-center py-4">
               <div className="text-white/60 mb-2">
-                <svg className="w-8 h-8 mx-auto mb-2 opacity-50" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M23.2 12c0-6.2-5-11.2-11.2-11.2S.8 5.8.8 12s5 11.2 11.2 11.2S23.2 18.2 23.2 12z"/>
-                </svg>
+                              <AppIcon icon={UserCircle} size="lg" weight="bold" className="mx-auto mb-2 opacity-50" />
               </div>
-              <p className="text-white/70 text-sm mb-2">Social profile not connected</p>
-              <p className="text-white/50 text-xs">Open inside the social platform to link your profile</p>
+              <p className="text-white/70 text-sm mb-2">No social profile linked</p>
+              <p className="text-white/50 text-xs">Launch inside Farcaster to connect.</p>
             </div>
           )}
         </section>
 
         {/* B) WALLET SECTION - CONDITIONAL */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <section className="app-panel">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-            <h3 className="text-lg font-semibold text-white">Wallet Connection</h3>
+            <h3 className="text-lg font-semibold text-white">Wallet</h3>
           </div>
           
           {isConnected && address ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span className="text-sm text-green-300">Wallet connected</span>
+                <span className="text-sm text-green-300">Connected to Base</span>
               </div>
               
               {/* Wallet Stats Grid */}
@@ -363,14 +363,14 @@ function ProfilePageContent() {
             </div>
           ) : (
             <div className="text-center py-4">
-              <p className="text-white/70 mb-4">Connect your wallet to view stats and access features</p>
+              <p className="text-white/70 mb-4">Link your wallet to view stats and claim rewards.</p>
               <WalletConnect />
             </div>
           )}
         </section>
 
         {/* FAQ SECTION - ALWAYS VISIBLE */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <section className="app-panel">
           <h3 className="text-lg font-semibold mb-3">Frequently Asked Questions</h3>
           <div className="space-y-2">
             {faqItems.map((faq, idx) => {
@@ -381,6 +381,7 @@ function ProfilePageContent() {
                   className="rounded-xl border border-white/10 bg-white/5"
                 >
                   <button
+                    aria-label={`Toggle ${faq.question}`}
                     className="flex w-full items-center justify-between px-4 py-3 text-left"
                     onClick={() => setOpenIdx(open ? null : idx)}
                   >

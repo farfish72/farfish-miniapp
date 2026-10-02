@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const userKey = `user:${wallet}`;
     
     // Get existing user data
-    let userData = await getKey(userKey);
+    const userData = await getKey(userKey);
     let userObj: any = {};
     
     if (userData) {
