@@ -1,5 +1,7 @@
 // app/components/ChestCard.tsx
 import { useState } from 'react';
+import { Crown, Diamond, Medal, Warning, DeviceMobile } from '@phosphor-icons/react';
+import { AppIcon } from './ui';
 
 type Props = {
   title: string;
@@ -20,29 +22,29 @@ const variantStyles = {
   bronze: {
     gradient: "from-amber-500/20 via-orange-500/20 to-red-500/20",
     border: "border-amber-400/30",
-    icon: "🥉",
+    icon: Crown,
     iconBg: "from-amber-400 to-orange-500",
     button: "from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600",
     progress: "from-amber-400 to-orange-500",
-    shadow: "shadow-amber-500/20"
+    shadow: ""
   },
   silver: {
     gradient: "from-slate-400/20 via-gray-400/20 to-slate-500/20",
-    border: "border-slate-400/30",
-    icon: "🥈",
+    border: "",
+    icon: Medal,
     iconBg: "from-slate-400 to-gray-500",
     button: "from-slate-400 to-gray-500 hover:from-slate-500 hover:to-gray-600",
     progress: "from-slate-400 to-gray-500",
-    shadow: "shadow-slate-500/20"
+    shadow: ""
   },
   default: {
     gradient: "from-purple-500/20 via-pink-500/20 to-red-500/20",
-    border: "border-purple-400/30",
-    icon: "💎",
+    border: "",
+    icon: Diamond,
     iconBg: "from-purple-400 to-pink-500",
     button: "from-purple-400 to-pink-500 hover:from-purple-500 hover:to-pink-600",
     progress: "from-purple-400 to-pink-500",
-    shadow: "shadow-purple-500/20"
+    shadow: ""
   }
 };
 
@@ -102,8 +104,8 @@ export default function ChestCard({
 
   return (
     <article className={`
-      relative overflow-hidden rounded-3xl border backdrop-blur-sm transition-all duration-300 hover:scale-105
-      bg-gradient-to-br ${styles.gradient} ${styles.border} ${styles.shadow} p-6 shadow-2xl
+      app-panel relative overflow-hidden border backdrop-blur-sm transition-all duration-300 hover:scale-105
+      ${styles.border} ${styles.shadow} shadow-2xl
     `}>
       {/* Animated background elements */}
       <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/5 rounded-full blur-3xl animate-pulse"></div>
@@ -113,11 +115,8 @@ export default function ChestCard({
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
-            <div className={`
-              w-16 h-16 rounded-2xl bg-gradient-to-br ${styles.iconBg} 
-              flex items-center justify-center shadow-lg ${styles.shadow}
-            `}>
-              <span className="text-2xl">{styles.icon}</span>
+            <div className="w-16 h-16 rounded-2xl bg-white/15 border border-white/30 flex items-center justify-center shadow-lg">
+              <AppIcon icon={styles.icon} size="lg" weight="fill" className="text-white" />
             </div>
             <div>
               <h3 className="text-xl font-bold text-white mb-1">{title}</h3>
@@ -151,7 +150,15 @@ export default function ChestCard({
               <span className="text-sm text-white/70">Progress</span>
               <span className="text-sm font-semibold text-white">{progress}%</span>
             </div>
-            <div className="h-3 w-full rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-3 w-full rounded-full bg-white/10 overflow-hidden"
+              role="progressbar"
+              aria-label={`${title} progress`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+              aria-valuetext={`${progress}% complete`}
+            >
               <div
                 className={`h-full bg-gradient-to-r ${styles.progress} transition-all duration-1000 ease-out shadow-lg`}
                 style={{ width: `${progress}%` }}
@@ -164,7 +171,7 @@ export default function ChestCard({
         {displayError && (
           <div className="mb-4 p-3 rounded-2xl bg-red-500/10 border border-red-400/30">
             <div className="flex items-center gap-2">
-              <span className="text-red-400">⚠️</span>
+              <AppIcon icon={Warning} size="md" weight="fill" className="text-red-400" />
               <p className="text-sm text-red-300">{displayError}</p>
             </div>
           </div>
@@ -178,7 +185,7 @@ export default function ChestCard({
               onClick={handleAction}
               disabled={actionDisabled || isLoading}
               className={`
-                w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg
+                w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed
                 ${actionDisabled || isLoading
                   ? "bg-white/10 text-white/50 cursor-not-allowed"
                   : `bg-gradient-to-r ${styles.button} text-black hover:scale-105 ${styles.shadow}`
@@ -202,7 +209,7 @@ export default function ChestCard({
               onClick={handleSecondaryAction}
               disabled={secondaryActionDisabled || secondaryLoading}
               className={`
-                w-full py-3 rounded-2xl border backdrop-blur-sm text-sm font-semibold transition-all duration-300
+                w-full py-3 rounded-2xl border backdrop-blur-sm text-sm font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
                 ${secondaryActionDisabled || secondaryLoading
                   ? "border-white/20 text-white/40 cursor-not-allowed"
                   : "border-white/30 text-white/90 hover:bg-white/10 hover:border-white/40 hover:scale-105"
@@ -216,7 +223,7 @@ export default function ChestCard({
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-2">
-                  <span>📱</span>
+                  <AppIcon icon={DeviceMobile} size="sm" weight="bold" />
                   {secondaryActionLabel}
                 </div>
               )}

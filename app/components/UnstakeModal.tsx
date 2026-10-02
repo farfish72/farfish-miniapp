@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { X } from "@phosphor-icons/react";
+import { AppIcon } from "./ui";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useBlockNumber } from "wagmi";
 import { base } from "viem/chains";
 import { STAKING_CONTRACT_ADDRESS } from "../constants";
@@ -42,7 +44,7 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeI
     });
   }, [publicClient, blockNumber]);
 
-  // Canonical stake data – single source of truth.
+  // Canonical stake data - single source of truth.
   const { activeStakes, isLoading: isLoadingStakes, isError: stakesError, refetch } = useUserStakes();
 
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
@@ -118,40 +120,39 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeI
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#050e18] p-6 shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="app-panel w-full max-w-md bg-ink shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Unstake NFT</h2>
+          <h2 className="text-xl font-semibold">Release NFT</h2>
           <button
             onClick={onClose}
-            className="text-white/70 hover:text-white transition"
+            className="app-control text-white/70 hover:text-white transition"
             aria-label="Close modal"
           >
-            ✕
+            <AppIcon icon={X} size="md" weight="bold" />
           </button>
         </div>
 
         {/* Static description text */}
         <p className="mb-4 text-sm text-white/80">
-          After the claim period ends, the NFT can be unstaked.
-          See the master reward table for details.
+          Once the lock period ends, your NFT can be released. Rewards are recorded in the table below.
         </p>
 
         {/* Stake list */}
         {!isConnected ? (
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
-            <p className="text-sm text-white/70">Connect wallet to view positions.</p>
+            <p className="text-sm text-white/70">Connect your wallet to see locked NFTs.</p>
           </div>
         ) : isLoadingStakes ? (
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
-            <p className="text-sm text-white/70">Loading staked positions...</p>
+            <p className="text-sm text-white/70">Loading positions…</p>
           </div>
         ) : stakesError && activeStakes.length === 0 ? (
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-sm text-red-200">Failed to load your staked positions. Please try again.</p>
+            <p className="text-sm text-red-200">Could not load positions. Try again.</p>
           </div>
         ) : !stakesError && !isLoadingStakes && activeStakes.length === 0 ? (
           <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
-            <p className="text-sm text-white/70">You have no staked positions to unstake.</p>
+            <p className="text-sm text-white/70">No locked positions found.</p>
           </div>
         ) : (
           <div className="mb-4 space-y-2 max-h-48 overflow-y-auto">
@@ -164,19 +165,23 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeI
                   <button
                     key={position.stakeId.toString()}
                     type="button"
+                    aria-label={`Select stake ${position.stakeId.toString()}`}
                     onClick={() => {
                       setSelectedPosition(position);
                     }}
                     disabled={isPending}
-                    className={`w-full rounded-xl p-3 border text-left transition ${
+                    className={`h-auto w-full border rounded-xl px-3 py-2 text-left transition-all ${
                       isSelected
-                        ? "border-[#00d4c4] bg-[#00d4c4]/10 shadow-lg shadow-[#00d4c4]/20"
-                        : "border-white/10 bg-white/5 hover:bg-white/10"
+                        ? "border-white/60 bg-white/15 text-white shadow-lg"
+                        : "border-white/20 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
                     } ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    <span className="text-sm font-semibold">
+                    <span className="text-sm font-semibold block">
                       Stake #{position.stakeId.toString()}
                     </span>
+                    {isSelected && (
+                      <span className="text-xs text-mint block mt-0.5">✓ Selected</span>
+                    )}
                   </button>
                 );
               })}
@@ -188,20 +193,27 @@ export default function UnstakeModal({ isOpen, onClose, onSuccess, initialStakeI
           <button
             onClick={onClose}
             disabled={isPending}
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition disabled:opacity-50"
+            className="app-control flex-1 border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleUnstake}
             disabled={!isButtonEnabled}
-            className={`flex-1 rounded-lg py-3 text-sm font-semibold transition ${
+            className={`app-button flex-1 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
               isButtonEnabled
-                ? "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black hover:opacity-90"
+                ? "bg-gradient-to-r from-teal to-mint text-ink hover:opacity-90"
                 : "bg-white/10 text-white/40 cursor-not-allowed"
             }`}
           >
-            {isPending ? "Unstaking..." : "Unstake"}
+            {isPending ? (
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Releasing…
+              </div>
+            ) : (
+              "Release"
+            )}
           </button>
         </div>
       </div>

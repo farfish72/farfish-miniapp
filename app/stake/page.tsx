@@ -79,7 +79,7 @@ export default function StakingPage() {
       abi: stakeAbi,
       functionName: "claim",
       args: [stakeId],
-      account: address as `0x${string}`, // ✅ wagmi v2 REQUIRED
+      account: address as `0x${string}`, // wagmi v2 required
       chain: base,
     });
   };
@@ -92,12 +92,12 @@ export default function StakingPage() {
 
       <div className="mt-4 space-y-4 flex-1 flex flex-col">
         {/* Actions */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
+        <section className="app-panel">
           <h2 className="text-xl font-bold mb-4">Stake Your NFTs</h2>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setIsStakeModalOpen(true)}
-              className="bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black font-bold py-3 rounded-lg"
+              className="bg-gradient-to-r from-teal to-mint text-ink font-bold py-3 rounded-lg border border-teal"
             >
               Stake NFT
             </button>
@@ -113,8 +113,8 @@ export default function StakingPage() {
         <StakeTable />
 
         {/* My Stakes */}
-        <section className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <h3 className="font-semibold text-lg mb-4">My Staked NFTs</h3>
+        <section className="app-panel">
+          <h3 className="font-semibold text-lg mb-4">Staked NFTs</h3>
 
           {/* Static informational text */}
           <p className="mb-4 text-sm text-white/80">
@@ -156,7 +156,7 @@ export default function StakingPage() {
                       onClick={() => handleClaim(s.stakeId)}
                       className={`px-4 py-2 rounded-lg ${
                         isButtonEnabled
-                          ? "bg-[#00d4c4] text-black"
+                          ? "bg-teal text-ink"
                           : "bg-white/10 text-white/40"
                       }`}
                     >

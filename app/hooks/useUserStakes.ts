@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useAccount, useChainId, useReadContract, usePublicClient } from "wagmi";
 import { STAKING_CONTRACT_ADDRESS } from "../constants";
 import stakeAbi from "../abi/stake.json";
+import { AppStateContext } from "../state/AppStateContext";
 
 const BASE_CHAIN_ID = 8453;
 
@@ -22,7 +23,7 @@ export type UserStake = {
   error?: boolean;
 };
 
-export default function useUserStakes() {
+export function useUserStakesSource() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const publicClient = usePublicClient();
@@ -149,4 +150,12 @@ export default function useUserStakes() {
     isError: isErrorIds || isErrorStakes,
     refetch: refetchStakeIds,
   };
+}
+
+export default function useUserStakes() {
+  const appState = useContext(AppStateContext);
+  if (!appState) {
+    throw new Error("useUserStakes must be used within an AppStateProvider");
+  }
+  return appState;
 }

@@ -22,7 +22,7 @@ const sessionCache = new Map<string, any>();
 /**
  * DEPRECATED: This function violates Farcaster security model
  * 
- * SECURITY VIOLATION: Attempts to resolve wallet → fid, which is forbidden.
+ * SECURITY VIOLATION: Attempts to resolve wallet to fid, which is forbidden.
  * Wallet address is NOT a Farcaster identity.
  * 
  * This function is kept for backward compatibility with existing display code,
@@ -33,10 +33,10 @@ const sessionCache = new Map<string, any>();
  */
 export async function getFarcasterDisplayData(walletAddress: string): Promise<FarcasterProfile | null> {
   console.warn("DEPRECATED: getFarcasterDisplayData violates Farcaster security model");
-  console.warn("This function attempts wallet → fid resolution which is forbidden");
+  console.warn("This function attempts wallet to fid resolution which is forbidden");
   console.warn("Use Farcaster Miniapp context for secure fid access");
   
-  // Return null to prevent any wallet → fid resolution
+  // Return null to prevent any wallet to fid resolution
   return null;
 }
 
@@ -44,7 +44,7 @@ export async function getFarcasterDisplayData(walletAddress: string): Promise<Fa
  * DEPRECATED VERIFICATION FUNCTIONS
  * 
  * These functions violate the Farcaster security model by attempting
- * wallet → fid resolution. They are kept for backward compatibility
+ * wallet to fid resolution. They are kept for backward compatibility
  * but should NOT be used.
  * 
  * For secure verification, use /api/farcaster/verify which only accepts

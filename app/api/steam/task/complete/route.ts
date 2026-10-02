@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const now = Math.floor(Date.now() / 1000); // UNIX timestamp
     
     // Get existing user data or create new structure
-    let userData = await getKey(userKey);
+    const userData = await getKey(userKey);
     let userObj: any = {};
     
     if (userData) {

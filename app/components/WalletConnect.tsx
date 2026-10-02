@@ -22,32 +22,37 @@ export default function WalletConnect() {
 
   return (
     <div className="w-full">
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3 mb-2">
+      <div className="app-panel mb-2">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold">Base Wallet</p>
+            <p className="text-sm font-semibold">Wallet</p>
             {isConnected && address && (
               <p className="text-xs text-white/60 mt-1">Connected</p>
             )}
             {!isConnected && (
-              <p className="text-xs text-white/60 mt-1">Not connected</p>
+              <p className="text-xs text-white/60 mt-1">Disconnected</p>
             )}
           </div>
           <button
             type="button"
             onClick={handleConnect}
             disabled={isPending || isConnected}
-            className={`px-3 py-1 rounded-md text-xs font-semibold ${
+            className={`px-3 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed ${
               isPending || isConnected
                 ? "bg-white/10 text-white/60"
-                : "bg-gradient-to-r from-[#00d4c4] to-[#3be6c1] text-black"
+                : "bg-gradient-to-r from-teal to-mint text-ink hover:opacity-90"
             }`}
           >
-            {isConnected && address
-              ? `Connected`
-              : isPending
-              ? "Connecting..."
-              : "Connect Farcaster Wallet"}
+            {isPending ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Connecting...
+              </>
+            ) : isConnected && address ? (
+              "Connected"
+            ) : (
+              "Connect Wallet"
+            )}
           </button>
         </div>
         {error && (
