@@ -11,44 +11,44 @@ export const metadata: Metadata = {
     title: "FarFISH",
     description: "Mint. Stake. Earn. Dominate the Seas.",
     type: "website",
-    url: "https://farfish-miniapp5.vercel.app",
-    images: ["https://farfish-miniapp5.vercel.app/og-image.png"],
+    url: "https://miniapp.farfish.xyz",
+    images: ["https://miniapp.farfish.xyz/og-image.png"],
   },
 
   twitter: {
     card: "summary_large_image",
     title: "FarFISH",
     description: "Mint. Stake. Earn. Dominate the Seas.",
-    images: ["https://farfish-miniapp5.vercel.app/og-image.png"],
+    images: ["https://miniapp.farfish.xyz/og-image.png"],
   },
 
   other: {
     "fc:miniapp": JSON.stringify({
       version: "1",
-      imageUrl: "https://farfish-miniapp5.vercel.app/og-image.png",
+      imageUrl: "https://miniapp.farfish.xyz/og-image.png",
       button: {
         title: "Launch",
         action: {
           type: "launch_miniapp",
-          url: "https://farfish-miniapp5.vercel.app",
+          url: "https://miniapp.farfish.xyz",
           name: "FarFISH",
-          splashImageUrl: "https://farfish-miniapp5.vercel.app/splash.png",
-          splashBackgroundColor: "#000000"
+          splashImageUrl: "https://miniapp.farfish.xyz/splash.png",
+          splashBackgroundColor: "#0a1f1a"
         }
       }
     }),
 
     "fc:frame": JSON.stringify({
       version: "1",
-      imageUrl: "https://farfish-miniapp5.vercel.app/og-image.png",
+      imageUrl: "https://miniapp.farfish.xyz/og-image.png",
       button: {
         title: "Launch",
         action: {
           type: "launch_frame",
-          url: "https://farfish-miniapp5.vercel.app",
+          url: "https://miniapp.farfish.xyz",
           name: "FarFISH",
-          splashImageUrl: "https://farfish-miniapp5.vercel.app/splash.png",
-          splashBackgroundColor: "#000000"
+          splashImageUrl: "https://miniapp.farfish.xyz/splash.png",
+          splashBackgroundColor: "#0a1f1a"
         }
       }
     })
