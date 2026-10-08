@@ -36,19 +36,25 @@ export default function RootLayout({
 
                 <div className="w-full max-w-md min-h-screen flex flex-col relative z-10">
                   <main
-                    className="flex-1"
+                    className="flex-1 flex flex-col"
                     style={{
                       paddingTop: "env(safe-area-inset-top, 0px)",
                     }}
                   >
                     <div
                       style={{
-                        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8rem)",
+                        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)",
                       }}
                     >
                       {children}
                     </div>
-                    <Footer />
+                    <div
+                      style={{
+                        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5rem)",
+                      }}
+                    >
+                      <Footer />
+                    </div>
                   </main>
                 </div>
 

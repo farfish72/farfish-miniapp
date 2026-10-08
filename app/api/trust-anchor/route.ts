@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
+import { getRedisClient } from '../../../lib/redis';
 
 export const dynamic = 'force-dynamic';
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+interface UserData {
+  steam?: {
+    like_recast?: {
+      completed?: boolean;
+    };
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
 
 export async function GET(request: Request) {
   try {
@@ -21,24 +26,34 @@ export async function GET(request: Request) {
     }
 
     const address = rawAddress.toLowerCase().trim();
+    const redis = getRedisClient();
 
-    const rankKey = `user:${address}:rank`;
-    const referralsKey = `refcount:${address}`;
-    const recastsKey = `user:${address}:recasts`;
+    // Get rank from leaderboard sorted set (ZREVRANK returns 0-indexed position)
+    const rankIndex = await redis.zrevrank('leaderboard', address);
+    const rank = rankIndex !== null ? rankIndex + 1 : null;
 
-    // THIS LINE IS THE REAL FIX
-    const results = (await Promise.all([
-      redis.get(rankKey),
-      redis.get(referralsKey),
-      redis.get(recastsKey),
-    ])) as (string | number | null)[];
+    // Get referral count from refcount:{wallet} key
+    const refcountKey = `refcount:${address}`;
+    const referralsRaw = await redis.get<number>(refcountKey);
+    const referrals = referralsRaw ?? 0;
 
-    const [rankRaw, referralsRaw, recastsRaw] = results;
+    // Get recasts from user:{wallet} JSON data
+    let recasts = 0;
+    const userKey = `user:${address}`;
+    const userData = await redis.get<UserData>(userKey);
+    if (userData?.steam?.like_recast?.completed === true) {
+      recasts = 1;
+    }
+
+    // Get points from leaderboard score (score × 20 FRH)
+    const score = await redis.zscore('leaderboard', address);
+    const points = score !== null ? score * 20 : 0;
 
     return NextResponse.json({
-      rank: rankRaw !== null ? Number(rankRaw) : null,
-      referrals: referralsRaw !== null ? Number(referralsRaw) : null,
-      recasts: recastsRaw !== null ? Number(recastsRaw) : null,
+      rank,
+      referrals,
+      recasts,
+      points,
     });
   } catch (error) {
     console.error('[trust-anchor]', error);

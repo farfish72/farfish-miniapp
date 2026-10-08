@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureReferralEnv } from "../../../config/referral";
-import { getKey } from "../../../../lib/upstash";
+import { getRedisClient } from "../../../../lib/redis";
 
 const walletRegex = /^0x[a-fA-F0-9]{40}$/;
 
@@ -19,15 +19,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Get chest streak from KV
-    // Assuming streak is stored as `streak:${wallet}` or similar
-    // If not found, check for daily chest claim pattern
-    const streakRaw = await getKey<number | string | null>(`streak:${wallet}`);
-    let streakDays = 0;
+    const redis = getRedisClient();
     
-    if (streakRaw !== null && streakRaw !== undefined) {
-      streakDays = Number(streakRaw) || 0;
-    }
+    // Get chest streak from Redis: streak:{wallet}
+    const streakKey = `streak:${wallet}`;
+    const streakDays = await redis.get<number>(streakKey) ?? 0;
 
     return NextResponse.json({ streakDays });
   } catch (error: any) {

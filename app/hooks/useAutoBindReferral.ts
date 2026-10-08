@@ -15,6 +15,7 @@ const REFERRAL_CACHE_KEY = "ff_pending_referral";
 export default function useAutoBindReferral() {
   const { address, isConnected } = useAccount();
   const hasRecorded = useRef(false);
+  const initFailCountRef = useRef(0);
 
   // Cache referral code immediately on page load
   useEffect(() => {
@@ -28,6 +29,40 @@ export default function useAutoBindReferral() {
       localStorage.setItem(REFERRAL_CACHE_KEY, refCode);
     }
   }, []); // Run only once on mount
+
+  // Initialize user when wallet connects (creates refcode entry)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isConnected || !address) return;
+
+    const initUser = async () => {
+      try {
+        const res = await fetch("/api/user/init", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet: address }),
+        });
+        
+        if (res.ok) {
+          initFailCountRef.current = 0; // reset on success
+        } else {
+          initFailCountRef.current += 1;
+          console.error("[useAutoBindReferral] User init failed, attempt", initFailCountRef.current, "- status:", res.status);
+          if (initFailCountRef.current >= 2) {
+            console.warn("[useAutoBindReferral] User init failed repeatedly. Your referral code may not be shareable until app is refreshed.");
+          }
+        }
+      } catch (error) {
+        initFailCountRef.current += 1;
+        console.error("[useAutoBindReferral] User init error, attempt", initFailCountRef.current, ":", error);
+        if (initFailCountRef.current >= 2) {
+          console.warn("[useAutoBindReferral] User init failed repeatedly. Your referral code may not be shareable until app is refreshed.");
+        }
+      }
+    };
+
+    initUser();
+  }, [address, isConnected]);
 
   // Process referral when wallet connects
   useEffect(() => {

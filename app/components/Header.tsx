@@ -11,7 +11,6 @@ const pageLabels: Record<string, string> = {
   "Home": "Overview",
   "Chest": "Rewards",
   "Stake": "Staking",
-  "Steam": "Missions",
   "Rank": "Leaderboard",
   "Profile": "Account",
   "Game": "Game"
@@ -29,8 +28,8 @@ export default function Header({ title }: { title: string }) {
   }, []);
 
   return (
-    <header className="w-full border-b border-surface bg-surface px-page pb-4 pt-3 rounded-xl">
-      <div className="flex items-center justify-between">
+    <header className="w-full border-b border-surface bg-surface px-page pb-4 rounded-xl">
+      <div className="flex items-start justify-between mt-2">
         <div className="flex flex-col">
           <Image
             src="/farfish-logo.png"
@@ -42,11 +41,11 @@ export default function Header({ title }: { title: string }) {
         </div>
 
         <Link
-          href="https://warpcast.com/farf"
+          href="https://farfish.xyz"
           target="_blank"
           className="app-control inline-flex items-center gap-1 border border-muted text-xs font-semibold text-white transition-colors hover:border-accent hover:text-accent"
         >
-          Follow
+          Find us
           <AppIcon icon={ArrowSquareOut} size="sm" weight="bold" aria-hidden="true" />
         </Link>
       </div>
@@ -58,7 +57,6 @@ export default function Header({ title }: { title: string }) {
             {title === "Home" && "Start your daily habit"}
             {title === "Chest" && "Check in & collect"}
             {title === "Stake" && "Lock NFTs, grow yield"}
-            {title === "Steam" && "Tasks & missions"}
             {title === "Rank" && "How you stack up"}
             {title === "Profile" && "Your identity & stats"}
             {title === "Game" && "Play & win"}

@@ -6,7 +6,6 @@ import {
   House,
   Package,
   Coins,
-  ListChecks,
   Trophy,
   User,
 } from "@phosphor-icons/react";
@@ -16,7 +15,6 @@ const items = [
   { href: "/", label: "Home", icon: House },
   { href: "/chest", label: "Chest", icon: Package },
   { href: "/stake", label: "Stake", icon: Coins },
-  { href: "/steam", label: "Steam", icon: ListChecks },
   { href: "/rank", label: "Rank", icon: Trophy },
   { href: "/profile", label: "Profile", icon: User },
 ];

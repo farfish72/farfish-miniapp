@@ -1,56 +1,33 @@
-import { getServerReferralEnv } from "../app/config/referral";
+/**
+ * Backward compatibility layer for existing API routes
+ * Redirects to lib/redis.ts for actual Redis operations
+ * Maintains in-memory fallback for when Redis is not configured
+ */
 
-type UpstashResponse<T> = {
-  result?: T;
-  error?: string;
-};
+import { getRedisClient } from "./redis";
 
-const getUpstashConfig = () => {
-  try {
-    const { upstashUrl, upstashToken } = getServerReferralEnv();
-    const baseUrl = upstashUrl.endsWith("/") ? upstashUrl.slice(0, -1) : upstashUrl;
-    return { baseUrl, upstashToken };
-  } catch {
-    return null;
-  }
-};
+// In-memory fallback store for when Upstash Redis is not configured
+const memStore = new Map<string, string>();
+const memSets = new Map<string, Set<string>>();
 
-const buildUrl = (baseUrl: string, path: string) => `${baseUrl}/${path}`;
-
-const upstashRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const config = getUpstashConfig();
-  if (!config) {
-    throw new Error("Upstash configuration is missing");
-  }
-
-  const res = await fetch(buildUrl(config.baseUrl, path), {
-    method: init?.method ?? "GET",
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.upstashToken}`,
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Upstash request failed (${res.status}): ${text || res.statusText}`);
-  }
-
-  const data = (await res.json()) as UpstashResponse<T>;
-  if (data.error) {
-    throw new Error(data.error);
-  }
-
-  return data.result as T;
+const isRedisAvailable = () => {
+  return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 };
 
 export const getKey = async <T = string>(key: string): Promise<T | null> => {
+  if (!isRedisAvailable()) {
+    const val = memStore.get(key);
+    if (!val) return null;
+    try {
+      return JSON.parse(val) as T;
+    } catch {
+      return val as unknown as T;
+    }
+  }
+
   try {
-    const result = await upstashRequest<T | null>(`get/${encodeURIComponent(key)}`);
-    return (result as T | null) ?? null;
+    const redis = getRedisClient();
+    return await redis.get<T>(key);
   } catch {
     return null;
   }
@@ -58,47 +35,75 @@ export const getKey = async <T = string>(key: string): Promise<T | null> => {
 
 export const setKey = async (key: string, value: string | Record<string, unknown>) => {
   const stored = typeof value === "string" ? value : JSON.stringify(value);
+  
+  if (!isRedisAvailable()) {
+    memStore.set(key, stored);
+    return 1;
+  }
+
   try {
-    return await upstashRequest<number>(`set/${encodeURIComponent(key)}/${encodeURIComponent(stored)}`, {
-      method: "POST",
-    });
+    const redis = getRedisClient();
+    await redis.set(key, value);
+    return 1;
   } catch {
-    // Swallow errors so callers can choose how to handle missing KV
+    memStore.set(key, stored);
     return 0;
   }
 };
 
 export const incrKey = async (key: string) => {
+  if (!isRedisAvailable()) {
+    const curr = parseInt(memStore.get(key) || "0", 10) || 0;
+    const next = curr + 1;
+    memStore.set(key, next.toString());
+    return next;
+  }
+
   try {
-    return await upstashRequest<number>(`incr/${encodeURIComponent(key)}`, { method: "POST" });
+    const redis = getRedisClient();
+    return await redis.incr(key);
   } catch {
     return 0;
   }
 };
 
 export const sadd = async (set: string, value: string) => {
+  if (!isRedisAvailable()) {
+    if (!memSets.has(set)) memSets.set(set, new Set());
+    memSets.get(set)!.add(value);
+    return 1;
+  }
+
   try {
-    return await upstashRequest<number>(`sadd/${encodeURIComponent(set)}/${encodeURIComponent(value)}`, {
-      method: "POST",
-    });
+    const redis = getRedisClient();
+    return await redis.sadd(set, value);
   } catch {
     return 0;
   }
 };
 
 export const smembers = async (set: string) => {
+  if (!isRedisAvailable()) {
+    return memSets.has(set) ? Array.from(memSets.get(set)!) : [];
+  }
+
   try {
-    const result = await upstashRequest<string[] | null>(`smembers/${encodeURIComponent(set)}`);
-    return Array.isArray(result) ? result : [];
+    const redis = getRedisClient();
+    return await redis.smembers(set);
   } catch {
     return [];
   }
 };
 
 export const keys = async (pattern: string) => {
+  if (!isRedisAvailable()) {
+    const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
+    return Array.from(memStore.keys()).filter((k) => regex.test(k));
+  }
+
   try {
-    const result = await upstashRequest<string[] | null>(`keys/${encodeURIComponent(pattern)}`);
-    return Array.isArray(result) ? result : [];
+    const redis = getRedisClient();
+    return await redis.keys(pattern);
   } catch {
     return [];
   }

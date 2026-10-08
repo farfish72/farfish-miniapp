@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { ensureReferralEnv } from "../../config/referral";
-import { getKey, smembers, keys } from "../../../lib/upstash";
+import { ensureReferralEnv, getServerReferralEnv } from "../../config/referral";
+import { getKey } from "../../../lib/upstash";
 
 type LeaderboardRow = {
   wallet: string;
@@ -11,126 +11,77 @@ type LeaderboardRow = {
 
 export const dynamic = "force-dynamic";
 
-const normalizeWallet = (wallet: string) => wallet.toLowerCase();
-
-/**
- * Get all unique users from KV store by merging:
- * 1. Keys matching referral:* (referred users)
- * 2. Values of referral:* map to referrer wallets
- * 3. Keys matching refcode:* (owners of referral codes)
- */
-const getAllUsers = async (): Promise<string[]> => {
-  const allUsers = new Set<string>();
-
-  try {
-    // 1. Get all referred users from referral:* keys
-    const referralKeys = await keys("referral:*");
-    for (const key of referralKeys) {
-      const wallet = key.replace("referral:", "");
-      if (wallet && /^0x[a-fA-F0-9]{40}$/i.test(wallet)) {
-        allUsers.add(normalizeWallet(wallet));
-      }
-    }
-
-    // 2. Get all referrer wallets from referral:* values
-    for (const key of referralKeys) {
-      try {
-        const referralData = await getKey<string | Record<string, unknown> | null>(key);
-        if (referralData) {
-          let referrer = "";
-          if (typeof referralData === "string") {
-            try {
-              const parsed = JSON.parse(referralData);
-              referrer = parsed?.referrer || "";
-            } catch {
-              referrer = referralData;
-            }
-          } else if (typeof referralData === "object" && referralData.referrer) {
-            referrer = String(referralData.referrer);
-          }
-          
-          if (referrer && /^0x[a-fA-F0-9]{40}$/i.test(referrer)) {
-            allUsers.add(normalizeWallet(referrer));
-          }
-        }
-      } catch {
-        // Skip invalid entries
-      }
-    }
-
-    // 3. Get all refcode owners from refcode:* values
-    const refcodeKeys = await keys("refcode:*");
-    for (const key of refcodeKeys) {
-      try {
-        const wallet = await getKey<string | null>(key);
-        if (wallet && /^0x[a-fA-F0-9]{40}$/i.test(wallet)) {
-          allUsers.add(normalizeWallet(wallet));
-        }
-      } catch {
-        // Skip invalid entries
-      }
-    }
-  } catch (error) {
-    console.error("Error gathering all users:", error);
-  }
-
-  return Array.from(allUsers);
-};
-
 export async function GET() {
   try {
     ensureReferralEnv();
   } catch (error: any) {
-    // Missing env/KV - return safe empty list
+    console.error("❌ [LEADERBOARD] Env check failed:", error.message);
     return NextResponse.json([]);
   }
 
   try {
-    // Get ALL unique users (not just referrers)
-    const allUsers = await getAllUsers();
+    // Use sorted set for leaderboard (shows TOTAL rewards earned)
+    const result = await upstashRequest<(string | number)[] | null>('zrevrange/leaderboard/0/-1/WITHSCORES');
     
-    if (!allUsers.length) {
+    if (!result || !Array.isArray(result) || result.length === 0) {
+      console.log("ℹ️ [LEADERBOARD] No users in sorted set");
       return NextResponse.json([]);
     }
 
-    // Get referral counts for all users
-    const withCounts = await Promise.all(
-      allUsers.map(async (wallet) => {
-        const countRaw = await getKey<number | string | null>(`refcount:${wallet}`);
-        const count = Number(countRaw ?? 0);
-
-        return {
-          wallet,
-          referrals_count: Number.isFinite(count) && count >= 0 ? count : 0,
-        };
-      }),
-    );
-
-    // Calculate rewards: referrals x 20 FRH
-    const withRewards: LeaderboardRow[] = withCounts.map((row) => ({
-      ...row,
-      rewards: row.referrals_count * 20,
-      rank: 0, // Will be set below
-    }));
-
-    // Sort by referral count (descending), then by wallet address (ascending) for deterministic tie-breaking
-    const sorted = withRewards.sort((a, b) => {
-      if (b.referrals_count !== a.referrals_count) {
-        return b.referrals_count - a.referrals_count;
+    // Parse sorted set result: [wallet1, totalRewards1, wallet2, totalRewards2, ...]
+    // totalRewards = how many times they got 20 tokens (as referrer OR referee)
+    const leaderboard: LeaderboardRow[] = [];
+    for (let i = 0; i < result.length; i += 2) {
+      const wallet = String(result[i]);
+      const rewardCount = Number(result[i + 1]); // How many 20 FRH rewards earned
+      
+      // Get actual referral count from refcount key for display
+      let referrals_count = 0;
+      try {
+        const refcountRaw = await getKey<number | string | null>(`refcount:${wallet}`);
+        referrals_count = Number(refcountRaw ?? 0);
+      } catch (error) {
+        console.warn(`⚠️ [LEADERBOARD] Could not fetch refcount for ${wallet}`);
       }
-      return a.wallet.localeCompare(b.wallet);
-    });
+      
+      leaderboard.push({
+        rank: Math.floor(i / 2) + 1,
+        wallet,
+        referrals_count, // Actual referrals (for display)
+        rewards: rewardCount * 20, // Total FRH earned
+      });
+    }
 
-    // Assign rank numbers sequentially starting from 1
-    const withRanks = sorted.map((row, idx) => ({
-      ...row,
-      rank: idx + 1,
-    }));
-
-    return NextResponse.json(withRanks);
+    console.log(`✅ [LEADERBOARD] Returned ${leaderboard.length} users (sorted by total rewards)`);
+    return NextResponse.json(leaderboard);
   } catch (error: any) {
-    console.error("Leaderboard generation failed:", error);
+    console.error("❌ [LEADERBOARD] Failed:", error);
     return NextResponse.json([]);
   }
+}
+
+// Upstash request helper
+async function upstashRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const { upstashUrl, upstashToken } = getServerReferralEnv();
+  const baseUrl = upstashUrl.endsWith("/") ? upstashUrl.slice(0, -1) : upstashUrl;
+  
+  const res = await fetch(`${baseUrl}/${path}`, {
+    method: init?.method ?? "GET",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${upstashToken}`,
+      ...(init?.headers ?? {}),
+    },
+    ...init,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Upstash request failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as { result?: T };
+  return data.result as T;
 }
 

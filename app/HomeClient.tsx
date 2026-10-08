@@ -704,7 +704,7 @@ export default function HomeClient() {
     <div className="flex flex-col flex-1 min-h-0">
       <Header title="Home" />
 
-      <div className="flex-1 flex flex-col space-y-6 pt-4">
+      <div className="flex-1 flex flex-col space-y-6 pt-4 pb-1">
         {/* Hero Section with animated cards */}
         <div className="relative">
           <div className="exchange-panel p-5 shadow-[0_12px_30px_rgba(0,0,0,0.18)]">

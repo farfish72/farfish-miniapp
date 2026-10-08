@@ -129,10 +129,17 @@ export async function POST(req: NextRequest) {
         // Rebuild the cache entry for future lookups
         await setKey(`refcode:${refCode}`, referrer);
       } else {
-        // No existing wallet found - this could be a first-time referrer
-        // Since we can't safely reconstruct the full wallet from 8 chars,
-        // and the requirements forbid wallet guessing, we must reject this
-        return NextResponse.json({ error: "RefCode not found" }, { status: 404 });
+        // No existing wallet found in any store - this could be a first-time referrer
+        // whose refcode cache wasn't created yet. Try to initialize them.
+        // We construct the full wallet address by assuming the refcode is the last 8 chars
+        // However, we CANNOT reconstruct a full 40-character wallet from just 8 chars.
+        // The only way to fix this is if the referrer connects first to create their refcode.
+        // Return a more specific error that frontend can handle.
+        console.log(`⚠️ [REFERRAL] RefCode ${refCode} not found in any store - referrer may not have connected yet`);
+        return NextResponse.json({ 
+          error: "Referral code not found. Ask your referrer to open the app once to activate their code.",
+          code: "REFERRER_NOT_INITIALIZED"
+        }, { status: 404 });
       }
     }
 
@@ -150,20 +157,41 @@ export async function POST(req: NextRequest) {
     // Bind referrer -> referee exactly once
     await setKey(`referral:${wallet}`, payload);
 
-    // Increment unified referral count for referrer
-    const newCount = await incrKey(`refcount:${referrer}`);
+    // ✅ OPTION 2: Both referrer AND referee get rewards!
+    
+    // Increment referral count for referrer (they earned this!)
+    const referrerNewCount = await incrKey(`refcount:${referrer}`);
+
+    // Give 20 tokens to referrer (increment their leaderboard score)
+    try {
+      await upstashRequestDirect(`zincrby/leaderboard/1/${encodeURIComponent(referrer)}`, {
+        method: 'POST'
+      });
+      console.log(`✅ [REFERRAL] Rewarded REFERRER ${referrer} with 20 tokens`);
+    } catch (error) {
+      console.error(`⚠️ [REFERRAL] Failed to update sorted set for referrer:`, error);
+    }
+
+    // Give 20 tokens to referee (welcome bonus - no refcount change!)
+    try {
+      await upstashRequestDirect(`zincrby/leaderboard/1/${encodeURIComponent(wallet)}`, {
+        method: 'POST'
+      });
+      console.log(`✅ [REFERRAL] Rewarded REFEREE ${wallet} with 20 tokens (welcome bonus)`);
+    } catch (error) {
+      console.error(`⚠️ [REFERRAL] Failed to update sorted set for referee:`, error);
+    }
 
     // Add referrer to set:referrers if this is their first referral (count becomes 1)
-    // This ensures they appear in leaderboard queries
-    if (newCount === 1) {
+    if (referrerNewCount === 1) {
       await sadd("set:referrers", referrer);
     }
 
-    console.log("[REFERRAL] Successfully recorded:", {
+    console.log("[REFERRAL] Successfully recorded (both rewarded!):", {
       referee: wallet, 
       referrer, 
       refCode, 
-      newReferrerCount: newCount 
+      referrerNewCount
     });
 
     return NextResponse.json({ success: true, referrer });
@@ -174,4 +202,33 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+// Helper for direct Upstash requests
+async function upstashRequestDirect(path: string, init?: RequestInit) {
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  
+  if (!upstashUrl || !upstashToken) {
+    throw new Error('Upstash credentials missing');
+  }
+  
+  const baseUrl = upstashUrl.endsWith("/") ? upstashUrl.slice(0, -1) : upstashUrl;
+  
+  const res = await fetch(`${baseUrl}/${path}`, {
+    method: init?.method ?? "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${upstashToken}`,
+      ...(init?.headers ?? {}),
+    },
+    ...init,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Upstash request failed (${res.status}): ${text}`);
+  }
+
+  return await res.json();
 }

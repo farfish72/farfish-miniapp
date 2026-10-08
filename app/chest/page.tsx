@@ -320,7 +320,7 @@ export default function ChestPage() {
     <div className="flex flex-col flex-1">
       <Header title="Chest" />
 
-      <div className="mt-4 space-y-4 flex-1">
+      <div className="mt-4 space-y-4 flex-1 pb-1">
         {/* Daily Streak Indicator */}
         {trustAnchorData.streak && trustAnchorData.streak > 0 && (
           <div className="app-panel border-orange-400/30">
