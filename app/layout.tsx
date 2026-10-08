@@ -43,22 +43,11 @@ export default function RootLayout({
                 <AutoBindReferral />
 
                 <div className="w-full max-w-md min-h-screen flex flex-col relative z-10">
-                  <main
-                    className="flex-1 flex flex-col"
-                    style={{
-                      paddingTop: "env(safe-area-inset-top, 0px)",
-                    }}
-                  >
+                  <main className="flex-1 flex flex-col">
+                    {children}
                     <div
                       style={{
-                        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)",
-                      }}
-                    >
-                      {children}
-                    </div>
-                    <div
-                      style={{
-                        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5rem)",
+                        paddingBottom: "5rem",
                       }}
                     >
                       <Footer />
